@@ -1,299 +1,452 @@
-# Roadmap форка: RU job-search automation
+# Roadmap форка: RU job discovery and career automation
 
-Этот форк используется как управляющий слой поиска работы: discovery, нормализация, оценка вакансий, персонализация материалов, единый tracker и оркестрация действий во внешних каналах.
+Этот форк превращает upstream `career-ops` в управляющий слой нашего поиска работы в РФ и смежных рынках.
 
-Цель — сохранить сильные части upstream `career-ops` и постепенно добавить российские источники и action-adapters, не превращая HH.ru в центр всей архитектуры.
+Главный приоритет на ближайший этап:
 
-## 1. Что уже есть в upstream
+> **регулярно обходить карьерные сайты/ATS, HH.ru и заданные Telegram-каналы, приводить всё к общей pipeline, удалять дубли и оставлять только полезные вакансии.**
 
-`career-ops` состоит из нескольких слоёв:
+Автоматические отклики, recruiter outreach и заполнение ATS forms остаются следующими слоями, а не условием первого MVP.
 
-1. **AI harness снаружи** — Codex / Claude Code / OpenCode / другой CLI исполняет инструкции.
-2. **Skill/router** — `.agents/skills/career-ops/SKILL.md` выбирает workflow.
-3. **Agent workflows** — `modes/*.md`: evaluation, scan, apply, tracker, interview, follow-up и т.д.
-4. **Deterministic scripts** — `*.mjs`: scan, dedup, tracker, PDF, liveness, analytics, ATS discovery и другие операции.
-5. **Providers** — `providers/*.mjs` приводят публичные job sources к общей форме вакансии.
-6. **Persistent user data** — `cv.md`, `config/profile.yml`, `data/applications.md`, `data/pipeline.md`, `reports/`, `jds/`.
-7. **Derived index** — SQLite используется только как ускоряющий индекс; каноническое состояние хранится в файлах.
-8. **Plugins** — отдельный слой для интеграций, которые не должны входить в public/no-auth core.
+Подробности:
 
-Базовый flow upstream:
+- [`FORK_ARCHITECTURE_RU.md`](FORK_ARCHITECTURE_RU.md) — архитектура и решения;
+- [`BACKLOG_RU.md`](BACKLOG_RU.md) — живой backlog;
+- [`../scripts/README.md`](../scripts/README.md) — структура fork-owned code.
 
-```text
-scan -> data/pipeline.md -> evaluate -> report/CV -> data/applications.md -> human apply
-```
+---
 
-Наш целевой flow:
+## 1. Что используем из upstream
 
-```text
-sources -> normalize/dedup -> evaluate -> decision -> action adapter -> result -> tracker
-```
+`career-ops` уже даёт:
 
-## 2. Граница ответственности
+- AI workflows в `modes/*.md`;
+- публичный scanner `scan.mjs`;
+- `providers/*` для ATS/job sources;
+- `data/pipeline.md` как inbox найденных вакансий;
+- `data/applications.md` как canonical tracker;
+- reports/JDs/CV/PDF generation;
+- liveness, dedup, tracker и analytics tooling;
+- plugin model для внешних integrations;
+- files-first architecture: файлы — source of truth, SQLite — derived index.
 
-### `career-ops`
+Не переписываем это без доказанной необходимости.
 
-Отвечает за:
-
-- единый candidate profile;
-- canonical vacancy / pipeline;
-- дедупликацию между источниками;
-- fit scoring;
-- company/job research;
-- tailored CV / cover message / form answers;
-- contacts и outreach context;
-- единый application tracker;
-- follow-up и outcome analytics;
-- решение, какое действие нужно выполнить дальше.
-
-### `work-optimization`
-
-Остаётся HH-specific executor/service:
-
-- HH API;
-- поиск/получение HH-вакансий;
-- отклики;
-- ответы работодателям;
-- HH-specific retries, rate limits, idempotency;
-- профили и HH-specific state.
-
-`career-ops` не должен дублировать эту логику. Интеграция строится через adapter/contract.
-
-### Другие adapters
-
-Позже:
-
-- Telegram: Telethon ingest + recruiter outreach;
-- ATS/career sites: Greenhouse/Ashby/Lever/Workday browser/form adapter;
-- email: application/outreach + reply ingestion;
-- LinkedIn: discovery/outreach/apply adapter;
-- browser fallback: только для web-only возможностей и диагностики.
-
-## 3. Архитектурная ставка
+Upstream flow:
 
 ```text
-                    Codex / Claude
-                         |
-                  career-ops skill
-                         |
-       +-----------------+-----------------+
-       |                 |                 |
-   discovery          decision           tracker
-       |                 |                 |
- HH / TG / ATS  -> normalize+dedup -> applications
-       |                 |
-       +--------> scoring/research
-                         |
-                    action router
-       +-----------------+-----------------+
-       |                 |                 |
- work-optimization   telegram adapter   ATS/email/etc
-       |                 |                 |
-      HH              Telegram          external systems
-       +-----------------+-----------------+
-                         |
-                    result/events
-                         |
-                      tracker
+scan -> pipeline -> evaluate -> report/CV -> tracker -> human action
 ```
 
-Ключевое правило: **source, decision и action — разные слои**. Одна и та же вакансия может быть найдена в Telegram, HH и на сайте компании, но в tracker должна существовать как одна canonical vacancy/application.
+Наш ближайший flow:
 
-## 4. Что не переписываем сразу
+```text
+ATS/career sites + HH + Telegram
+            |
+            v
+          ingest
+            |
+            v
+     normalize / filter
+            |
+            v
+           dedup
+            |
+            v
+     data/pipeline.md
+            |
+            v
+      optional ranking
+```
 
-На первом этапе не трогаем без необходимости:
+---
 
-- upstream scoring (`modes/_shared.md`, `modes/oferta.md`);
-- tracker format и status machinery;
-- PDF/CV generation;
-- public ATS providers;
-- liveness/dedup scripts;
-- updater;
-- dashboard.
+## 2. Архитектурные границы
 
-Сначала используем их как готовую платформу и меняем только места, необходимые для RU automation.
+### Source
 
-## 5. Этапы доработки
+Получает новые items из внешней системы.
 
-### Phase 0 — понять и запустить upstream
+### Decision
 
+Определяет:
+
+- это вообще вакансия или шум;
+- новая ли она;
+- является ли она дублем;
+- стоит ли её поднимать выше;
+- нужен ли полноценный LLM evaluation.
+
+### Action
+
+Позже выполняет:
+
+- apply;
+- form fill;
+- recruiter outreach;
+- follow-up;
+- reply/status sync.
+
+**Source, Decision и Action не смешиваем.**
+
+---
+
+# Phase 0 — Foundation / baseline
+
+Цель: понимать настоящий upstream runtime и не ломать его случайными рефакторами.
+
+- [x] Изучить architecture/data contract/providers/plugin model.
+- [x] Изучить donor implementations.
+- [x] Создать architecture/strategy document.
+- [x] Создать living backlog.
+- [x] Создать структуру для нового fork-owned code под `scripts/`.
 - [ ] Настроить локальный candidate profile без секретов в git.
-- [ ] Запустить одну ручную вакансию через auto-pipeline.
-- [ ] Запустить `scan` на существующих public providers.
-- [ ] Проверить tracker, report и generated CV.
-- [ ] Прогнать тесты upstream до наших изменений.
+- [ ] Прогнать upstream `node test-all.mjs` до behavior changes.
+- [ ] Запустить один existing public provider scan.
+- [ ] Провести одну вакансию через pipeline/evaluation/tracker.
 
-Результат: понимаем реальный runtime, а не только README.
+### Root scripts
 
-### Phase 1 — единый integration contract
+Upstream намеренно держит большую часть `.mjs` в корне из-за path compatibility и updater contract.
 
-Сделать минимальную модель взаимодействия с внешними executors.
-
-Нужны сущности:
+Поэтому сейчас:
 
 ```text
-Vacancy
-Application
-Contact
-ActionRequest
-ActionResult
-SourceRef
+existing upstream root scripts -> остаются на месте
+new fork scripts               -> scripts/<area>/
 ```
 
-Минимальный action contract:
+Если позже захотим physical migration — это отдельный эпик с compatibility wrappers и полным тестовым прогоном.
+
+---
+
+# Phase 1 — Common source/ingest contract
+
+Цель: новые источники подключаются одинаково.
+
+Концептуально нам нужен source item со следующими свойствами:
 
 ```text
-prepare -> execute -> verify -> persist result
+source kind
+stable source id
+canonical source URL
+raw/normalized vacancy data
+published time
+source metadata
+optional contacts
 ```
 
-Поля результата должны позволять отличить:
+Stable ids:
 
 ```text
-applied / skipped / duplicate / needs_review / failed / rate_limited
+HH        -> hh:<vacancy_id>
+Telegram  -> telegram:<channel>:<message_id>
+ATS       -> canonical posting URL/provider id
 ```
 
-На этом этапе action может быть dry-run.
+На первом этапе не ломаем upstream `Job` type: строим adapter boundary и расширяем формат только когда появится конкретная необходимость.
 
-### Phase 2 — HH vertical slice
-
-Первый настоящий end-to-end канал:
+Acceptance:
 
 ```text
-HH vacancy
--> canonical vacancy
--> career-ops evaluation
--> decision threshold
--> work-optimization adapter
--> HH apply
--> verified result
--> career-ops tracker
+source -> normalized items -> canonical pipeline writer
+```
+
+с dry-run, per-source errors и summary counters.
+
+---
+
+# Phase 2 — Career sites / ATS coverage
+
+Цель: подключить наши реальные целевые компании.
+
+Для каждой компании:
+
+```text
+career URL
+  -> определить ATS/vendor
+  -> проверить existing provider
+  -> добавить config
+  -> только если provider отсутствует: найти public API/feed
+  -> только потом писать новый adapter/browser fallback
+```
+
+Сначала используем уже существующие Greenhouse/Ashby/Lever/Workday/Teamtailor/etc providers.
+
+Результат:
+
+> добавляем компанию в config — её новые вакансии появляются в pipeline.
+
+---
+
+# Phase 3 — HH discovery
+
+Цель: HH становится ещё одним source, а не отдельной системой вокруг которой построен весь fork.
+
+Flow:
+
+```text
+HH API/search
+ -> hh:<vacancy_id>
+ -> normalize
+ -> dedup
+ -> pipeline
 ```
 
 Требования:
 
-- не откликаться повторно;
-- сохранять HH vacancy id + URL как source refs;
-- хранить причину skip/failure;
-- rate limit остаётся внутри HH executor;
-- сначала dry-run и маленькая тестовая пачка;
-- затем configurable auto-submit policy.
+- несколько поисковых запросов;
+- pagination/caps;
+- одна HH vacancy не появляется несколько раз;
+- сохраняется canonical HH URL;
+- ошибки HH изолированы от других sources;
+- понятная статистика run.
 
-### Phase 3 — Telegram ingest
+Auto-apply сюда **не входит**.
 
-Reference/donor: HHunter/JSS.
+---
 
-```text
-Telethon
--> channel messages
--> cheap filters
--> vacancy extraction
--> recruiter/contact extraction
--> canonical vacancy
--> dedup against HH/ATS
--> evaluation
-```
+# Phase 4 — Telegram ingest
 
-Из сообщений извлекаем по возможности:
+Цель: заданные нами Telegram-каналы становятся полноценными vacancy sources.
 
-- company;
-- role;
-- stack;
-- grade;
-- salary;
-- location/remote;
-- HH/ATS/career URL;
-- email;
-- Telegram username;
-- phone/contact name.
-
-Отдельно различаем channel / recruiter / bot username.
-
-### Phase 4 — contact enrichment + outreach
-
-Единый `Contact` слой:
+MVP:
 
 ```text
-recruiter | hiring-manager | peer | interviewer
+Telethon session
+ -> configured channels
+ -> recent messages
+ -> age filter
+ -> vacancy/keyword gate
+ -> anti-resume/spam filter
+ -> channel:message_id dedup
+ -> URL/contact extraction
+ -> common pipeline
 ```
 
-Каналы:
+Сохраняем минимум:
 
 ```text
-Telegram / email / LinkedIn
+channel
+message id
+message URL
+published time
+raw text
+extracted HH/ATS/career links
+@username/email/phone when obvious
 ```
 
-Нужны recruiter-level cooldown, история сообщений и связь контакта с application/tracker id.
+LLM classification не должен запускаться на каждом сообщении. Сначала дешёвые filters/dedup, semantic/LLM — только для неоднозначных кейсов.
 
-### Phase 5 — career sites / ATS actions
+---
 
-Использовать существующий public ATS discovery из career-ops для поиска.
+# Phase 5 — Cross-source dedup and ranking
 
-Для apply:
+Цель: вакансия, найденная в нескольких местах, остаётся одной canonical vacancy.
 
-- form inspection;
-- answer cache;
-- CV upload;
-- conditional fields;
-- submit verification;
-- `needs_review` при неизвестном вопросе/captcha/неоднозначном результате.
+Порядок signals:
+
+1. exact source id;
+2. canonical URL;
+3. embedded HH/ATS URL из Telegram;
+4. normalized company + title + date;
+5. text fingerprint/SimHash при необходимости.
+
+При merge сохраняем все source refs.
+
+После dedup добавляем дешёвый pre-ranking, чтобы полноценный career-ops evaluation запускался только по полезной части pipeline.
+
+---
+
+# Phase 6 — Scheduler / operations
+
+Цель: discovery реально работает регулярно.
+
+Нужно:
+
+- единый runner;
+- dry-run;
+- source isolation/timeouts;
+- overlapping-run lock;
+- cadence;
+- health state;
+- summary counters;
+- useful logging.
+
+Желаемый итог run:
+
+```text
+ATS       fetched/new/accepted/dup/errors
+HH        fetched/new/accepted/dup/errors
+Telegram  fetched/new/accepted/filtered/errors
+```
+
+---
+
+# Milestone: Discovery v0
+
+Первый настоящий product milestone:
+
+```text
+public ATS/career sites
++ HH
++ Telegram
+      |
+      v
+ normalize
+      |
+      v
+   dedup
+      |
+      v
+ data/pipeline.md
+```
+
+Done, когда:
+
+- повторный run не дублирует старые вакансии;
+- source каждой вакансии известен;
+- Telegram сообщения имеют stable id/URL;
+- ошибка одного source не валит остальные;
+- есть dry-run;
+- есть run summary;
+- очевидный мусор отбрасывается без LLM;
+- новые компании/каналы добавляются конфигурацией или маленьким adapter, а не переписыванием всей системы.
+
+---
+
+# Phase 7 — HH action vertical slice
+
+Только после Discovery v0.
+
+```text
+canonical vacancy
+ -> evaluation/decision
+ -> ActionRequest
+ -> HH executor
+ -> verify result
+ -> tracker
+```
+
+Берём из `hh-autoresponder` и других donor implementations:
+
+- sync already-applied state;
+- idempotency;
+- daily cap;
+- retry budget;
+- platform pause/global error handling;
+- API-first;
+- browser fallback only when needed;
+- verify before marking success.
+
+---
+
+# Phase 8 — ATS/browser actions
+
+После HH action slice.
 
 Reference: JobApplyAgent.
 
-### Phase 6 — replies и analytics
+Нужно:
 
-Объединить ответы из:
+- form inspection;
+- dynamic DOM extraction;
+- layered answer resolver;
+- CV/cover upload;
+- conditional multi-pass fill;
+- answer cache;
+- `needs_review` на неизвестных/опасных вопросах;
+- explicit result verification.
 
-- HH;
-- email;
-- Telegram;
-- LinkedIn.
+---
 
-Метрики:
+# Phase 9 — Contacts / outreach / replies
 
-```text
-source -> discovered -> evaluated -> applied -> reply -> screen -> tech -> offer
-```
-
-Оптимизируем не число отправок, а conversion в интервью/офферы.
-
-## 6. Правила реализации форка
-
-1. Сначала vertical slice, потом новые каналы.
-2. Не создавать вторую canonical DB: следуем upstream-принципу files-first, пока нет доказанной причины менять его.
-3. SQLite/индексы — derived state.
-4. Любое внешнее действие должно быть идемпотентным либо иметь проверку перед повтором.
-5. Action result проверяется после выполнения; факт вызова API/клика сам по себе не равен success.
-6. Secrets, session strings, cookies, API keys и PII не коммитятся.
-7. Новые источники не смешиваются с action logic.
-8. Browser automation — adapter/fallback, а не единственная архитектурная основа.
-9. Сохраняем возможность подтягивать upstream: минимизируем правки существующего core без необходимости.
-10. Новые behavior-changing изменения идут с тестами.
-
-## 7. Первый технический milestone
-
-Не строим сразу Telegram + HH + LinkedIn + email.
-
-Первый milestone:
+Добавляем:
 
 ```text
-one vacancy
--> evaluate
--> ActionRequest
--> HH adapter (dry-run)
--> ActionResult
--> tracker update
+Telegram recruiters
+email
+LinkedIn
+HH messages
 ```
 
-После него подключаем реальное выполнение через `work-optimization`.
+Нужны единый Contact model, cooldown/history и связь с canonical application.
 
-## 8. Вопросы, которые надо решить до кода integration layer
+Analytics:
 
-- Как `work-optimization` будет вызываться: HTTP API, CLI/subprocess или queue?
-- Какой минимальный canonical vacancy id использовать между источниками?
-- Где хранить source refs (`hh_id`, Telegram message id, ATS URL)?
-- Встраивать action adapters в plugin layer career-ops или сделать fork-specific integration layer?
-- Где заканчивается decision policy и начинается executor policy?
-- Как отражать `needs_review`, captcha и unknown form questions в существующих statuses?
-- Какие поля tracker стоит расширять, а какие хранить в sidecar/event log, чтобы не ломать upstream format?
+```text
+source
+ -> discovered
+ -> accepted
+ -> evaluated
+ -> applied
+ -> reply
+ -> interview
+ -> offer
+```
 
-До ответа на эти вопросы не меняем tracker schema и core scoring.
+Оптимизируем качество воронки, а не число автоматических действий.
+
+---
+
+## Donor-проекты и что из них берём
+
+### HHunter
+
+- Telethon runner/session;
+- staged Telegram filters;
+- anti-resume;
+- age filter;
+- text-hash dedup;
+- contact extraction;
+- unified vacancy pipeline;
+- dry-run.
+
+### job_monitoring_tg
+
+- простой MVP scanner;
+- per-channel error isolation;
+- `channel + message_id` state;
+- canonical message URL;
+- pause/resume/scheduler patterns.
+
+### hh-autoresponder
+
+- HH action/idempotency patterns;
+- already-applied sync;
+- caps/retries;
+- platform-level failure handling;
+- API-first + browser fallback.
+
+### profi_ru_bot
+
+- persistent browser profile;
+- page-ready synchronization;
+- JS-aware extraction;
+- урок: aggressive polling и нестандартный embedded browser быстро создают проблемы.
+
+### JobApplyAgent
+
+- fork-owned `scripts/` organization;
+- reusable form engine under `scripts/lib/`;
+- diagnostics/probes;
+- dynamic/conditional form filling;
+- answer cache.
+
+---
+
+## Правила развития форка
+
+1. Discovery first.
+2. Source != Decision != Action.
+3. API/feed/provider before browser automation.
+4. Cheap filters before LLM.
+5. Stable source IDs and idempotency from первого дня.
+6. Ошибка одного source не должна ломать весь run.
+7. Не создавать вторую canonical DB без доказанной причины.
+8. Secrets/session strings/cookies/PII не коммитятся.
+9. Новые fork scripts идут под `scripts/`, upstream compatibility surface без причины не двигаем.
+10. Behavior changes идут с тестами.
+11. Сначала один работающий vertical slice, потом расширение.
+12. `FORK_ARCHITECTURE_RU.md` и `BACKLOG_RU.md` обновляются вместе с важными решениями.
