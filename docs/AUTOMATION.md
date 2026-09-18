@@ -6,7 +6,7 @@ recipe: how to run the scanner unattended, and a cheap, zero-token **triage** pa
 that turns a pile of freshly-scanned URLs into a short "worth a look" list — *before*
 you spend any tokens evaluating them.
 
-Two independent pieces, smallest first. You can use either on its own.
+The upstream automation has two independent pieces, smallest first. This fork adds an optional third autonomous execution layer; each can be used independently.
 
 - **[1. Schedule the scan](#1-schedule-the-scan)** — run `node scan.mjs` on cron /
   launchd / Windows Task Scheduler. Zero tokens: the scanner only reads public
@@ -166,3 +166,32 @@ that already cleared a free title/location filter.
   separate and stack on top.
 - **Nothing new to install.** `node scan.mjs` already ships; the triage is a prompt,
   not a dependency.
+
+
+---
+
+## 3. Optional fork extension: autonomous application loop
+
+This fork adds `autopilot.mjs` + `autopilot-browser.mjs` for users who explicitly want the repetitive application step automated as well. The upstream human-review path remains available unchanged.
+
+The execution path is intentionally split into a reversible read phase and an irreversible-action phase:
+
+```text
+scan -> deterministic queue -> open/read JD -> claim(job + cap slot)
+                                         -> fill -> submit -> report -> tracker
+```
+
+The claim is the transaction boundary. Do not fill or upload before it succeeds:
+
+```bash
+npm run autopilot:preflight
+npm run autopilot
+node autopilot.mjs claim "https://company.example/jobs/123"
+# ... browser work ...
+node autopilot.mjs report "https://company.example/jobs/123" applied \
+  --claim-token "<token>" --channel browser --note "success page confirmed"
+```
+
+For multi-page forms, start a long-lived browser once with `node autopilot-browser.mjs serve`; normal `open`/`step` calls then reuse that page. The loopback control port is authenticated and the browser driver blocks private-network destinations, symlink upload escapes, and arbitrary page `eval` by default.
+
+For the full state machine, concurrency semantics, crash recovery, configuration, and security boundary, read [AUTOPILOT_SPEC.md](../AUTOPILOT_SPEC.md).
