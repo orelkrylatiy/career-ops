@@ -256,8 +256,7 @@ export function activeClaimCount(date, at = new Date()) {
  * The cap is checked against sent applications + live claims in the same SQLite
  * transaction, so parallel workers cannot both reserve the final slot.
  */
-export function claimApplication(urlKey, date, cap, ttlMinutes = 45) {
-  if (!Number.isSafeInteger(cap) || cap < 1) throw new RangeError('claimApplication: cap must be a positive integer');
+export function claimApplication(urlKey, date, ttlMinutes = 45) {
   if (!Number.isFinite(ttlMinutes) || ttlMinutes <= 0) throw new RangeError('claimApplication: ttlMinutes must be > 0');
   const db = openDb();
   return db.transaction(() => {
@@ -289,14 +288,6 @@ export function claimApplication(urlKey, date, cap, ttlMinutes = 45) {
       return { allowed: false, reason: 'already-claimed', expiresAt: existing.expires_at };
     }
 
-    const sent = db.prepare('SELECT applications_sent FROM daily_state WHERE date = ?').get(date)?.applications_sent ?? 0;
-    const reserved = db.prepare(
-      "SELECT COUNT(*) AS n FROM application_claims WHERE date = ? AND state = 'claimed' AND expires_at > ?",
-    ).get(date, now).n;
-    if (sent + reserved >= cap) {
-      return { allowed: false, reason: 'daily-cap', sent, reserved, cap };
-    }
-
     const token = randomUUID();
     db.prepare(`
       INSERT INTO application_claims (job_url_key, token, date, claimed_at, expires_at, state)
@@ -311,7 +302,7 @@ export function claimApplication(urlKey, date, cap, ttlMinutes = 45) {
     db.prepare(
       "UPDATE jobs SET status = 'in_progress', updated_at = ? WHERE url_key = ?",
     ).run(now, urlKey);
-    return { allowed: true, token, date, sent, reserved: reserved + 1, cap, expiresAt };
+    return { allowed: true, token, date, expiresAt };
   })();
 }
 
