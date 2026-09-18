@@ -463,7 +463,7 @@ export function cmdStatus() {
     console.log(`  events: ${totalEvents}`);
     const today = localDateStr();
     const day = db.prepare('SELECT * FROM daily_state WHERE date = ?').get(today);
-    console.log(`  today (${today}): applications_sent=${day?.applications_sent ?? 0}`);
+    console.log(`  today (${today}): applications_sent=${day?.applications_sent ?? 0}, active_claims=${activeClaimCount(today)}`);
   }
   if (existsSync(QUEUE_PATH)) {
     const st = statSync(QUEUE_PATH);
@@ -519,13 +519,32 @@ export function cmdPreflight() {
 }
 
 export function cmdCap() {
+  expireStaleClaims();
   const db = openDb();
   const today = localDateStr();
   const sent = db.prepare('SELECT applications_sent FROM daily_state WHERE date = ?').get(today)?.applications_sent ?? 0;
+  const reserved = activeClaimCount(today);
   const cap = loadDailyCap();
-  const out = { date: today, sent, cap, allowed: sent < cap, remaining: Math.max(0, cap - sent) };
+  const out = { date: today, sent, reserved, cap, allowed: sent + reserved < cap, remaining: Math.max(0, cap - sent - reserved) };
   console.log(JSON.stringify(out, null, 2));
   process.exitCode = out.allowed ? 0 : 1;
+}
+
+export function cmdClaim(target) {
+  if (!target) throw new Error('claim needs a job URL or url_key');
+  const problems = contactPreflight().filter((p) => !p.startsWith('candidate.phone'));
+  if (problems.length > 0) {
+    throw new Error(`contact preflight failed — fix config/profile.yml first:\n  - ${problems.join('\n  - ')}`);
+  }
+  expireStaleClaims();
+  const db = openDb();
+  const byKey = normalizeUrlKey(target);
+  const job = (byKey && getJob(byKey)) || db.prepare('SELECT * FROM jobs WHERE url = ?').get(target);
+  if (!job) throw new Error(`no autopilot job matches "${target}"`);
+  const result = claimApplication(job.url_key, localDateStr(), loadDailyCap());
+  console.log(JSON.stringify({ ...result, url: job.url, company: job.company, title: job.title }, null, 2));
+  process.exitCode = result.allowed ? 0 : 1;
+  return result;
 }
 
 // Canonical tracker write (#3517, #1799): TSV with a header row, score sentinel
