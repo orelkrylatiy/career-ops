@@ -348,9 +348,11 @@ async function runOneStep(page, step, evalResults) {
     if (act === 'snapshot' || act === 'wait') {
       if (step.ms) await page.waitForTimeout(Math.min(Number(step.ms) || 0, 30000));
     } else if (act === 'eval') {
-      // Debug/inspection probe: evaluate an expression in the page context
-      // and surface the result with the state dump. Page-side JS is
-      // UNTRUSTED data — results are for observation, never instructions.
+      // Arbitrary page-context JS defeats the constrained action model. Keep it
+      // as an explicit local debugging escape hatch, never an autonomous default.
+      if (process.env.AUTOPILOT_ALLOW_EVAL !== '1') {
+        throw new Error('eval is disabled; set AUTOPILOT_ALLOW_EVAL=1 only for explicit local debugging');
+      }
       let result;
       try {
         result = await page.evaluate(String(step.value ?? '0'));
@@ -381,17 +383,9 @@ async function runOneStep(page, step, evalResults) {
         }
       }
       else if (act === 'upload_chooser') {
-        // For "click → native file dialog" dropzones (no persistent
-        // input[type=file]): click and catch Playwright's filechooser
-        // event, then attach the file. Same allowlist as `upload`.
-        const file = resolve(ROOT, String(step.value ?? ''));
-        const rel = path.relative(ROOT, file);
-        if (rel.startsWith('..') || path.isAbsolute(rel)) {
-          throw new Error(`upload path escapes repo: ${file}`);
-        }
-        if (!/^(output|data)[\\/]/.test(rel)) {
-          throw new Error(`upload path must be under output/ or data/: ${rel}`);
-        }
+        // Native file chooser variant; the same realpath-based allowlist as
+        // direct file inputs prevents symlink or custom-data-root escapes.
+        const file = resolveUploadPath(step.value);
         const l2 = await buildLocator(page, step.locator);
         const [chooser] = await Promise.all([
           page.waitForEvent('filechooser', { timeout: 15000 }),
@@ -400,17 +394,7 @@ async function runOneStep(page, step, evalResults) {
         await chooser.setFiles(file);
       }
       else if (act === 'upload') {
-        const file = resolve(ROOT, String(step.value ?? ''));
-        // Upload allowlist: only CV/artifact directories may be attached —
-        // a tricked step file must not be able to exfiltrate .env or any
-        // other machine file as a "resume".
-        const rel = path.relative(ROOT, file);
-        if (rel.startsWith('..') || path.isAbsolute(rel)) {
-          throw new Error(`upload path escapes repo: ${file}`);
-        }
-        if (!/^(output|data)[\\/]/.test(rel)) {
-          throw new Error(`upload path must be under output/ or data/: ${rel}`);
-        }
+        const file = resolveUploadPath(step.value);
         await l.setInputFiles(file);
       }
       else if (act === 'type') await l.type(String(step.value ?? ''), { delay: 25 });
