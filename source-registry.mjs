@@ -235,7 +235,7 @@ function rowIdentity(row) {
 }
 
 async function fetchOne(url, ctx) {
-  return fetchTextWithRetry(url, { fetchText: ctx.fetchText, sleep: ctx.sleep }, { retries: 2 });
+  return fetchTextWithRetry(ctx, url, { redirect: 'error' }, { retries: 2 });
 }
 
 async function fetchDirectory(entry, ctx) {
