@@ -55,10 +55,6 @@ const CHANNELS = ['browser', 'ats_api', 'email'];
 // Geographic exclusions belong in profile.autopilot.blocked_locations rather
 // than in system code: hard-coded countries silently drop valid opportunities.
 const REMOTE_ONLY_NEGATIVE_RE = /(\b(?:hybrid|onsite|on-?site|office[ -]based)\b|гибрид|в офисе|только офис|офисный формат)/i;
-// Conservative fallback when config/profile.yml carries no usable cap: an
-// autonomous applier without a configured limit should stop early, not never.
-const DEFAULT_DAILY_CAP = 10;
-
 // Set for the top-level catch so even a crash mid-dry-run cannot write an
 // error event into a DB the dry-run promised not to touch.
 let dryRunActive = false;
@@ -69,7 +65,7 @@ function esc(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-/** Local-time 'YYYY-MM-DD' — the daily cap is a local-day concept. */
+/** Local-time 'YYYY-MM-DD' for analytics and application history. */
 function localDateStr(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
