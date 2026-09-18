@@ -31,6 +31,10 @@ These files contain your personal data, customizations, and work product. Update
 | `plugins.lock` | Integrity pins + recorded consent for your enabled plugins (generated; never auto-updated) |
 | `data/applications.md` | Your application tracker (source of truth) |
 | `data/applications.db` | Derived query index over `applications.md` (SQLite, rebuilt by `node tracker.mjs sync` — safe to delete) |
+| `data/autopilot.db` (+ `-wal`/`-shm`) | Autonomous worker operational journal: queued jobs, attempts, claim leases, daily counters, events and harvested contacts. The canonical long-term record of sent applications remains `data/applications.md`; deleting this DB loses operational/event history but scans can rebuild queued work. |
+| `data/autopilot-queue.md` | Generated human/agent-readable projection of currently queued autonomous jobs; regenerated from `data/autopilot.db`, safe to delete. |
+| `data/autopilot/jds/*` | Verbatim JD snapshots captured by the autonomous browser flow for audit/recovery; candidate work product, never auto-updated. |
+| `data/browser-profile*`, `data/browser-state*.json`, `data/browser-serve*.json` | Local browser session/profile, observation dumps and authenticated loopback serve metadata. Sensitive machine-local runtime state; never commit or auto-update. |
 | `data/pipeline.md` | Your URL inbox |
 | `data/scan-history.tsv` | Your scan history (tab-separated, append-only trailing columns; col 8: local SimHash JD fingerprint for cross-listing detection, col 9: posting date, cols 10-11: trust score/flags, col 12: normalized company key for repost/name matching). Older rows may have fewer columns — readers index by position and tolerate the absence. |
 | `data/scan-runs.tsv` | Your per-run scan counters (appended by `scan.mjs`, read by `stats.mjs`) |
