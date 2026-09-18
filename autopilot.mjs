@@ -303,7 +303,13 @@ export async function cmdRun(flags) {
   const counts = { pending: 0, qualifiedNew: 0, alreadyKnown: 0, dupTracker: 0, gateSkipped: 0, dedupSkipped: 0 };
   let scanResult = 'skipped';
 
-  if (!flags.dryRun) addEvent('run', 'start', { noScan: !!flags.noScan, noTg: !!flags.noTg });
+  if (!flags.dryRun) {
+    const staleClaims = expireStaleClaims();
+    if (staleClaims > 0) {
+      addEvent('claim', `expired ${staleClaims} stale application claim(s); jobs require verification before retry`, { staleClaims }, 'warn');
+    }
+    addEvent('run', 'start', { noScan: !!flags.noScan, noTg: !!flags.noTg });
+  }
 
   try {
     // 1. scan (unless suppressed)
@@ -323,17 +329,10 @@ export async function cmdRun(flags) {
     let db = null;
     if (!flags.dryRun) db = openDb();
     else if (existsSync(DB_PATH)) db = openDb();
-    // Cross-source dedup index: the same posting arrives from two aggregators
-    // under two different URLs, so URL dedup passes both and the autopilot
-    // would apply twice. Key = normalizeTextKey(company) + '\n' + title.
-    // Built after `db` exists (a dry run without a DB file simply skips it).
-    const dbCompanyTitleIndex = new Map();
-    if (db) {
-      for (const j of listJobs()) {
-        const k = `${normalizeTextKey(j.company || '')}\n${normalizeTextKey(j.title || '')}`;
-        if (k !== '\n' && !dbCompanyTitleIndex.has(k)) dbCompanyTitleIndex.set(k, j);
-      }
-    }
+    // Deliberately no company+title fuzzy dedup here. The core tracker treats
+    // distinct confirmed posting URLs as distinct requisitions; collapsing them
+    // here caused false negatives for companies hiring the same title more than once.
+    const locationPolicy = loadLocationPolicy();
 
     for (const entry of entries) {
       const urlKey = normalizeUrlKey(entry.url);
@@ -357,22 +356,16 @@ export async function cmdRun(flags) {
       // Exact-match sets only: a substring test made /job/123 match /job/1234.
       const inTracker = tracker.rawSet.has(entry.url) || tracker.keySet.has(urlKey);
       const blHit = blacklist.get(normalizeTextKey(entry.company || '')) || null;
-      const hostHit = excludedHosts.find(t => host.includes(t));
+      const hostHit = excludedHosts.find(t => hostMatchesToken(host, t));
 
       if (seenInDb) {
         decisions.push(`DUP: already in autopilot DB | ${label}`);
         counts.alreadyKnown += 1;
         continue;
       }
-      const dupOf = db ? dbCompanyTitleIndex.get(`${normalizeTextKey(entry.company || '')}\n${normalizeTextKey(entry.title || '')}`) : null;
-      if (dupOf) {
-        decisions.push(`DUP: same company+title already queued via ${dupOf.source || dupOf.url_key} | ${label}`);
-        counts.alreadyKnown += 1;
-        continue;
-      }
-      const locBad = LOCATION_NEGATIVE_RE.exec(String(entry.location || ''));
-      if (locBad) {
-        decisions.push(`SKIPPED: location "${locBad[0]}" in "${entry.location}" (remote-only candidate) | ${label}`);
+      const locationGate = gateLocation(entry.location, locationPolicy);
+      if (!locationGate.ok) {
+        decisions.push(`SKIPPED: ${locationGate.reason} in "${entry.location}" | ${label}`);
         counts.gateSkipped += 1;
         continue;
       }
@@ -395,8 +388,6 @@ export async function cmdRun(flags) {
       // 5. survivor
       decisions.push(`QUALIFIED | ${label}`);
       survivors.push({ company: entry.company, title: entry.title, url: entry.url });
-      // Same-run cross-source duplicates must also collide with each other.
-      dbCompanyTitleIndex.set(`${normalizeTextKey(entry.company || '')}\n${normalizeTextKey(entry.title || '')}`, { url_key: urlKey, source: host });
       counts.qualifiedNew += 1;
       if (!flags.dryRun) {
         upsertJob({
