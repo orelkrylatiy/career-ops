@@ -19,6 +19,7 @@
 // must treat that as unknown, never as a value that can match another ''.
 
 import { mkdirSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { fileURLToPath } from 'node:url';
@@ -52,6 +53,14 @@ CREATE TABLE IF NOT EXISTS applications (
   outcome TEXT,
   error TEXT,
   created_at TEXT
+);
+CREATE TABLE IF NOT EXISTS application_claims (
+  job_url_key TEXT PRIMARY KEY,
+  token TEXT NOT NULL UNIQUE,
+  date TEXT NOT NULL,
+  claimed_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  state TEXT NOT NULL DEFAULT 'claimed'
 );
 CREATE TABLE IF NOT EXISTS llm_calls (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -88,6 +97,7 @@ CREATE TABLE IF NOT EXISTS daily_state (
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 CREATE INDEX IF NOT EXISTS idx_applications_job ON applications(job_url_key);
+CREATE INDEX IF NOT EXISTS idx_claims_date_state ON application_claims(date, state, expires_at);
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
 `;
 
@@ -105,6 +115,7 @@ export function openDb() {
   mkdirSync(path.dirname(DB_PATH), { recursive: true });
   const db = new Database(DB_PATH);
   db.pragma('journal_mode = WAL');
+  db.pragma('busy_timeout = 5000');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
   dbHandle = db;
@@ -203,6 +214,107 @@ export function upsertJob(job) {
   });
 }
 
+/**
+ * Expire abandoned application claims. Claimed jobs are NOT silently requeued:
+ * a worker may have submitted the external form and crashed before reporting it.
+ * Marking the job failed/review-required prevents a duplicate application.
+ *
+ * @param {Date} [at=new Date()]
+ * @returns {number} number of claims expired
+ */
+export function expireStaleClaims(at = new Date()) {
+  const db = openDb();
+  const now = at.toISOString();
+  return db.transaction(() => {
+    const stale = db.prepare(
+      "SELECT job_url_key FROM application_claims WHERE state = 'claimed' AND expires_at <= ?",
+    ).all(now);
+    if (stale.length === 0) return 0;
+    db.prepare(
+      "UPDATE application_claims SET state = 'expired' WHERE state = 'claimed' AND expires_at <= ?",
+    ).run(now);
+    const failJob = db.prepare(
+      "UPDATE jobs SET status = 'failed', note = ?, updated_at = ? WHERE url_key = ? AND status = 'in_progress'",
+    );
+    for (const row of stale) {
+      failJob.run('stale_claim_verify_before_retry', now, row.job_url_key);
+    }
+    return stale.length;
+  })();
+}
+
+/** Count live claims that currently consume today's application capacity. */
+export function activeClaimCount(date, at = new Date()) {
+  return openDb().prepare(
+    "SELECT COUNT(*) AS n FROM application_claims WHERE date = ? AND state = 'claimed' AND expires_at > ?",
+  ).get(date, at.toISOString()).n;
+}
+
+/**
+ * Atomically reserve one application slot and one job for a worker.
+ *
+ * The cap is checked against sent applications + live claims in the same SQLite
+ * transaction, so parallel workers cannot both reserve the final slot.
+ */
+export function claimApplication(urlKey, date, cap, ttlMinutes = 45) {
+  if (!Number.isSafeInteger(cap) || cap < 1) throw new RangeError('claimApplication: cap must be a positive integer');
+  if (!Number.isFinite(ttlMinutes) || ttlMinutes <= 0) throw new RangeError('claimApplication: ttlMinutes must be > 0');
+  const db = openDb();
+  return db.transaction(() => {
+    const nowDate = new Date();
+    const now = nowDate.toISOString();
+    const expiresAt = new Date(nowDate.getTime() + Math.min(ttlMinutes, 180) * 60_000).toISOString();
+
+    const stale = db.prepare(
+      "SELECT job_url_key FROM application_claims WHERE state = 'claimed' AND expires_at <= ?",
+    ).all(now);
+    if (stale.length) {
+      db.prepare(
+        "UPDATE application_claims SET state = 'expired' WHERE state = 'claimed' AND expires_at <= ?",
+      ).run(now);
+      const failJob = db.prepare(
+        "UPDATE jobs SET status = 'failed', note = ?, updated_at = ? WHERE url_key = ? AND status = 'in_progress'",
+      );
+      for (const row of stale) failJob.run('stale_claim_verify_before_retry', now, row.job_url_key);
+    }
+
+    const job = db.prepare('SELECT * FROM jobs WHERE url_key = ?').get(urlKey);
+    if (!job) return { allowed: false, reason: 'not-found' };
+    if (job.status === 'applied') return { allowed: false, reason: 'already-applied' };
+
+    const existing = db.prepare(
+      "SELECT * FROM application_claims WHERE job_url_key = ? AND state = 'claimed' AND expires_at > ?",
+    ).get(urlKey, now);
+    if (existing) {
+      return { allowed: false, reason: 'already-claimed', expiresAt: existing.expires_at };
+    }
+
+    const sent = db.prepare('SELECT applications_sent FROM daily_state WHERE date = ?').get(date)?.applications_sent ?? 0;
+    const reserved = db.prepare(
+      "SELECT COUNT(*) AS n FROM application_claims WHERE date = ? AND state = 'claimed' AND expires_at > ?",
+    ).get(date, now).n;
+    if (sent + reserved >= cap) {
+      return { allowed: false, reason: 'daily-cap', sent, reserved, cap };
+    }
+
+    const token = randomUUID();
+    db.prepare(`
+      INSERT INTO application_claims (job_url_key, token, date, claimed_at, expires_at, state)
+      VALUES (?, ?, ?, ?, ?, 'claimed')
+      ON CONFLICT(job_url_key) DO UPDATE SET
+        token = excluded.token,
+        date = excluded.date,
+        claimed_at = excluded.claimed_at,
+        expires_at = excluded.expires_at,
+        state = 'claimed'
+    `).run(urlKey, token, date, now, expiresAt);
+    db.prepare(
+      "UPDATE jobs SET status = 'in_progress', updated_at = ? WHERE url_key = ?",
+    ).run(now, urlKey);
+    return { allowed: true, token, date, sent, reserved: reserved + 1, cap, expiresAt };
+  })();
+}
+
 /** @returns {object|undefined} the jobs row for a url_key, if any */
 export function getJob(urlKey) {
   return openDb().prepare('SELECT * FROM jobs WHERE url_key = ?').get(urlKey);
@@ -230,19 +342,93 @@ export function listJobs(status) {
  * @param {string|null} [channel] - 'browser' | 'ats_api' | 'email'
  * @returns {boolean} true when a jobs row was actually updated
  */
-export function reportOutcome(urlKey, outcome, note = null, channel = null) {
+export function reportOutcome(urlKey, outcome, note = null, channel = null, claimToken = null) {
   const db = openDb();
   const now = new Date().toISOString();
   const run = db.transaction(() => {
-    const res = db.prepare(
+    const job = db.prepare('SELECT * FROM jobs WHERE url_key = ?').get(urlKey);
+    if (!job) return false;
+
+    const claim = db.prepare(
+      "SELECT * FROM application_claims WHERE job_url_key = ? AND state = 'claimed'",
+    ).get(urlKey);
+    if (claim && claim.token !== claimToken) {
+      throw new Error('application claim token required or does not match');
+    }
+
+    // Idempotency: retrying the same report after a timeout/crash must not add
+    // another attempt row or consume capacity again.
+    if (job.status === outcome) {
+      if (note != null) {
+        db.prepare('UPDATE jobs SET note = ?, updated_at = ? WHERE url_key = ?').run(note, now, urlKey);
+      }
+      if (claim) {
+        db.prepare("UPDATE application_claims SET state = 'released' WHERE job_url_key = ?").run(urlKey);
+      }
+      return true;
+    }
+
+    db.prepare(
       'UPDATE jobs SET status = ?, note = COALESCE(?, note), updated_at = ? WHERE url_key = ?',
     ).run(outcome, note ?? null, now, urlKey);
     db.prepare(
       'INSERT INTO applications (job_url_key, channel, outcome, error, created_at) VALUES (?, ?, ?, ?, ?)',
     ).run(urlKey, channel ?? null, outcome, outcome === 'failed' ? (note ?? null) : null, now);
-    return res.changes > 0;
+    if (claim) {
+      db.prepare("UPDATE application_claims SET state = 'released' WHERE job_url_key = ?").run(urlKey);
+    }
+    return true;
   });
   return run();
+}
+
+/**
+ * Record a real external submission exactly once and consume its claim.
+ * A live claim is the concurrency-safe cap reservation. Legacy callers without
+ * a claim are still accepted so an already-sent form is never misrepresented as
+ * failed; the caller can surface `claimed:false` as a warning.
+ */
+export function reportApplied(urlKey, note = null, channel = null, date, claimToken = null) {
+  const db = openDb();
+  const now = new Date().toISOString();
+  return db.transaction(() => {
+    const job = db.prepare('SELECT * FROM jobs WHERE url_key = ?').get(urlKey);
+    if (!job) return { ok: false, reason: 'not-found' };
+
+    if (job.status === 'applied') {
+      const row = db.prepare('SELECT * FROM daily_state WHERE date = ?').get(date);
+      return { ok: true, duplicate: true, claimed: false, dailyRow: row ?? { date, applications_sent: 0 } };
+    }
+
+    const claim = db.prepare(
+      "SELECT * FROM application_claims WHERE job_url_key = ? AND state = 'claimed'",
+    ).get(urlKey);
+    if (claim && claim.expires_at <= now) {
+      return { ok: false, reason: 'claim-expired' };
+    }
+    if (claim && claim.token !== claimToken) {
+      return { ok: false, reason: 'claim-token-required' };
+    }
+    if (job.status === 'in_progress' && !claim) {
+      return { ok: false, reason: 'claim-missing' };
+    }
+
+    db.prepare(
+      'UPDATE jobs SET status = ?, note = COALESCE(?, note), updated_at = ? WHERE url_key = ?',
+    ).run('applied', note ?? null, now, urlKey);
+    db.prepare(
+      'INSERT INTO applications (job_url_key, channel, outcome, error, created_at) VALUES (?, ?, ?, NULL, ?)',
+    ).run(urlKey, channel ?? null, 'applied', now);
+    db.prepare(`
+      INSERT INTO daily_state (date, applications_sent, notes) VALUES (?, 1, NULL)
+      ON CONFLICT(date) DO UPDATE SET applications_sent = applications_sent + 1
+    `).run(date);
+    if (claim) {
+      db.prepare("UPDATE application_claims SET state = 'consumed' WHERE job_url_key = ?").run(urlKey);
+    }
+    const dailyRow = db.prepare('SELECT * FROM daily_state WHERE date = ?').get(date);
+    return { ok: true, duplicate: false, claimed: Boolean(claim), dailyRow };
+  })();
 }
 
 /**
@@ -265,7 +451,7 @@ export function incrementDaily(date, delta = 1) {
 }
 
 /** Canonical lifecycle statuses, in lifecycle order (for zero-filled reports). */
-export const JOB_STATUSES = ['queued', 'applied', 'test_filled', 'failed', 'captcha', 'skipped'];
+export const JOB_STATUSES = ['queued', 'in_progress', 'applied', 'test_filled', 'failed', 'captcha', 'skipped'];
 
 /** Per-status job counts, zero-filled over JOB_STATUSES plus any stray value. */
 export function statusCounts() {
