@@ -626,7 +626,7 @@ async function writeTrackerAdditionTsv(job, note) {
   }
 }
 
-export async function cmdReport(target, outcome, note, channel) {
+export async function cmdReport(target, outcome, note, channel, claimToken) {
   if (!OUTCOMES.includes(outcome)) {
     throw new Error(`invalid outcome "${outcome}" — must be one of: ${OUTCOMES.join(' | ')}`);
   }
@@ -636,18 +636,12 @@ export async function cmdReport(target, outcome, note, channel) {
   if (!target) throw new Error('report needs a job URL or url_key as the first argument');
 
   const db = openDb();
-  // normalizeUrl is idempotent, so this accepts a raw URL, an already
-  // normalized url_key, or anything that normalizes onto the stored key.
   const byKey = normalizeUrlKey(target);
   const job = (byKey && getJob(byKey)) || db.prepare('SELECT * FROM jobs WHERE url = ?').get(target);
   if (!job) {
     throw new Error(`no autopilot job matches "${target}" (neither as url_key nor as exact url)`);
   }
 
-  // B1 guard: recording a fill/submit that used placeholder contacts would
-  // launder fabricated data into the tracker. Block until the profile is real.
-  // Phone is a warning, not a blocker (email-only forms are fine; phone-REQUIRING
-  // forms are skipped per playbook — never fabricated).
   if (outcome === 'applied' || outcome === 'test_filled') {
     const problems = contactPreflight().filter((p) => !p.startsWith('candidate.phone'));
     if (problems.length > 0) {
@@ -656,41 +650,40 @@ export async function cmdReport(target, outcome, note, channel) {
     }
   }
 
-  // Cap check BEFORE any write. A refusal after a real submit is the dangerous
-  // case (M2): the application may have been sent, so the job must LEAVE the
-  // queue (failed/cap_exceeded) instead of staying queued for a re-submit.
   let dailyRow = null;
+  let duplicate = false;
   if (outcome === 'applied') {
-    const cap = loadDailyCap();
-    const today = localDateStr();
-    const row = db.prepare('SELECT applications_sent FROM daily_state WHERE date = ?').get(today);
-    const sent = row?.applications_sent ?? 0;
-    if (sent >= cap) {
-      reportOutcome(job.url_key, 'failed', 'cap_exceeded_post_submit: application may have been sent — verify manually', null);
-      addEvent('cap', 'refused "applied": daily cap reached; job marked failed/cap_exceeded_post_submit', { date: today, sent, cap, url: job.url }, 'warn');
-      regenerateQueue();
-      throw new Error(`daily cap reached: ${sent}/${cap} for ${today}. Job moved OUT of the queue (application may have been sent — verify manually).`);
+    const result = reportApplied(job.url_key, note ?? null, channel ?? null, localDateStr(), claimToken ?? null);
+    if (!result.ok) throw new Error(`cannot record applied outcome: ${result.reason}`);
+    dailyRow = result.dailyRow;
+    duplicate = result.duplicate;
+    if (!result.claimed && !result.duplicate) {
+      addEvent('claim', 'applied outcome arrived without a live claim; recorded reality but concurrency cap was not reserved', { url: job.url }, 'warn');
+      console.error('  warning: applied was reported without a live claim; use autopilot.mjs claim before opening a form');
     }
+  } else {
+    const updated = reportOutcome(job.url_key, outcome, note ?? null, channel ?? null, claimToken ?? null);
+    if (!updated) throw new Error(`job row vanished before update (url_key=${job.url_key})`);
   }
 
-  const updated = reportOutcome(job.url_key, outcome, note ?? null, channel ?? null);
-  if (!updated) throw new Error(`job row vanished before update (url_key=${job.url_key})`);
-  addEvent('report', `${outcome} — ${job.company || '?'} — ${job.title || '?'}`, {
+  addEvent('report', `${outcome}${duplicate ? ' (idempotent retry)' : ''} — ${job.company || '?'} — ${job.title || '?'}`, {
     url: job.url, note: note ?? null, channel: channel ?? null,
   });
+
   if (outcome === 'applied') {
-    dailyRow = incrementDaily(localDateStr(), 1);
     try {
-      const tsv = writeTrackerAdditionTsv(job, note);
-      console.log(`  tracker: row ${tsv.num} written + merged (${path.basename(tsv.file)})`);
+      const tsv = await writeTrackerAdditionTsv(job, note);
+      if (tsv.alreadyPresent) console.log('  tracker: application row already present (idempotent retry)');
+      else if (tsv.repaired) console.log(`  tracker: recovered pending row ${tsv.num ?? '?'} and merged it`);
+      else console.log(`  tracker: row ${tsv.num} written + merged (${path.basename(tsv.file)})`);
     } catch (e) {
       addEvent('tracker', `TSV/merge failed after applied: ${e.message}`, { url: job.url }, 'error');
-      console.error(`  tracker write FAILED (${e.message}) — row NOT in applications.md; record manually`);
+      console.error(`  tracker write FAILED (${e.message}) — durable TSV/reservation kept when possible; retry the same report to reconcile`);
     }
   }
 
   regenerateQueue();
-  console.log(`reported ${outcome} for: ${job.company || '?'} — ${job.title || '?'}`);
+  console.log(`reported ${outcome}${duplicate ? ' (already recorded)' : ''} for: ${job.company || '?'} — ${job.title || '?'}`);
   console.log(`  url: ${job.url}`);
   if (note) console.log(`  note: ${note}`);
   if (channel) console.log(`  channel: ${channel}`);
