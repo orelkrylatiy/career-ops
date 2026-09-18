@@ -243,7 +243,7 @@ export function expireStaleClaims(at = new Date()) {
   })();
 }
 
-/** Count live claims that currently consume today's application capacity. */
+/** Count live claims created for a local date (operational diagnostics only). */
 export function activeClaimCount(date, at = new Date()) {
   return openDb().prepare(
     "SELECT COUNT(*) AS n FROM application_claims WHERE date = ? AND state = 'claimed' AND expires_at > ?",
@@ -251,10 +251,10 @@ export function activeClaimCount(date, at = new Date()) {
 }
 
 /**
- * Atomically reserve one application slot and one job for a worker.
+ * Atomically lease one job to a worker.
  *
- * The cap is checked against sent applications + live claims in the same SQLite
- * transaction, so parallel workers cannot both reserve the final slot.
+ * There is intentionally no local throughput quota. The transaction exists
+ * only to stop two workers from mutating/submitting the same posting at once.
  */
 export function claimApplication(urlKey, date, ttlMinutes = 45) {
   if (!Number.isFinite(ttlMinutes) || ttlMinutes <= 0) throw new RangeError('claimApplication: ttlMinutes must be > 0');
