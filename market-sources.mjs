@@ -18,6 +18,7 @@ const DATA_ROOT = getCareerOpsRoot();
 const REGISTRY_ROOT = path.join(CODE_ROOT, 'market-sources');
 const COMPANY_ROOT = path.join(REGISTRY_ROOT, 'companies');
 const AGGREGATORS_FILE = path.join(REGISTRY_ROOT, 'aggregators.yml');
+const LOCALES_FILE = path.join(REGISTRY_ROOT, 'locales.yml');
 const COUNTRY_FILES = { RU: 'ru.yml', KZ: 'kz.yml', AM: 'am.yml', UZ: 'uz.yml' };
 const DEFAULT_COUNTRIES = Object.keys(COUNTRY_FILES);
 
@@ -53,7 +54,16 @@ export function loadMarketRegistry(countries = DEFAULT_COUNTRIES) {
     return { ...doc, country, companies: [...ranked, ...extra], ranked_count: ranked.length, extra_count: extra.length };
   });
   const aggregators = loadYaml(AGGREGATORS_FILE).sources ?? [];
-  return { markets, aggregators: aggregators.filter(s => countries.includes(String(s.country || '').toUpperCase())) };
+  const localeDoc = loadYaml(LOCALES_FILE);
+  const locales = Object.fromEntries(
+    Object.entries(localeDoc.markets ?? {}).filter(([country]) => countries.includes(country)),
+  );
+  return {
+    markets,
+    locales,
+    locale_policy: localeDoc.policy ?? {},
+    aggregators: aggregators.filter(s => countries.includes(String(s.country || '').toUpperCase())),
+  };
 }
 
 export function registryStats(registry) {
@@ -89,7 +99,13 @@ export function exportCompanySeeds(registry) {
       const key = name.toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
-      const row = { name, market: market.country, languages: market.languages ?? [] };
+      const locale = registry.locales?.[market.country] ?? {};
+      const row = {
+        name,
+        market: market.country,
+        languages: market.languages ?? [],
+        application_languages: locale.fallback_order ?? market.languages ?? [],
+      };
       if (c.career_url) row.website = c.career_url;
       companies.push(row);
     }
