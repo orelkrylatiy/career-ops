@@ -14,3 +14,4 @@ modes/autopilot.md
 AUTOPILOT_SPEC.md
 market-sources.mjs
 market-sources/
+wide-scan.mjs
