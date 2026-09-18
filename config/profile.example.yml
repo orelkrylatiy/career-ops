@@ -256,6 +256,20 @@ cover_letter:
 #   # default_sender_note: "the email used to send this message"
 #   # signature_name: "Jane Smith"
 
+# ── Autonomous wide-funnel worker (fork extension) ──────────────────────────
+#
+# There is intentionally NO Career-Ops-side application-count or per-run cap.
+# External services may rate-limit; the worker should back off only that source.
+#
+# autopilot:
+#   cv_pdf: "output/cv.pdf"
+#   # Optional explicit restrictions. Defaults are open/wide:
+#   remote_only: false
+#   blocked_locations: []
+#   blacklist_sources: []
+#   # Locale strategy is page-first. Regional fallback order comes from
+#   # catalog/source-catalog.yml rather than a single forced language.
+#
 # ── Scan / JD extractor ─────────────────────────────────────────────────────
 #
 # How the scan and JD-extraction steps read SPA job pages.
