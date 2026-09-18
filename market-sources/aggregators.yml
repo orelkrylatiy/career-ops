@@ -1,0 +1,160 @@
+version: 1
+verified_on: 2026-09-18
+sources:
+  - id: hh-ru
+    name: HeadHunter Russia
+    country: RU
+    languages: [ru]
+    url: https://hh.ru/vacancies
+    source_type: aggregator
+    status: live
+    access: browser
+    notes: Broad general-market source; keep as a discovery lane even when direct employer sites are also tracked.
+  - id: habr-career
+    name: Habr Career
+    country: RU
+    languages: [ru]
+    url: https://career.habr.com/vacancies
+    source_type: tech_job_board
+    status: live
+    access: browser
+  - id: geekjob
+    name: GeekJob
+    country: RU
+    languages: [ru]
+    url: https://geekjob.ru/
+    source_type: tech_job_board
+    status: live
+    access: browser
+  - id: getmatch
+    name: getmatch
+    country: RU
+    languages: [ru]
+    url: https://getmatch.ru/catalog
+    source_type: tech_job_board
+    status: live
+    access: browser
+  - id: superjob
+    name: SuperJob
+    country: RU
+    languages: [ru]
+    url: https://www.superjob.ru/vakansii/
+    source_type: aggregator
+    status: live
+    access: browser
+  - id: rabota-ru
+    name: Rabota.ru
+    country: RU
+    languages: [ru]
+    url: https://www.rabota.ru/vacancy
+    source_type: aggregator
+    status: live
+    access: browser
+  - id: zarplata-ru
+    name: Zarplata.ru
+    country: RU
+    languages: [ru]
+    url: https://zarplata.ru/search/vacancy
+    source_type: aggregator
+    status: live
+    access: browser
+
+  - id: hh-kz
+    name: HeadHunter Kazakhstan
+    country: KZ
+    languages: [ru, kk]
+    url: https://hh.kz/vacancies
+    source_type: aggregator
+    status: live
+    access: browser
+  - id: enbek-kz
+    name: Enbek
+    country: KZ
+    languages: [ru, kk]
+    url: https://www.enbek.kz/ru/vac/profs/01
+    source_type: public_employment_exchange
+    status: live
+    access: http_or_browser
+    notes: Official electronic labour exchange; IT/telecom category is directly addressable.
+  - id: rabota-nur-kz
+    name: Rabota NUR
+    country: KZ
+    languages: [ru, kk]
+    url: https://rabota.nur.kz/
+    source_type: aggregator
+    status: research
+    access: browser
+
+  - id: staff-am
+    name: Staff.am
+    country: AM
+    languages: [hy, en, ru]
+    url: https://staff.am/
+    source_type: aggregator
+    status: live
+    access: http_or_browser
+  - id: careercenter-am
+    name: CareerCenter.am
+    country: AM
+    languages: [hy, en, ru]
+    url: https://careercenter.am/en/jobs
+    source_type: aggregator
+    status: live
+    access: http_or_browser
+  - id: jobfinder-am
+    name: JobFinder.am
+    country: AM
+    languages: [hy, en, ru]
+    url: https://www.jobfinder.am/en/jobs
+    source_type: aggregator
+    status: live
+    access: http_or_browser
+  - id: myjob-am
+    name: MyJob.am
+    country: AM
+    languages: [hy, en]
+    url: https://www.myjob.am/
+    source_type: aggregator
+    status: live
+    access: http_or_browser
+  - id: list-am-jobs
+    name: List.am Jobs
+    country: AM
+    languages: [hy, en, ru]
+    url: https://www.list.am/en/category/29
+    source_type: classifieds_jobs
+    status: live
+    access: browser
+
+  - id: hh-uz
+    name: HeadHunter Uzbekistan
+    country: UZ
+    languages: [ru, uz]
+    url: https://hh.uz/vacancies
+    source_type: aggregator
+    status: live
+    access: browser
+  - id: ishkop-uz
+    name: Ishkop
+    country: UZ
+    languages: [ru, uz]
+    url: https://ishkop.uz/it
+    source_type: aggregator
+    status: live
+    access: http_or_browser
+  - id: uzjobs
+    name: UzJobs
+    country: UZ
+    languages: [ru, en, uz]
+    url: https://uzjobs.uz/r/vakansy.html
+    source_type: aggregator
+    status: live
+    access: http_or_browser
+  - id: olx-uz-it
+    name: OLX Uzbekistan IT jobs
+    country: UZ
+    languages: [ru, uz]
+    url: https://www.olx.uz/rabota/it-telekom-kompyutery/
+    source_type: classifieds_jobs
+    status: live
+    access: browser
