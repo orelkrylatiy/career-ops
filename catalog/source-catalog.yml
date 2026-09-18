@@ -29,7 +29,7 @@ company_directories:
   - id: ru-cnews500-2025
     country: RU
     name: CNews500 2025
-    url: https://www.cnews.ru/reviews/rynok_it_itogi_2025/articles/cnews500_krupnejshie_it-kompanii_rossii
+    url: https://www.cnews.ru/reviews/rynok_it_itogi_2025/review_table/1b09b9e5d91b5fec50d07da70048a51301067b34
     parser: cnews500
     order: ranking
     status: live
