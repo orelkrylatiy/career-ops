@@ -8,7 +8,7 @@ Career-ops is built on three commitments that every design decision serves:
 
 - **Local-first.** Everything runs on your machine against your files. No account required, no server in the loop for the core tool.
 - **AI-agnostic.** The logic lives in Markdown prompt files under `modes/`, executed by whatever AI coding CLI you use (Claude Code, Codex, OpenCode, Gemini, Qwen, Grok, Antigravity) or by standalone Node scripts. No single model is hardcoded.
-- **Human-in-the-loop.** The tool prepares and evaluates; the human reviews and clicks. It never submits applications on your behalf.
+- **Human-in-the-loop by default.** Upstream/core prepares and evaluates; the human reviews and clicks. This fork adds an explicit autonomous execution overlay (`AUTOPILOT_SPEC.md`) that may submit only through its claim/cap/audit protocol; it is not the default core path.
 
 ## The two layers (the data contract)
 
@@ -22,6 +22,8 @@ The single most important architectural rule: **system files** and **user files*
 ## Files are canonical — databases are derived
 
 Settled doctrine ([#918](https://github.com/career-ops-hq/career-ops/issues/918)): the human-readable, git-diffable files (`data/applications.md`, `reports/`, `data/pipeline.md`) are the **permanent source of truth**. SQLite exists only as a derived index (fast queries, reindex-on-delete) and will never become a primary store — not even opt-in. The reason is ecosystem-wide: the web UI, the Go dashboard, community plugins, and thousands of fork scripts all read the files; a second canonical store would force every reader to support two modes forever. Performance work is welcome **on the derived layer**; the files stay the brain.
+
+The autonomous fork extension follows the same long-term rule: `data/autopilot.db` is an **operational journal** for queue state, leases, attempts and telemetry, while sent applications are reconciled into `data/applications.md`. Deleting the journal can lose transient/event history, but must not erase the canonical record of an application that was sent.
 
 ## Why the flat root
 
@@ -63,6 +65,9 @@ The heart of the tool. `oferta.md` defines the A–H evaluation blocks (H is con
 ### Tracking — `data/` + `reports/` + tracker scripts
 Every evaluated offer is registered. `data/applications.md` is the canonical tracker table; `reports/{NNN}-{company}-{date}.md` holds full evaluations. `tracker.mjs`, `merge-tracker.mjs`, `dedup-tracker.mjs`, `normalize-statuses.mjs`, and `reconcile-pipeline.mjs` keep it consistent (atomic writes + a SQLite index). Report numbers are claimed atomically via `reserve-report-num.mjs`.
 
+### Autonomous execution overlay — `autopilot*.mjs`
+This fork's optional execution layer consumes discovered postings, applies deterministic gates, reserves a job/daily-cap slot in SQLite, drives a constrained persistent browser, records the external outcome idempotently, then reconciles successful submissions into the canonical tracker. Claims prevent two workers from submitting the same job or both consuming the final daily slot. See [`AUTOPILOT_SPEC.md`](AUTOPILOT_SPEC.md) for state transitions, failure recovery and security boundaries.
+
 ### Liveness — never evaluate a dead posting
 `check-liveness.mjs` / `liveness-*.mjs` verify a posting is still open (zero-token) before it costs evaluation time.
 
@@ -79,10 +84,14 @@ A standalone Go TUI under `dashboard/` for browsing the pipeline. Isolated from 
 
 ```
 scan ──► data/pipeline.md ──► evaluate (oferta + cv) ──► reports/NNN-*.md
-                                          │                      │
-                                          └──► data/applications.md (tracker)
-                                                         │
-                                          apply (human reviews + clicks)
+   │                                      │                      │
+   │                                      └──► data/applications.md (tracker)
+   │                                                     │
+   │                                      apply (human reviews + clicks)
+   │
+   └──► [optional fork overlay] autopilot queue ──► claim ──► browser submit
+                                                     │              │
+                                                     └──────────────┴──► tracker
 ```
 
 ## Quality gates
