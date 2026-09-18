@@ -1,0 +1,61 @@
+version: 1
+country: AM
+country_name: Armenia
+languages: [hy, en, ru]
+verified_on: 2026-09-18
+default_discovery: ats_probe
+source_basis:
+  - https://staff.am/
+  - https://careercenter.am/en/jobs
+  - https://www.myjob.am/
+companies:
+  - { name: "Picsart" }
+  - { name: "ServiceTitan" }
+  - { name: "Synopsys Armenia" }
+  - { name: "Digitain" }
+  - { name: "SoftConstruct" }
+  - { name: "EPAM Armenia" }
+  - { name: "DataArt Armenia" }
+  - { name: "NVIDIA Armenia" }
+  - { name: "TeamViewer Armenia" }
+  - { name: "Krisp" }
+  - { name: "Renderforest" }
+  - { name: "SuperAnnotate" }
+  - { name: "DISQO" }
+  - { name: "CodeSignal" }
+  - { name: "Dexatel" }
+  - { name: "Simply Technologies" }
+  - { name: "Grid Dynamics Armenia" }
+  - { name: "Adobe Armenia" }
+  - { name: "Siemens EDA Armenia" }
+  - { name: "Synopsys" }
+  - { name: "Volo" }
+  - { name: "Webb Fontaine Armenia" }
+  - { name: "Synergy International Systems" }
+  - { name: "SFL" }
+  - { name: "BetConstruct" }
+  - { name: "SoftConstruct Digital" }
+  - { name: "Evolution Armenia" }
+  - { name: "Miro Armenia" }
+  - { name: "Arloopa" }
+  - { name: "SoloLearn" }
+  - { name: "10Web" }
+  - { name: "Podcastle" }
+  - { name: "Expper Technologies" }
+  - { name: "EasyDMARC" }
+  - { name: "SmartClick" }
+  - { name: "ScyllaDB Armenia" }
+  - { name: "Ameriabank" }
+  - { name: "IDBank" }
+  - { name: "Idram" }
+  - { name: "Evocabank" }
+  - { name: "Fast Bank Armenia" }
+  - { name: "Ardshinbank" }
+  - { name: "ACBA Bank" }
+  - { name: "Inecobank" }
+  - { name: "Ucom" }
+  - { name: "Team Telecom Armenia" }
+  - { name: "TUMO Center for Creative Technologies" }
+  - { name: "Armath Engineering Laboratories" }
+  - { name: "Instigate" }
+  - { name: "Energize Global Services" }
