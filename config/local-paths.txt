@@ -12,3 +12,5 @@ extract-contacts.mjs
 notify-tg.mjs
 modes/autopilot.md
 AUTOPILOT_SPEC.md
+market-sources.mjs
+market-sources/
