@@ -51,13 +51,10 @@ const SCAN_PATH = path.join(CODE_ROOT, 'scan.mjs');
 
 const OUTCOMES = ['applied', 'test_filled', 'failed', 'captcha', 'skipped'];
 const CHANNELS = ['browser', 'ats_api', 'email'];
-const DEFAULT_EXCLUDED_HOSTS = ['hh.ru', 'linkedin.com'];
-// Location gate (2026-09-18): the candidate is remote-only (config/profile.yml),
-// and aggregator location cells like "Berlin (hybrid)" mean an office the
-// candidate cannot work from. Latin forms are word-anchored so "home office"
-// never trips it; Cyrillic forms are plain substrings (ASCII \b is broken for
-// Cyrillic — every boundary between two Cyrillic letters is a word boundary).
-const LOCATION_NEGATIVE_RE = /((?:hybrid|onsite|on-?site|office[ -]based)|гибрид|в офисе|офис|chile|peru|argentina|colombia|brasil|brazil|mexico|latam)/i;
+// Work-arrangement filtering is opt-in via profile.autopilot.remote_only.
+// Geographic exclusions belong in profile.autopilot.blocked_locations rather
+// than in system code: hard-coded countries silently drop valid opportunities.
+const REMOTE_ONLY_NEGATIVE_RE = /(\b(?:hybrid|onsite|on-?site|office[ -]based)\b|гибрид|в офисе|только офис|офисный формат)/i;
 // Conservative fallback when config/profile.yml carries no usable cap: an
 // autonomous applier without a configured limit should stop early, not never.
 const DEFAULT_DAILY_CAP = 10;
@@ -205,20 +202,51 @@ function loadBlacklistKeys() {
   return entries;
 }
 
-/** Hard-excluded source hosts (profile autopilot.blacklist_sources, with defaults). */
+/** Hard-excluded source hosts. Nothing is silently blacklisted by default. */
 function excludedHostTokens() {
   const list = loadYamlIfExists(PROFILE_PATH)?.autopilot?.blacklist_sources;
-  const tokens = (Array.isArray(list) ? list : [])
+  return (Array.isArray(list) ? list : [])
     .filter(t => typeof t === 'string' && t.trim())
-    .map(t => t.trim().toLowerCase());
-  for (const d of DEFAULT_EXCLUDED_HOSTS) if (!tokens.includes(d)) tokens.push(d);
-  return tokens;
+    .map(t => {
+      const raw = t.trim().toLowerCase().replace(/^\.+/, '');
+      try { return new URL(raw.includes('://') ? raw : `https://${raw}`).hostname.toLowerCase(); }
+      catch { return raw; }
+    })
+    .filter(Boolean);
+}
+
+export function hostMatchesToken(host, token) {
+  const h = String(host ?? '').toLowerCase().replace(/\.$/, '');
+  const t = String(token ?? '').toLowerCase().replace(/^\.+|\.$/g, '');
+  return Boolean(h && t && (h === t || h.endsWith(`.${t}`)));
 }
 
 function hostOf(url) {
   try { return new URL(url).hostname.toLowerCase(); } catch { return ''; }
 }
 
+function loadLocationPolicy() {
+  const autopilot = loadYamlIfExists(PROFILE_PATH)?.autopilot ?? {};
+  return {
+    remoteOnly: autopilot.remote_only === true,
+    blocked: (Array.isArray(autopilot.blocked_locations) ? autopilot.blocked_locations : [])
+      .filter(v => typeof v === 'string' && v.trim())
+      .map(v => v.trim().toLowerCase()),
+  };
+}
+
+export function gateLocation(location, policy = {}) {
+  const text = String(location ?? '').trim();
+  if (!text) return { ok: true };
+  if (policy.remoteOnly) {
+    const hit = text.match(REMOTE_ONLY_NEGATIVE_RE);
+    if (hit) return { ok: false, reason: `remote_only: "${hit[0]}"` };
+  }
+  const lower = text.toLowerCase();
+  const blocked = (policy.blocked ?? []).find(token => token && lower.includes(token));
+  if (blocked) return { ok: false, reason: `blocked_location: "${blocked}"` };
+  return { ok: true };
+}
 // ── queue file regeneration ─────────────────────────────────────────
 
 export function regenerateQueue() {
