@@ -1,0 +1,242 @@
+version: 1
+country: RU
+country_name: Russia
+languages: [ru, en]
+verified_on: 2026-09-18
+default_discovery: ats_probe
+ranking:
+  name: CNews500 2025
+  year: 2025
+  source_url: https://telecom.cnews.ru/reviews/rynok_it_itogi_2025/review_table/1b09b9e5d91b5fec50d07da70048a51301067b34
+  notes: Top 200 ranked Russian IT companies by 2025 IT revenue. Ranking membership/order verified against CNews on 2026-09-18.
+companies:
+  - { rank: 1, name: "Ростелеком (цифровые сервисы)", career_url: "https://www.company.rt.ru/career/vacancy/", career_status: live }
+  - { rank: 2, name: "ИТ-холдинг Т1" }
+  - { rank: 3, name: "ИКС Холдинг" }
+  - { rank: 4, name: "OCS Distribution" }
+  - { rank: 5, name: "Softline", career_url: "https://softline.ru/about/vacancies", career_status: live }
+  - { rank: 6, name: "3Logic Group" }
+  - { rank: 7, name: "Лаборатория Касперского", career_url: "https://careers.kaspersky.ru/", career_status: live }
+  - { rank: 8, name: "Cloud.ru", career_url: "https://cloud.ru/career/vacancies", career_status: live }
+  - { rank: 9, name: "МТС Web Services" }
+  - { rank: 10, name: "Группа Rubytech" }
+  - { rank: 11, name: "Монт" }
+  - { rank: 12, name: "Yandex B2B Tech", career_url: "https://yandex.ru/jobs/", career_status: live }
+  - { rank: 13, name: "СКБ Контур" }
+  - { rank: 14, name: "Айтеко" }
+  - { rank: 15, name: "Газинформсервис" }
+  - { rank: 16, name: "Инфосистемы Джет", career_url: "https://jet.su/career/vacancies/", career_status: live }
+  - { rank: 17, name: "Элемент" }
+  - { rank: 18, name: "Гринатом" }
+  - { rank: 19, name: "Лига Цифровой Экономики" }
+  - { rank: 20, name: "Группа Позитив" }
+  - { rank: 21, name: "Инвента" }
+  - { rank: 22, name: "ICL", career_url: "https://icl.ru/career/jobs/", career_status: live }
+  - { rank: 23, name: "Сбертех" }
+  - { rank: 24, name: "Бифорком Тек" }
+  - { rank: 25, name: "Атомдата" }
+  - { rank: 26, name: "BI.Zone" }
+  - { rank: 27, name: "Хайтэк-Интеграция" }
+  - { rank: 28, name: "Тензор" }
+  - { rank: 29, name: "Сател" }
+  - { rank: 30, name: "IBS", career_url: "https://ibs.ru/career/vacancies/", career_status: live }
+  - { rank: 31, name: "Акстим (Axenix)" }
+  - { rank: 32, name: "Астра" }
+  - { rank: 33, name: "X-Com" }
+  - { rank: 34, name: "К2Тех" }
+  - { rank: 35, name: "VK Tech" }
+  - { rank: 36, name: "Selectel" }
+  - { rank: 37, name: "Сиссофт" }
+  - { rank: 38, name: "Эвотор" }
+  - { rank: 39, name: "Первый Бит" }
+  - { rank: 40, name: "Вымпелком-Информационные технологии" }
+  - { rank: 41, name: "Fortis" }
+  - { rank: 42, name: "Edna" }
+  - { rank: 43, name: "Сигма" }
+  - { rank: 44, name: "1С-Рарус" }
+  - { rank: 45, name: "РТ-Инвест Транспортные Системы" }
+  - { rank: 46, name: "Базовые решения" }
+  - { rank: 47, name: "Ситроникс" }
+  - { rank: 48, name: "Depo Computers" }
+  - { rank: 49, name: "ОТР" }
+  - { rank: 50, name: "IT-One" }
+  - { rank: 51, name: "Сбербанк-Сервис" }
+  - { rank: 52, name: "Innostage" }
+  - { rank: 53, name: "Инфотекс" }
+  - { rank: 54, name: "Сервис-Телематика" }
+  - { rank: 55, name: "ВС Лаб" }
+  - { rank: 56, name: "Золотая корона" }
+  - { rank: 57, name: "GlowByte" }
+  - { rank: 58, name: "Свободные технологии инжиниринг (СТИ)" }
+  - { rank: 59, name: "Прайм групп" }
+  - { rank: 60, name: "Selecty" }
+  - { rank: 61, name: "Урбантех" }
+  - { rank: 62, name: "Angara Security" }
+  - { rank: 63, name: "UserGate" }
+  - { rank: 64, name: "Прософт-Системы" }
+  - { rank: 65, name: "Код безопасности" }
+  - { rank: 66, name: "Сбер2B" }
+  - { rank: 67, name: "Nexign" }
+  - { rank: 68, name: "DSSL" }
+  - { rank: 69, name: "НВБС" }
+  - { rank: 70, name: "УЦСБ" }
+  - { rank: 71, name: "Диасофт" }
+  - { rank: 72, name: "Информзащита" }
+  - { rank: 73, name: "Атол" }
+  - { rank: 74, name: "Арман" }
+  - { rank: 75, name: "Solar Staff" }
+  - { rank: 76, name: "Корус Консалтинг" }
+  - { rank: 77, name: "RRC (Бизнес-телеком импорт)" }
+  - { rank: 78, name: "Arenadata" }
+  - { rank: 79, name: "Айкон" }
+  - { rank: 80, name: "Программный Продукт" }
+  - { rank: 81, name: "ReStaff" }
+  - { rank: 82, name: "В2В-РТС" }
+  - { rank: 83, name: "Астон" }
+  - { rank: 84, name: "Унитех" }
+  - { rank: 85, name: "Рексофт" }
+  - { rank: 86, name: "Технопром" }
+  - { rank: 87, name: "Би.Си.Си." }
+  - { rank: 88, name: "Tera IT Distributor" }
+  - { rank: 89, name: "Ferrum IT Group" }
+  - { rank: 90, name: "Инносети" }
+  - { rank: 91, name: "Открытые технологии" }
+  - { rank: 92, name: "Информтехника и Связь" }
+  - { rank: 93, name: "ACT" }
+  - { rank: 94, name: "Форс" }
+  - { rank: 95, name: "Postgres Professional" }
+  - { rank: 96, name: "Аскон" }
+  - { rank: 97, name: "iiko" }
+  - { rank: 98, name: "Имкотрейд" }
+  - { rank: 99, name: "Форт Диалог" }
+  - { rank: 100, name: "Барс Груп" }
+  - { rank: 101, name: "GetCourse" }
+  - { rank: 102, name: "Naumen" }
+  - { rank: 103, name: "РегЛаб" }
+  - { rank: 104, name: "Ц1" }
+  - { rank: 105, name: "Спецпроект-2" }
+  - { rank: 106, name: "Синто" }
+  - { rank: 107, name: "Кросс технолоджис" }
+  - { rank: 108, name: "СёрчИнформ" }
+  - { rank: 109, name: "TravelLine" }
+  - { rank: 110, name: "БТЕ" }
+  - { rank: 111, name: "Аметист" }
+  - { rank: 112, name: "Неофлекс" }
+  - { rank: 113, name: "Киберпротект" }
+  - { rank: 114, name: "Lansoft" }
+  - { rank: 115, name: "Figura" }
+  - { rank: 116, name: "Форус" }
+  - { rank: 117, name: "1С:Северо-Запад" }
+  - { rank: 118, name: "RockITSoft" }
+  - { rank: 119, name: "Инлайн Телеком Солюшнс" }
+  - { rank: 120, name: "Комитас" }
+  - { rank: 121, name: "intact" }
+  - { rank: 122, name: "BSS" }
+  - { rank: 123, name: "НТЦ «Ландата»" }
+  - { rank: 124, name: "CSI" }
+  - { rank: 125, name: "Инлайн Груп" }
+  - { rank: 126, name: "CTI" }
+  - { rank: 127, name: "Обит" }
+  - { rank: 128, name: "1С:Франчайзи. Гэндальф" }
+  - { rank: 129, name: "Нанософт" }
+  - { rank: 130, name: "RDW Computers" }
+  - { rank: 131, name: "Flocktory" }
+  - { rank: 132, name: "Гигант-Компьютерные системы" }
+  - { rank: 133, name: "Интеллектуальные Системы Безопасности (ISS)" }
+  - { rank: 134, name: "Ред Софт" }
+  - { rank: 135, name: "АМТ-Груп" }
+  - { rank: 136, name: "Смарт Текнолоджис" }
+  - { rank: 137, name: "OFT Group" }
+  - { rank: 138, name: "Auxo" }
+  - { rank: 139, name: "Кит-системс" }
+  - { rank: 140, name: "Биллинговый центр" }
+  - { rank: 141, name: "SimbirSoft" }
+  - { rank: 142, name: "Qtech" }
+  - { rank: 143, name: "Юзтех" }
+  - { rank: 144, name: "Orion soft" }
+  - { rank: 145, name: "DатаРу" }
+  - { rank: 146, name: "Актив бизнес консалт (VS Robotics)" }
+  - { rank: 147, name: "iRU" }
+  - { rank: 148, name: "Астрал" }
+  - { rank: 149, name: "НПО «Криста»" }
+  - { rank: 150, name: "F6 (F.A.C.C.T.)" }
+  - { rank: 151, name: "ДиалогНаука" }
+  - { rank: 152, name: "Ниеншанц-Автоматика" }
+  - { rank: 153, name: "InfoWatch" }
+  - { rank: 154, name: "Импульс Телеком" }
+  - { rank: 155, name: "Атлас-карт" }
+  - { rank: 156, name: "ТерраЛинк" }
+  - { rank: 157, name: "ITPS" }
+  - { rank: 158, name: "Биатех (ранее BIA Technologies)" }
+  - { rank: 159, name: "ЗащитаИнфоТранс" }
+  - { rank: 160, name: "1С-Корпоративные системы управления (1С-КСУ)" }
+  - { rank: 161, name: "beeline cloud" }
+  - { rank: 162, name: "НПО «Мир»" }
+  - { rank: 163, name: "Актив-софт" }
+  - { rank: 164, name: "ИТ-Элемент29" }
+  - { rank: 165, name: "Agima" }
+  - { rank: 166, name: "Тринити" }
+  - { rank: 167, name: "Топ Системы" }
+  - { rank: 168, name: "Tilda" }
+  - { rank: 169, name: "Р7" }
+  - { rank: 170, name: "iCore" }
+  - { rank: 171, name: "Финвал" }
+  - { rank: 172, name: "ДиСиЛоджик (DCLogic)" }
+  - { rank: 173, name: "Группа компаний «Системы практической безопасности»" }
+  - { rank: 174, name: "NexTouch" }
+  - { rank: 175, name: "IVA Technologies" }
+  - { rank: 176, name: "R-Style Softlab" }
+  - { rank: 177, name: "Центр открытых разработок" }
+  - { rank: 178, name: "Centicore Group" }
+  - { rank: 179, name: "ИРМ (Интегрированные разработки для моделирования)" }
+  - { rank: 180, name: "Директум" }
+  - { rank: 181, name: "MaxPoster" }
+  - { rank: 182, name: "iSpring" }
+  - { rank: 183, name: "Itglobal.com" }
+  - { rank: 184, name: "Philax" }
+  - { rank: 185, name: "NVI Solutions" }
+  - { rank: 186, name: "Компьютеры и сети" }
+  - { rank: 187, name: "Севен Груп" }
+  - { rank: 188, name: "Автомакон" }
+  - { rank: 189, name: "Кейсистемс" }
+  - { rank: 190, name: "ITV Group" }
+  - { rank: 191, name: "Айфэлл" }
+  - { rank: 192, name: "Бифит" }
+  - { rank: 193, name: "EdgeЦентр" }
+  - { rank: 194, name: "1С-Поволжье" }
+  - { rank: 195, name: "Телеком-Биржа" }
+  - { rank: 196, name: "Digital Future Systems" }
+  - { rank: 197, name: "DIS Group" }
+  - { rank: 198, name: "Rvi Group" }
+  - { rank: 199, name: "R-Vision" }
+  - { rank: 200, name: "МТС Линк" }
+
+# Large digital employers that materially widen the engineering funnel but are
+# not represented cleanly as standalone rows in CNews500's IT-vendor ranking.
+additional_employers:
+  - { name: "Яндекс", career_url: "https://yandex.ru/jobs/", career_status: live }
+  - { name: "VK" }
+  - { name: "Ozon" }
+  - { name: "Avito" }
+  - { name: "Сбер" }
+  - { name: "Т-Банк" }
+  - { name: "Альфа-Банк" }
+  - { name: "X5 Tech" }
+  - { name: "Магнит Tech" }
+  - { name: "Wildberries & Russ" }
+  - { name: "Самокат" }
+  - { name: "Lamoda Tech" }
+  - { name: "МегаФон" }
+  - { name: "МТС" }
+  - { name: "Билайн" }
+  - { name: "Точка Банк" }
+  - { name: "Совкомбанк Технологии" }
+  - { name: "Газпромбанк.Тех" }
+  - { name: "Райффайзенбанк Россия" }
+  - { name: "ЦФТ" }
+  - { name: "2ГИС" }
+  - { name: "ДОМ.РФ Технологии" }
+  - { name: "Росбанк Tech" }
+  - { name: "Самолет Технологии" }
+  - { name: "МойОфис" }
+  - { name: "СберМаркет / Купер" }
