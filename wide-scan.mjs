@@ -11,7 +11,7 @@
  * No employer/application count limit is imposed here. Time/cache thresholds
  * only avoid repeating expensive network discovery on every short autopilot loop.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -65,11 +65,7 @@ function writeState(state) {
   mkdirSync(path.dirname(STATE_FILE), { recursive: true });
   const tmp = STATE_FILE + '.tmp';
   writeFileSync(tmp, JSON.stringify(state, null, 2) + '\n', 'utf8');
-  // Same directory; rename-like atomicity is nice but cross-platform fs rename
-  // is not worth another helper dependency here. The state is only a cache:
-  // a partial write safely degrades into "run discovery again".
-  writeFileSync(STATE_FILE, readFileSync(tmp));
-  try { writeFileSync(tmp, ''); } catch {}
+  renameSync(tmp, STATE_FILE);
 }
 
 export function renderBoardQueue(registry) {
