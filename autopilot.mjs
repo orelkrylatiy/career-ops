@@ -708,8 +708,9 @@ function usage() {
   node autopilot.mjs [--no-scan] [--no-tg] [--dry-run]
   node autopilot.mjs status
   node autopilot.mjs preflight        (contacts+CV guard — must pass before fill/submit)
-  node autopilot.mjs cap              (JSON: {sent, cap, allowed, remaining} — check BEFORE each form)
-  node autopilot.mjs report "<url or url_key>" <applied|test_filled|failed|captcha|skipped> [--note "..."] [--channel browser|ats_api|email]`);
+  node autopilot.mjs cap              (JSON: sent + active reservations)
+  node autopilot.mjs claim "<url>"     (atomic daily-cap reservation; REQUIRED before a form)
+  node autopilot.mjs report "<url or url_key>" <applied|test_filled|failed|captcha|skipped> [--note "..."] [--channel browser|ats_api|email] [--claim-token <uuid>]`);
 }
 
 async function main() {
@@ -732,11 +733,24 @@ async function main() {
     return;
   }
 
+  if (argv[0] === 'claim') {
+    cmdClaim(argv[1]);
+    return;
+  }
+
   if (argv[0] === 'report') {
-    const rest = argv.slice(1).filter(a => !a.startsWith('--note') && !a.startsWith('--channel'));
+    const valueOptions = new Set(['--note', '--channel', '--claim-token']);
+    const rest = [];
+    for (let i = 1; i < argv.length; i++) {
+      const arg = argv[i];
+      if (valueOptions.has(arg)) { i += 1; continue; }
+      if ([...valueOptions].some(name => arg.startsWith(`${name}=`))) continue;
+      rest.push(arg);
+    }
     const note = flagValue(argv, '--note');
     const channel = flagValue(argv, '--channel');
-    await cmdReport(rest[0], rest[1], note, channel);
+    const claimToken = flagValue(argv, '--claim-token');
+    await cmdReport(rest[0], rest[1], note, channel, claimToken);
     return;
   }
 
