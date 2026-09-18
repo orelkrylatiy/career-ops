@@ -21,7 +21,7 @@
 // shell:false; all paths are absolute; no bash-isms.
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as yaml from 'js-yaml';
@@ -30,10 +30,12 @@ import { compileKeyword, compilePositiveKeyword } from './title-keywords.mjs';
 import { normalizeUrl } from './url-key.mjs';
 import { normalizeTextKey } from './tracker-parse.mjs';
 import {
-  openDb, addEvent, upsertJob, getJob, listJobs, reportOutcome,
-  incrementDaily, normalizeUrlKey, statusCounts, JOB_STATUSES, DB_PATH,
+  openDb, addEvent, upsertJob, getJob, listJobs, reportOutcome, reportApplied,
+  claimApplication, activeClaimCount, expireStaleClaims,
+  normalizeUrlKey, statusCounts, JOB_STATUSES, DB_PATH,
 } from './autopilot-db.mjs';
 import { sendTelegram } from './notify-tg.mjs';
+import { reserveReportNumbers, releaseReportNumbers, formatReportNumber } from './reserve-report-num.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 
 const CODE_ROOT = path.dirname(fileURLToPath(import.meta.url));
