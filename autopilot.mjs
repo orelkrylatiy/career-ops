@@ -485,6 +485,31 @@ function loadDailyCap() {
   return DEFAULT_DAILY_CAP;
 }
 
+function loadClaimTtlMinutes() {
+  const raw = Number(loadYamlIfExists(PROFILE_PATH)?.autopilot?.claim_ttl_minutes);
+  return Number.isFinite(raw) && raw > 0 ? Math.min(180, raw) : 45;
+}
+
+function workHoursDecision(at = new Date()) {
+  const raw = loadYamlIfExists(PROFILE_PATH)?.autopilot?.work_hours;
+  if (raw == null || raw === '' || raw === false) return { allowed: true };
+  let start;
+  let end;
+  if (typeof raw === 'string') {
+    const m = raw.match(/^\s*(\d{1,2})(?::\d{2})?\s*[-–]\s*(\d{1,2})(?::\d{2})?\s*$/);
+    if (m) { start = Number(m[1]); end = Number(m[2]); }
+  } else if (typeof raw === 'object') {
+    start = Number(raw.start);
+    end = Number(raw.end);
+  }
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || start > 23 || end < 0 || end > 23) {
+    return { allowed: false, reason: 'invalid-work-hours-config' };
+  }
+  const hour = at.getHours();
+  const inside = start === end ? true : start < end ? hour >= start && hour < end : hour >= start || hour < end;
+  return inside ? { allowed: true } : { allowed: false, reason: 'outside-work-hours', start, end, hour };
+}
+
 // B1 guard: required personal fields must be real, not placeholders. The agent
 // must never type a fabricated contact into an employer form — if these are
 // unfilled, fill/submit attempts are refused until the user fills the profile.
@@ -541,7 +566,14 @@ export function cmdClaim(target) {
   const byKey = normalizeUrlKey(target);
   const job = (byKey && getJob(byKey)) || db.prepare('SELECT * FROM jobs WHERE url = ?').get(target);
   if (!job) throw new Error(`no autopilot job matches "${target}"`);
-  const result = claimApplication(job.url_key, localDateStr(), loadDailyCap());
+  const hours = workHoursDecision();
+  if (!hours.allowed) {
+    const result = { ...hours, url: job.url, company: job.company, title: job.title };
+    console.log(JSON.stringify(result, null, 2));
+    process.exitCode = 1;
+    return result;
+  }
+  const result = claimApplication(job.url_key, localDateStr(), loadDailyCap(), loadClaimTtlMinutes());
   console.log(JSON.stringify({ ...result, url: job.url, company: job.company, title: job.title }, null, 2));
   process.exitCode = result.allowed ? 0 : 1;
   return result;
