@@ -475,39 +475,9 @@ export function cmdStatus() {
 
 // ── report command ──────────────────────────────────────────────────
 
-function loadDailyCap() {
-  try {
-    const cap = Number(loadYamlIfExists(PROFILE_PATH)?.autopilot?.max_applications_per_day);
-    if (Number.isFinite(cap) && cap > 0) return Math.floor(cap);
-  } catch {
-    // fall through to the default
-  }
-  return DEFAULT_DAILY_CAP;
-}
-
 function loadClaimTtlMinutes() {
   const raw = Number(loadYamlIfExists(PROFILE_PATH)?.autopilot?.claim_ttl_minutes);
   return Number.isFinite(raw) && raw > 0 ? Math.min(180, raw) : 45;
-}
-
-function workHoursDecision(at = new Date()) {
-  const raw = loadYamlIfExists(PROFILE_PATH)?.autopilot?.work_hours;
-  if (raw == null || raw === '' || raw === false) return { allowed: true };
-  let start;
-  let end;
-  if (typeof raw === 'string') {
-    const m = raw.match(/^\s*(\d{1,2})(?::\d{2})?\s*[-–]\s*(\d{1,2})(?::\d{2})?\s*$/);
-    if (m) { start = Number(m[1]); end = Number(m[2]); }
-  } else if (typeof raw === 'object') {
-    start = Number(raw.start);
-    end = Number(raw.end);
-  }
-  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || start > 23 || end < 0 || end > 23) {
-    return { allowed: false, reason: 'invalid-work-hours-config' };
-  }
-  const hour = at.getHours();
-  const inside = start === end ? true : start < end ? hour >= start && hour < end : hour >= start || hour < end;
-  return inside ? { allowed: true } : { allowed: false, reason: 'outside-work-hours', start, end, hour };
 }
 
 // B1 guard: required personal fields must be real, not placeholders. The agent
@@ -549,12 +519,10 @@ export function cmdCap() {
   const today = localDateStr();
   const sent = db.prepare('SELECT applications_sent FROM daily_state WHERE date = ?').get(today)?.applications_sent ?? 0;
   const reserved = activeClaimCount(today);
-  const cap = loadDailyCap();
-  const out = { date: today, sent, reserved, cap, allowed: sent + reserved < cap, remaining: Math.max(0, cap - sent - reserved) };
+  const out = { date: today, sent, reserved, unlimited: true, allowed: true };
   console.log(JSON.stringify(out, null, 2));
-  process.exitCode = out.allowed ? 0 : 1;
+  process.exitCode = 0;
 }
-
 export function cmdClaim(target) {
   if (!target) throw new Error('claim needs a job URL or url_key');
   const problems = contactPreflight().filter((p) => !p.startsWith('candidate.phone'));
@@ -566,14 +534,7 @@ export function cmdClaim(target) {
   const byKey = normalizeUrlKey(target);
   const job = (byKey && getJob(byKey)) || db.prepare('SELECT * FROM jobs WHERE url = ?').get(target);
   if (!job) throw new Error(`no autopilot job matches "${target}"`);
-  const hours = workHoursDecision();
-  if (!hours.allowed) {
-    const result = { ...hours, url: job.url, company: job.company, title: job.title };
-    console.log(JSON.stringify(result, null, 2));
-    process.exitCode = 1;
-    return result;
-  }
-  const result = claimApplication(job.url_key, localDateStr(), loadDailyCap(), loadClaimTtlMinutes());
+  const result = claimApplication(job.url_key, localDateStr(), loadClaimTtlMinutes());
   console.log(JSON.stringify({ ...result, url: job.url, company: job.company, title: job.title }, null, 2));
   process.exitCode = result.allowed ? 0 : 1;
   return result;
@@ -720,8 +681,7 @@ export async function cmdReport(target, outcome, note, channel, claimToken) {
   if (note) console.log(`  note: ${note}`);
   if (channel) console.log(`  channel: ${channel}`);
   if (dailyRow) {
-    const cap = loadDailyCap();
-    console.log(`  today: ${dailyRow.applications_sent}/${cap} applications sent`);
+    console.log(`  today: ${dailyRow.applications_sent} applications sent (no local throughput cap)`);
   }
   console.log(`  queue regenerated without it -> ${QUEUE_PATH}`);
 }
@@ -740,7 +700,7 @@ function usage() {
   node autopilot.mjs [--no-scan] [--no-tg] [--dry-run]
   node autopilot.mjs status
   node autopilot.mjs preflight        (contacts+CV guard — must pass before fill/submit)
-  node autopilot.mjs cap              (JSON: sent + active reservations)
+  node autopilot.mjs cap              (compatibility diagnostics; local throughput is unlimited)
   node autopilot.mjs claim "<url>"     (atomic daily-cap reservation; REQUIRED before a form)
   node autopilot.mjs report "<url or url_key>" <applied|test_filled|failed|captcha|skipped> [--note "..."] [--channel browser|ats_api|email] [--claim-token <uuid>]`);
 }
