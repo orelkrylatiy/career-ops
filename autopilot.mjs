@@ -549,16 +549,53 @@ export function cmdClaim(target) {
 
 // Canonical tracker write (#3517, #1799): TSV with a header row, score sentinel
 // N/A (no evaluation), root-relative report cell, then merge-tracker.mjs.
-function writeTrackerAdditionTsv(job, note) {
-  const reserved = spawnSync(process.execPath, [path.join(CODE_ROOT, 'reserve-report-num.mjs'), '--count', '1'], { encoding: 'utf8' });
-  if (reserved.status !== 0) throw new Error(`reserve-report-num failed: ${reserved.stderr?.trim() || reserved.status}`);
-  const num = (reserved.stdout.match(/\d{1,3}/) || [])[0];
-  if (!num) throw new Error(`could not parse report number from: ${reserved.stdout}`);
+function trackerHasJob(job) {
+  const idx = loadTrackerUrlIndex();
+  const key = normalizeUrl(job.url);
+  return idx.rawSet.has(job.url) || (key && idx.keySet.has(key));
+}
+
+function pendingTrackerAdditionFor(job) {
+  const dir = path.join(DATA_ROOT, 'batch', 'tracker-additions');
+  if (!existsSync(dir)) return null;
+  const key = normalizeUrl(job.url);
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith('.tsv')) continue;
+    const file = path.join(dir, name);
+    let text = '';
+    try { text = readFileSync(file, 'utf8'); } catch { continue; }
+    const urls = [...text.matchAll(/https?:\/\/[^\s\t|)'\"]+/g)].map(m => m[0]);
+    if (urls.some(u => u === job.url || (key && normalizeUrl(u) === key))) {
+      const num = Number((name.match(/^(\d+)/) || [])[1]);
+      return { file, num: Number.isSafeInteger(num) && num > 0 ? num : null };
+    }
+  }
+  return null;
+}
+
+async function writeTrackerAdditionTsv(job, note) {
+  if (trackerHasJob(job)) return { alreadyPresent: true, num: null, file: null };
+
+  // Recovery: if a previous report wrote its TSV but crashed before merge,
+  // retry that exact row instead of reserving a second tracker number.
+  const pending = pendingTrackerAdditionFor(job);
+  if (pending) {
+    const merged = spawnSync(process.execPath, [path.join(CODE_ROOT, 'merge-tracker.mjs')], { encoding: 'utf8' });
+    if (merged.status !== 0) throw new Error(`merge-tracker retry failed: ${merged.stderr?.trim() || merged.status}`);
+    if (!trackerHasJob(job)) throw new Error('merge-tracker retry exited 0 but the application URL is still absent from the tracker');
+    if (pending.num) {
+      await releaseReportNumbers([pending.num], { rootDir: DATA_ROOT, trackerPath: TRACKER_PATH, force: true }).catch(() => {});
+    }
+    return { repaired: true, num: pending.num, file: pending.file };
+  }
+
+  const reservation = await reserveReportNumbers(1, { rootDir: DATA_ROOT, trackerPath: TRACKER_PATH });
+  const num = reservation[0];
   const date = localDateStr();
   const slug = String(job.company || 'company').toLowerCase().replace(/[^a-z0-9а-яё]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'company';
   const dir = path.join(DATA_ROOT, 'batch', 'tracker-additions');
   mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, `${num}-${slug}.tsv`);
+  const file = path.join(dir, `${formatReportNumber(num)}-${slug}.tsv`);
   const cells = [
     ['num', String(num)],
     ['date', date],
@@ -572,11 +609,21 @@ function writeTrackerAdditionTsv(job, note) {
     ['url', job.url],
   ];
   const tsv = `${cells.map(([k]) => k).join('\t')}\n${cells.map(([, v]) => v.replace(/\t|\n/g, ' ')).join('\t')}\n`;
-  writeFileSync(file, tsv, 'utf8');
-  addEvent('tracker', `TSV written: ${path.basename(file)} -> merge-tracker next`, { num, company: job.company });
-  const merged = spawnSync(process.execPath, [path.join(CODE_ROOT, 'merge-tracker.mjs')], { encoding: 'utf8' });
-  if (merged.status !== 0) throw new Error(`merge-tracker failed: ${merged.stderr?.trim() || merged.status}`);
-  return { num, file };
+  try {
+    writeFileSync(file, tsv, 'utf8');
+    addEvent('tracker', `TSV written: ${path.basename(file)} -> merge-tracker next`, { num, company: job.company });
+    const merged = spawnSync(process.execPath, [path.join(CODE_ROOT, 'merge-tracker.mjs')], { encoding: 'utf8' });
+    if (merged.status !== 0) throw new Error(`merge-tracker failed: ${merged.stderr?.trim() || merged.status}`);
+    await releaseReportNumbers(reservation, { rootDir: DATA_ROOT, trackerPath: TRACKER_PATH });
+    return { num, file };
+  } catch (err) {
+    // A written TSV is durable recovery state, so keep its reservation sentinel.
+    // If the write itself failed, no row exists and the slot can be released.
+    if (!existsSync(file)) {
+      await releaseReportNumbers(reservation, { rootDir: DATA_ROOT, trackerPath: TRACKER_PATH }).catch(() => {});
+    }
+    throw err;
+  }
 }
 
 export async function cmdReport(target, outcome, note, channel) {
