@@ -79,7 +79,31 @@ job_sources:
     access: public-api
     status: live
     locales: [ru]
-    notes: "Official open-data API; up to 100 records/page and 10k records per response window. Provider splits queries rather than imposing a Career-Ops funnel cap."
+    search_queries:
+      - разработчик
+      - программист
+      - software
+      - backend
+      - frontend
+      - fullstack
+      - devops
+      - sre
+      - data engineer
+      - data scientist
+      - аналитик
+      - тестировщик
+      - qa
+      - machine learning
+      - искусственный интеллект
+      - информационная безопасность
+      - кибербезопасность
+      - системный администратор
+      - архитектор
+      - product manager
+      - project manager
+      - tech lead
+      - руководитель разработки
+    notes: "Official open-data API; up to 100 records/page and 10k records per query window. Multiple overlapping IT queries widen coverage; Career-Ops adds no result ceiling."
   - id: ru-habr-career
     country: RU
     kind: aggregator
@@ -171,7 +195,12 @@ job_sources:
     access: public-html
     status: live
     locales: [en, hy, ru]
-    notes: "Market leader; software-development and data-science categories verified live."
+    paths:
+      - /jobs/software-development
+      - /jobs/data-science
+      - /jobs/information-technologies
+      - /jobs/product-project-management
+    notes: "Market leader; multiple technical categories are scanned and deduplicated."
   - id: am-careercenter
     country: AM
     kind: aggregator
@@ -187,18 +216,18 @@ job_sources:
     country: UZ
     kind: aggregator
     name: Ishkop.uz
-    url: https://ishkop.uz/%D0%B2%D0%B0%D0%BA%D0%B0%D0%BD%D1%81%D0%B8%D0%B8/IT
-    provider: ishkop
-    access: public-html
+    url: https://ishkop.uz/it
+    access: browser
     status: live
     locales: [ru, uz]
-    notes: "Aggregator redirects users to original vacancy source; IT category verified live."
+    notes: "Wide meta-aggregator. Listing is public, but click-through uses a JS redirect wrapper; keep as browser/search channel rather than emitting unstable application URLs."
   - id: uz-ish
     country: UZ
     kind: aggregator
     name: ish.uz
-    url: https://ish.uz/
-    access: browser-or-public-html
+    url: https://ish.uz/ru/jobs
+    provider: ishuz
+    access: public-html
     status: live
     locales: [uz, ru]
   - id: uz-uzjobs
