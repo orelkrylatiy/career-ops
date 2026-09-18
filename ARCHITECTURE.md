@@ -8,7 +8,7 @@ Career-ops is built on three commitments that every design decision serves:
 
 - **Local-first.** Everything runs on your machine against your files. No account required, no server in the loop for the core tool.
 - **AI-agnostic.** The logic lives in Markdown prompt files under `modes/`, executed by whatever AI coding CLI you use (Claude Code, Codex, OpenCode, Gemini, Qwen, Grok, Antigravity) or by standalone Node scripts. No single model is hardcoded.
-- **Human-in-the-loop by default.** Upstream/core prepares and evaluates; the human reviews and clicks. This fork adds an explicit autonomous execution overlay (`AUTOPILOT_SPEC.md`) that may submit only through its claim/cap/audit protocol; it is not the default core path.
+- **Human-in-the-loop by default.** Upstream/core prepares and evaluates; the human reviews and clicks. This fork adds an explicit autonomous execution overlay (`AUTOPILOT_SPEC.md`) that may submit only through its claim/idempotency/audit protocol; it is not the default core path.
 
 ## The two layers (the data contract)
 
@@ -66,7 +66,7 @@ The heart of the tool. `oferta.md` defines the A–H evaluation blocks (H is con
 Every evaluated offer is registered. `data/applications.md` is the canonical tracker table; `reports/{NNN}-{company}-{date}.md` holds full evaluations. `tracker.mjs`, `merge-tracker.mjs`, `dedup-tracker.mjs`, `normalize-statuses.mjs`, and `reconcile-pipeline.mjs` keep it consistent (atomic writes + a SQLite index). Report numbers are claimed atomically via `reserve-report-num.mjs`.
 
 ### Autonomous execution overlay — `autopilot*.mjs`
-This fork's optional execution layer consumes discovered postings, applies deterministic gates, reserves a job/daily-cap slot in SQLite, drives a constrained persistent browser, records the external outcome idempotently, then reconciles successful submissions into the canonical tracker. Claims prevent two workers from submitting the same job or both consuming the final daily slot. See [`AUTOPILOT_SPEC.md`](AUTOPILOT_SPEC.md) for state transitions, failure recovery and security boundaries.
+This fork's optional execution layer consumes discovered postings, applies deterministic gates, leases a job to exactly one worker in SQLite, drives a constrained persistent browser, records the external outcome idempotently, then reconciles successful submissions into the canonical tracker. Claims prevent two workers from submitting the same job; they do not impose a throughput quota. See [`AUTOPILOT_SPEC.md`](AUTOPILOT_SPEC.md) for state transitions, failure recovery and security boundaries.
 
 ### Liveness — never evaluate a dead posting
 `check-liveness.mjs` / `liveness-*.mjs` verify a posting is still open (zero-token) before it costs evaluation time.
