@@ -271,6 +271,20 @@ async function launchContext(insecure, headed, noproxy = false) {
       ctx = await chromium.launchPersistentContext(PROFILE_DIR, { ...baseOpts });
     }
   }
+  // Enforce the same destination policy on redirects, iframes and page-side
+  // fetches. Host verdicts are DNS-cached above, so this does not resolve every
+  // asset repeatedly.
+  await ctx.route('**/*', async (route) => {
+    const target = route.request().url();
+    if (!/^https?:/i.test(target)) { await route.continue(); return; }
+    try {
+      await assertSafeUrl(target);
+      await route.continue();
+    } catch (err) {
+      console.error(`[autopilot-browser] blocked request: ${target} (${err.message})`);
+      await route.abort('blockedbyclient');
+    }
+  });
   return ctx;
 }
 
@@ -286,11 +300,11 @@ async function runCommand(ctx, cmd, args, settleMs) {
     let last = null;
     try { last = JSON.parse(readFileSync(STATE_FILE, 'utf8')).url; } catch {}
     if (last && last !== 'about:blank') {
-      await page.goto(assertSafeUrl(last), { waitUntil: 'domcontentloaded', timeout: 45000 });
+      await page.goto(await assertSafeUrl(last), { waitUntil: 'domcontentloaded', timeout: 45000 });
     }
   }
   if (cmd === 'open') {
-    const url = assertSafeUrl(args[0]);
+    const url = await assertSafeUrl(args[0]);
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
     // SPA settle: form apps render (and sometimes bounce redirects) well
     // after domcontentloaded — give them `--settle <ms>` before the dump.
