@@ -256,6 +256,25 @@ cover_letter:
 #   # default_sender_note: "the email used to send this message"
 #   # signature_name: "Jane Smith"
 
+# ── Autonomous application worker (fork extension) ──────────────────────────
+#
+# The core project remains human-in-the-loop. This optional block configures
+# the fork's `autopilot.mjs` execution layer. Copy only after reading
+# AUTOPILOT_SPEC.md and setting real contact data above.
+#
+# autopilot:
+#   max_applications_per_day: 25
+#   # Reserve a slot before opening/filling each form (`node autopilot.mjs claim URL`).
+#   claim_ttl_minutes: 45
+#   # Set true only when hybrid/on-site postings should be rejected.
+#   remote_only: false
+#   # Explicit geographic exclusions; no countries are hard-coded by the worker.
+#   blocked_locations: []
+#   # Explicit source host exclusions. Subdomains are matched safely; unrelated
+#   # hosts such as `notlinkedin.com` do not match `linkedin.com`.
+#   blacklist_sources: []
+#   # CV uploads are restricted to the user data root's output/ or data/ dirs.
+#   cv_pdf: "output/cv.pdf"
 # ── Scan / JD extractor ─────────────────────────────────────────────────────
 #
 # How the scan and JD-extraction steps read SPA job pages.
