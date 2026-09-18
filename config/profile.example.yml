@@ -263,12 +263,9 @@ cover_letter:
 # AUTOPILOT_SPEC.md and setting real contact data above.
 #
 # autopilot:
-#   max_applications_per_day: 25
-#   # Reserve a slot before opening/filling each form (`node autopilot.mjs claim URL`).
+#   # Claim a job before opening/filling its form. Claims prevent duplicate
+#   # submissions of the same posting; they do NOT impose a throughput limit.
 #   claim_ttl_minutes: 45
-#   # Optional local-hour claim window; omit for 24/7 scheduling. Overnight
-#   # windows such as { start: 22, end: 6 } are supported.
-#   work_hours: { start: 8, end: 23 }
 #   # Set true only when hybrid/on-site postings should be rejected.
 #   remote_only: false
 #   # Explicit geographic exclusions; no countries are hard-coded by the worker.
