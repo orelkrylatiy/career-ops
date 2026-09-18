@@ -9,15 +9,15 @@ source_basis:
   - https://ishkop.uz/it
   - https://hh.uz/vacancies
 companies:
-  - { name: "Uzum" }
+  - { name: "Uzum", career_url: "https://people.uzum.com/career/ru/vacancies", career_status: live }
   - { name: "Uzum Market" }
   - { name: "Uzum Bank" }
-  - { name: "Click" }
+  - { name: "Click", career_url: "https://click.uz/ru/vacancies", career_status: live }
   - { name: "Payme" }
-  - { name: "TBC Bank Uzbekistan" }
+  - { name: "TBC Bank Uzbekistan", career_url: "https://tbcbank.uz/ru/career/", career_status: live }
   - { name: "UZINFOCOM" }
   - { name: "IT Park Uzbekistan" }
-  - { name: "EPAM Uzbekistan" }
+  - { name: "EPAM Uzbekistan", career_url: "https://careers.epam.com/en/vacancies?country=Uzbekistan", career_status: live }
   - { name: "Exadel Uzbekistan" }
   - { name: "Andersen Uzbekistan" }
   - { name: "Beeline Uzbekistan" }
