@@ -1,0 +1,61 @@
+version: 1
+country: UZ
+country_name: Uzbekistan
+languages: [uz, ru, en]
+verified_on: 2026-09-18
+default_discovery: ats_probe
+source_basis:
+  - https://www.it-park.uz/ru/itpark/residents/itpark-residents
+  - https://ishkop.uz/it
+  - https://hh.uz/vacancies
+companies:
+  - { name: "Uzum" }
+  - { name: "Uzum Market" }
+  - { name: "Uzum Bank" }
+  - { name: "Click" }
+  - { name: "Payme" }
+  - { name: "TBC Bank Uzbekistan" }
+  - { name: "UZINFOCOM" }
+  - { name: "IT Park Uzbekistan" }
+  - { name: "EPAM Uzbekistan" }
+  - { name: "Exadel Uzbekistan" }
+  - { name: "Andersen Uzbekistan" }
+  - { name: "Beeline Uzbekistan" }
+  - { name: "Ucell" }
+  - { name: "Mobiuz" }
+  - { name: "Uztelecom" }
+  - { name: "Humans Uzbekistan" }
+  - { name: "Alif Uzbekistan" }
+  - { name: "Kapitalbank Uzbekistan" }
+  - { name: "Ipak Yuli Bank" }
+  - { name: "Anorbank" }
+  - { name: "Octobank" }
+  - { name: "Aloqabank" }
+  - { name: "Asakabank" }
+  - { name: "Hamkorbank" }
+  - { name: "Davr Bank" }
+  - { name: "InfinBank" }
+  - { name: "Orient Finans Bank" }
+  - { name: "Agrobank Digital" }
+  - { name: "RealSoft" }
+  - { name: "Udevs" }
+  - { name: "BILLZ" }
+  - { name: "MyTaxi" }
+  - { name: "Express24" }
+  - { name: "Yandex Uzbekistan" }
+  - { name: "Kolesa Group / Avtoelon.uz" }
+  - { name: "OLX Uzbekistan" }
+  - { name: "ZoodMall Uzbekistan" }
+  - { name: "U-Pay" }
+  - { name: "OSON" }
+  - { name: "Multicard" }
+  - { name: "Atmos" }
+  - { name: "Didox" }
+  - { name: "Fido-Biznes" }
+  - { name: "Newmax Technologies" }
+  - { name: "Cybernet" }
+  - { name: "Corporate Solutions Group" }
+  - { name: "Amega ITS" }
+  - { name: "Nomadian" }
+  - { name: "OsiyoTech" }
+  - { name: "Cybrex" }
