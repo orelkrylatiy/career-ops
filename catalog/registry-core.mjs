@@ -145,7 +145,10 @@ export function normalizeCompanyKey(value) {
     .normalize('NFKC')
     .toLowerCase()
     .replace(/[«»"'“”„]/g, '')
-    .replace(/\b(?:ооо|зао|оао|пао|тоо|ао|llc|ltd|inc|cjsc|ojsc|jsc|masuliyati cheklangan jamiyat)\b/giu, ' ')
+    // JS \b is ASCII-centric and does not form useful word boundaries around
+    // Cyrillic legal forms such as ООО/ТОО. Use Unicode letter/number
+    // boundaries explicitly so regional company identity really collapses.
+    .replace(/(^|[^\p{L}\p{N}])(?:ооо|зао|оао|пао|тоо|ао|llc|ltd|inc|cjsc|ojsc|jsc|masuliyati cheklangan jamiyat)(?=[^\p{L}\p{N}]|$)/giu, ' ')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
