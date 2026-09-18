@@ -22,7 +22,7 @@ The automation optimizes for **throughput without duplicate external actions**. 
 |---|---|---|
 | `scan.mjs` | discover postings and append the pipeline | `data/pipeline.md`, scan history |
 | `autopilot.mjs` | deterministic gate, queue, claims, outcomes, tracker reconciliation | `data/autopilot.db`, queue file, canonical tracker |
-| `autopilot-db.mjs` | SQLite operational journal, claim/cap transaction boundary | `data/autopilot.db` (WAL) |
+| `autopilot-db.mjs` | SQLite operational journal and per-job claim transaction boundary | `data/autopilot.db` (WAL) |
 | `autopilot-browser.mjs` | constrained browser actions and page observations | browser profile/state/screenshot |
 | `notify-tg.mjs` | best-effort operational notifications | none |
 | `merge-tracker.mjs` | canonical tracker writer | `data/applications.md` |
@@ -52,7 +52,7 @@ A stale claim is **never silently requeued**. The worker may have submitted the 
 
 1. **Claim before mutation.** Viewing a JD is read-only; filling/uploading/submitting a form requires a successful `autopilot.mjs claim <url>`.
 2. **One live claim per job.** `application_claims.job_url_key` is unique.
-3. **Daily cap includes reservations.** Capacity is `sent + live_claims`, checked inside the same SQLite transaction that creates the claim.
+3. **No local throughput cap.** The worker does not impose a daily, hourly, per-run or country-level application quota. Claims serialize the same job only; different jobs may proceed concurrently.
 4. **Applied is idempotent.** Retrying `report applied` must not create a second application attempt or increment the daily counter again.
 5. **Tracker write is recoverable.** If the external submission was recorded but tracker merge fails, the pending TSV and report-number reservation are durable recovery state. Retrying the same report first reconciles that row rather than allocating another.
 6. **External reality wins.** An application that was actually submitted is never relabeled as failed just because local reconciliation failed.
@@ -76,11 +76,11 @@ flowchart TD
     H --> I[Open JD / liveness check]
     I -->|dead / not actionable| J[report skipped/failed]
     I -->|actionable| K[claim URL]
-    K -->|cap / claimed / applied| L[Do not touch form]
+    K -->|already claimed / applied| L[Do not touch form]
     K -->|token| M[Fill constrained form]
     M -->|new form type| N[report test_filled + token]
     M -->|submit confirmed| O[report applied + token]
-    O --> P[SQLite applied + daily counter]
+    O --> P[SQLite applied + analytics counter]
     P --> Q[TSV + merge-tracker]
     Q --> R[data/applications.md]
     Q -->|merge failure| S[Keep TSV + reservation]
@@ -134,9 +134,7 @@ Recommended profile block:
 
 ```yaml
 autopilot:
-  max_applications_per_day: 25
   claim_ttl_minutes: 45
-  work_hours: { start: 8, end: 23 } # optional; omit for 24/7 claims
   remote_only: false
   blocked_locations: []
   blacklist_sources: []
@@ -168,7 +166,7 @@ npm run autopilot:preflight
 npm run autopilot
 npm run autopilot:status
 
-node autopilot.mjs cap
+node autopilot.mjs cap  # compatibility diagnostics; never blocks throughput
 node autopilot.mjs claim "<url>"
 node autopilot-browser.mjs serve
 node autopilot-browser.mjs stop
