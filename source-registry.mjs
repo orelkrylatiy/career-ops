@@ -25,6 +25,7 @@ import * as yaml from 'js-yaml';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { fetchTextWithRetry, makeHttpCtx } from './providers/_http.mjs';
 import { resolveCompany } from './discover-ats.mjs';
+import { loadProviders, resolveProvider } from './providers/_registry.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 import {
   DIRECTORY_PARSERS,
@@ -32,6 +33,12 @@ import {
   normalizeCompanyKey,
   sourceLocale,
 } from './catalog/registry-core.mjs';
+import {
+  careerPageEvidence,
+  commonCareerCandidates,
+  extractCareerLinks,
+  extractExternalWebsiteCandidates,
+} from './catalog/career-discovery-core.mjs';
 
 const CODE_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DATA_ROOT = getCareerOpsRoot();
@@ -39,6 +46,8 @@ const CATALOG_PATH = path.join(CODE_ROOT, 'catalog', 'source-catalog.yml');
 const DB_PATH = process.env.CAREER_OPS_SOURCE_DB || path.join(DATA_ROOT, 'data', 'source-registry.db');
 const EXPORT_PATH = process.env.CAREER_OPS_EXPANDED_PORTALS
   || path.join(DATA_ROOT, 'data', 'portals-regional.generated.yml');
+const DISCOVERY_QUEUE_PATH = process.env.CAREER_OPS_SOURCE_DISCOVERY_QUEUE
+  || path.join(DATA_ROOT, 'data', 'source-discovery-queue.md');
 const USER_PORTALS = process.env.CAREER_OPS_PORTALS || path.join(DATA_ROOT, 'portals.yml');
 
 const SCHEMA = `
@@ -384,6 +393,107 @@ async function parallelMap(rows, concurrency, fn) {
   return results;
 }
 
+
+async function fetchCareerHtml(url, ctx) {
+  return fetchTextWithRetry(ctx, url, { redirect: 'follow', timeoutMs: 15000 }, { retries: 1 });
+}
+
+function upsertCompanyCareerSource(companyId, candidate, providers) {
+  const db = openRegistryDb();
+  const routed = resolveProvider({ name: 'career-discovery', careers_url: candidate.url }, providers, { skipIds: ['local-parser'] });
+  const provider = routed?.provider?.id || null;
+  const status = provider ? 'live' : 'career-page';
+  db.prepare(`
+    INSERT INTO company_sources
+      (company_id, provider, careers_url, api, status, job_count, verified_at, error)
+    VALUES (?, ?, ?, NULL, ?, NULL, ?, NULL)
+    ON CONFLICT(company_id, careers_url) DO UPDATE SET
+      provider=excluded.provider,
+      status=excluded.status,
+      verified_at=excluded.verified_at,
+      error=NULL
+  `).run(companyId, provider, candidate.url, status, now());
+  return { provider, status };
+}
+
+async function enrichCompanyCareers(country = null) {
+  const db = openRegistryDb();
+  const companies = db.prepare(`
+    SELECT * FROM companies
+    WHERE (? IS NULL OR country = ?)
+    ORDER BY country, priority DESC, CASE WHEN rank IS NULL THEN 1 ELSE 0 END, rank, id
+  `).all(country, country);
+  const ctx = makeHttpCtx();
+  const providers = await loadProviders(path.join(CODE_ROOT, 'providers'));
+  const concurrency = Math.max(1, Number(process.env.SOURCE_REGISTRY_CONCURRENCY) || 6);
+  const summary = { companies: companies.length, websiteEnriched: 0, careerPages: 0, atsPages: 0, unresolved: 0, errors: 0 };
+
+  await parallelMap(companies, concurrency, async (row) => {
+    let website = row.website || null;
+    try {
+      // Official directories often expose the website only on the detail page.
+      if (!website && row.directory_url) {
+        const detail = await fetchCareerHtml(row.directory_url, ctx);
+        const external = extractExternalWebsiteCandidates(detail, row.directory_url);
+        if (external.length) {
+          website = external[0].url;
+          db.prepare('UPDATE companies SET website=? WHERE id=?').run(website, row.id);
+          summary.websiteEnriched += 1;
+        }
+      }
+
+      if (!website) {
+        summary.unresolved += 1;
+        return;
+      }
+
+      const home = await fetchCareerHtml(website, ctx);
+      let candidates = extractCareerLinks(home, website);
+      const accepted = [];
+
+      for (const candidate of candidates) {
+        try {
+          const html = await fetchCareerHtml(candidate.url, ctx);
+          const evidence = careerPageEvidence(html, candidate.url);
+          if (evidence.verified) accepted.push({ ...candidate, evidence });
+        } catch {
+          // Keep trying other candidates; health is stored only after evidence.
+        }
+      }
+
+      // No linked careers surface: probe conventional paths on the verified
+      // official website. This is a finite strategy list, not a company/result
+      // ceiling; unresolved companies remain in the browser-discovery queue.
+      if (accepted.length === 0) {
+        for (const url of commonCareerCandidates(website)) {
+          try {
+            const html = await fetchCareerHtml(url, ctx);
+            const evidence = careerPageEvidence(html, url);
+            if (evidence.verified) accepted.push({ url, text: '', score: evidence.score, isAts: false, evidence });
+          } catch {
+            // 404/auth/network means this candidate is not usable now.
+          }
+        }
+      }
+
+      const seen = new Set();
+      for (const candidate of accepted.sort((a, b) => (b.score || 0) - (a.score || 0))) {
+        const key = candidate.url.toLowerCase().replace(/\/+$/, '');
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const stored = upsertCompanyCareerSource(row.id, candidate, providers);
+        summary.careerPages += 1;
+        if (stored.provider) summary.atsPages += 1;
+      }
+      if (seen.size === 0) summary.unresolved += 1;
+    } catch (err) {
+      summary.errors += 1;
+      console.error('career discovery failed ' + row.country + ' ' + row.name + ': ' + (err?.message || err));
+    }
+  });
+  return summary;
+}
+
 async function resolveCompanySources(country = null) {
   const db = openRegistryDb();
   const companies = db.prepare(`
@@ -468,6 +578,59 @@ function dedupeEntries(rows) {
   return out;
 }
 
+
+function exportDiscoveryQueue(country = null) {
+  const db = openRegistryDb();
+  const catalog = loadCatalog();
+  const regionByCode = catalog.regions || {};
+  const rows = db.prepare(`
+    SELECT
+      c.id, c.country, c.name, c.rank, c.priority, c.website, c.directory_url,
+      cs.careers_url, cs.provider, cs.status
+    FROM companies c
+    LEFT JOIN company_sources cs
+      ON cs.company_id = c.id AND cs.status = 'career-page'
+    WHERE (? IS NULL OR c.country = ?)
+      AND NOT EXISTS (
+        SELECT 1 FROM company_sources live
+        WHERE live.company_id=c.id AND live.provider IS NOT NULL AND live.status IN ('live','empty')
+      )
+    ORDER BY c.country, c.priority DESC, CASE WHEN c.rank IS NULL THEN 1 ELSE 0 END, c.rank, c.name
+  `).all(country, country);
+
+  const lines = [
+    '# Regional Source Discovery Queue',
+    '',
+    'Generated: ' + now(),
+    '',
+    'This is not a rejection list. Every row below still belongs to the funnel;',
+    'it simply has no machine-resolved provider yet. Browser/web-search agents',
+    'should resolve an official careers URL/ATS and write it back to the registry.',
+    '',
+  ];
+
+  let current = null;
+  for (const row of rows) {
+    if (row.country !== current) {
+      current = row.country;
+      const region = regionByCode[current] || {};
+      lines.push('## ' + current + ' — ' + (region.name || current));
+      lines.push('');
+      lines.push('Locales: ' + sourceLocale(current, region.locales).join(', '));
+      lines.push('');
+    }
+    const hints = [];
+    if (row.rank) hints.push('rank=' + row.rank);
+    if (row.website) hints.push('site=' + row.website);
+    if (row.careers_url) hints.push('career=' + row.careers_url);
+    if (row.directory_url) hints.push('directory=' + row.directory_url);
+    lines.push('- [ ] ' + row.name + (hints.length ? ' | ' + hints.join(' | ') : ''));
+  }
+  mkdirSync(path.dirname(DISCOVERY_QUEUE_PATH), { recursive: true });
+  writeFileSync(DISCOVERY_QUEUE_PATH, lines.join('\n') + '\n', 'utf8');
+  return { path: DISCOVERY_QUEUE_PATH, count: rows.length };
+}
+
 function exportPortals(country = null) {
   const catalog = loadCatalog();
   const base = loadUserPortals();
@@ -508,7 +671,8 @@ function exportPortals(country = null) {
   };
   mkdirSync(path.dirname(EXPORT_PATH), { recursive: true });
   writeFileSync(EXPORT_PATH, yaml.dump(doc, { lineWidth: 140, noRefs: true, sortKeys: false }), 'utf8');
-  return { path: EXPORT_PATH, trackedCompanies: doc.tracked_companies.length, jobBoards: doc.job_boards.length };
+  const discoveryQueue = exportDiscoveryQueue(country);
+  return { path: EXPORT_PATH, trackedCompanies: doc.tracked_companies.length, jobBoards: doc.job_boards.length, discoveryQueue };
 }
 
 function status(country = null) {
@@ -530,6 +694,7 @@ function status(country = null) {
     db: DB_PATH,
     catalog: CATALOG_PATH,
     export: EXPORT_PATH,
+    discoveryQueue: DISCOVERY_QUEUE_PATH,
     companies: country ? companies.filter((r) => r.country === country) : companies,
     sources: country ? sources.filter((r) => r.country === country || r.country == null) : sources,
     memberships: country ? memberships.filter((r) => r.country === country) : memberships,
@@ -579,6 +744,11 @@ async function main() {
     if (json) console.log(JSON.stringify(out, null, 2));
     return;
   }
+  if (cmd === 'enrich') {
+    const out = await withRun('enrich', country, () => enrichCompanyCareers(country));
+    if (json) console.log(JSON.stringify(out, null, 2));
+    return;
+  }
   if (cmd === 'resolve') {
     const out = await withRun('resolve', country, () => resolveCompanySources(country));
     if (json) console.log(JSON.stringify(out, null, 2));
@@ -594,6 +764,7 @@ async function main() {
     const out = {};
     out.sync = await withRun('sync', country, () => syncDirectories(country));
     out.verify = await withRun('verify', country, () => verifySources(country));
+    out.enrich = await withRun('enrich', country, () => enrichCompanyCareers(country));
     out.resolve = await withRun('resolve', country, () => resolveCompanySources(country));
     out.export = exportPortals(country);
     console.log(JSON.stringify(out, null, 2));
@@ -604,7 +775,7 @@ async function main() {
     console.log(JSON.stringify(status(country), null, 2));
     return;
   }
-  throw new Error('usage: node source-registry.mjs <init|sync|verify|resolve|export|full|status> [--country RU|KZ|AM|UZ] [--json]');
+  throw new Error('usage: node source-registry.mjs <init|sync|verify|enrich|resolve|export|full|status> [--country RU|KZ|AM|UZ] [--json]');
 }
 
 if (isMainModule(import.meta.url)) {
