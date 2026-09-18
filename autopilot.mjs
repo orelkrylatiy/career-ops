@@ -47,7 +47,9 @@ const PIPELINE_PATH = process.env.CAREER_OPS_PIPELINE || path.join(DATA_ROOT, 'd
 const TRACKER_PATH = resolveTrackerPath(DATA_ROOT);
 const BLACKLIST_PATH = path.join(DATA_ROOT, 'data', 'blacklist.md');
 export const QUEUE_PATH = path.join(DATA_ROOT, 'data', 'autopilot-queue.md');
-const SCAN_PATH = path.join(CODE_ROOT, 'scan.mjs');
+const DISCOVERY_PATH = process.env.CAREER_OPS_DISCOVERY_MODE === 'core'
+  ? path.join(CODE_ROOT, 'scan.mjs')
+  : path.join(CODE_ROOT, 'wide-scan.mjs');
 
 const OUTCOMES = ['applied', 'test_filled', 'failed', 'captcha', 'skipped'];
 const CHANNELS = ['browser', 'ats_api', 'email'];
@@ -273,7 +275,7 @@ export function regenerateQueue() {
 // ── run command ─────────────────────────────────────────────────────
 
 function runScanStep() {
-  const res = spawnSync(process.execPath, [SCAN_PATH], {
+  const res = spawnSync(process.execPath, [DISCOVERY_PATH], {
     cwd: CODE_ROOT,
     stdio: 'inherit',
     shell: false,
@@ -284,11 +286,11 @@ function runScanStep() {
     return 'spawn-failed';
   }
   if (res.status !== 0) {
-    addEvent('scan', `scan.mjs exited with status ${res.status}; continuing with existing pipeline`, null, 'warn');
-    console.error(`autopilot: scan.mjs exited ${res.status}; continuing with existing pipeline`);
+    addEvent('scan', `discovery exited with status ${res.status}; continuing with existing pipeline`, null, 'warn');
+    console.error(`autopilot: discovery exited ${res.status}; continuing with existing pipeline`);
     return 'failed';
   }
-  addEvent('scan', 'scan.mjs completed');
+  addEvent('scan', `discovery completed via ${path.basename(DISCOVERY_PATH)}`);
   return 'ok';
 }
 
