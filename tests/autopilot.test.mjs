@@ -13,7 +13,6 @@ writeFileSync(join(root, 'config', 'profile.yml'), [
   '  email: test@example.net',
   '  phone: ""',
   'autopilot:',
-  '  max_applications_per_day: 2',
   '  remote_only: true',
   '  blocked_locations: [LATAM]',
   '  cv_pdf: output/cv.pdf',
@@ -67,7 +66,7 @@ test('source host exclusions respect DNS-label boundaries', () => {
   assert.equal(core.hostMatchesToken('notlinkedin.com', 'linkedin.com'), false);
 });
 
-test('application claims reserve the daily cap atomically and applied reporting is idempotent', () => {
+test('application claims prevent duplicate workers without limiting throughput', () => {
   const a = 'https://jobs.example/a';
   const b = 'https://jobs.example/b';
   const ka = dbmod.normalizeUrlKey(a);
@@ -75,10 +74,18 @@ test('application claims reserve the daily cap atomically and applied reporting 
   dbmod.upsertJob({ urlKey: ka, url: a, company: 'Acme', title: 'Engineer A' });
   dbmod.upsertJob({ urlKey: kb, url: b, company: 'Beta', title: 'Engineer B' });
 
-  const claimA = dbmod.claimApplication(ka, '2026-09-18', 1, 45);
+  const claimA = dbmod.claimApplication(ka, '2026-09-18', 45);
   assert.equal(claimA.allowed, true);
-  const claimB = dbmod.claimApplication(kb, '2026-09-18', 1, 45);
-  assert.deepEqual({ allowed: claimB.allowed, reason: claimB.reason }, { allowed: false, reason: 'daily-cap' });
+  const duplicateClaim = dbmod.claimApplication(ka, '2026-09-18', 45);
+  assert.deepEqual(
+    { allowed: duplicateClaim.allowed, reason: duplicateClaim.reason },
+    { allowed: false, reason: 'already-claimed' },
+  );
+
+  // A different job is still claimable immediately: there is deliberately no
+  // local daily/application throughput cap.
+  const claimB = dbmod.claimApplication(kb, '2026-09-18', 45);
+  assert.equal(claimB.allowed, true);
 
   const applied = dbmod.reportApplied(ka, 'ok', 'browser', '2026-09-18', claimA.token);
   assert.equal(applied.ok, true);
