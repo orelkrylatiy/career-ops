@@ -1,0 +1,60 @@
+version: 1
+country: KZ
+country_name: Kazakhstan
+languages: [ru, kk, en]
+verified_on: 2026-09-18
+default_discovery: ats_probe
+source_basis:
+  - https://www.enbek.kz/ru/vac/profs/01
+  - https://forbes.kz/
+companies:
+  - { name: "Kaspi.kz", career_url: "https://job.kaspi.kz/", career_status: live }
+  - { name: "Kolesa Group", career_url: "https://kolesa.group/career/job", career_status: live }
+  - { name: "inDrive", career_url: "https://careers.indrive.com/vacancies/?country=Kazakhstan", career_status: live }
+  - { name: "Kcell", career_url: "https://jobs.kcell.kz/career", career_status: live }
+  - { name: "Halyk Bank", career_url: "https://halykbank.kz/about/career", career_status: live }
+  - { name: "Technodom", career_url: "https://hr.technodom.kz/vacancies/", career_status: live }
+  - { name: "Freedom Holding Corp." }
+  - { name: "Freedom Bank Kazakhstan" }
+  - { name: "BTS Digital" }
+  - { name: "Beeline Kazakhstan" }
+  - { name: "Kazakhtelecom" }
+  - { name: "Tele2/Altel Kazakhstan" }
+  - { name: "ForteBank" }
+  - { name: "Alatau City Bank" }
+  - { name: "Home Credit Bank Kazakhstan" }
+  - { name: "Bank CenterCredit" }
+  - { name: "Eurasian Bank" }
+  - { name: "Bereke Bank" }
+  - { name: "Choco" }
+  - { name: "Chocolife" }
+  - { name: "Aviata" }
+  - { name: "Arbuz.kz" }
+  - { name: "Sergek Group" }
+  - { name: "BI Group Digital" }
+  - { name: "ERG Digital" }
+  - { name: "Air Astana" }
+  - { name: "FlyArystan" }
+  - { name: "EPAM Kazakhstan" }
+  - { name: "Andersen Kazakhstan" }
+  - { name: "DataArt Kazakhstan" }
+  - { name: "Grid Dynamics Kazakhstan" }
+  - { name: "Netcracker Kazakhstan" }
+  - { name: "One Technologies" }
+  - { name: "DAR" }
+  - { name: "Wooppay" }
+  - { name: "CerebraAI" }
+  - { name: "Clockster" }
+  - { name: "Documentolog" }
+  - { name: "Smart Parking Technologies / Parqour" }
+  - { name: "Aitu / BTS Digital" }
+  - { name: "QazCode" }
+  - { name: "Samruk-Kazyna Digital" }
+  - { name: "Qazaqstan Investment Corporation Tech" }
+  - { name: "Kazpost Digital" }
+  - { name: "Astana Hub" }
+  - { name: "QazCloud" }
+  - { name: "Transtelecom Kazakhstan" }
+  - { name: "2GIS Kazakhstan" }
+  - { name: "Yandex Kazakhstan" }
+  - { name: "VK Tech Kazakhstan" }
