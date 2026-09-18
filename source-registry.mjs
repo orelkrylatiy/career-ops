@@ -640,14 +640,21 @@ function exportPortals(country = null) {
 
   const catalogBoards = (catalog.job_sources || [])
     .filter((s) => countryMatch(s.country, country) && s.provider)
-    .map((s) => ({
-      name: s.name,
-      ...(s.url ? { careers_url: s.url } : {}),
-      provider: s.provider,
-      enabled: true,
-      notes: 'regional source ' + s.id + '; locales=' + sourceLocale(s.country, s.locales).join(','),
-      ...(s.channel ? { channel: s.channel } : {}),
-    }));
+    .map((s) => {
+      const locales = sourceLocale(s.country, s.locales);
+      const preferredLocale = catalog.regions?.[s.country]?.default_locale || locales[0];
+      return {
+        name: s.name,
+        ...(s.url ? { careers_url: s.url } : {}),
+        provider: s.provider,
+        enabled: true,
+        locale: preferredLocale,
+        notes: 'regional source ' + s.id + '; country=' + s.country + '; locales=' + locales.join(','),
+        ...(s.channel ? { channel: s.channel } : {}),
+        ...(Array.isArray(s.search_queries) ? { search_queries: s.search_queries } : {}),
+        ...(Array.isArray(s.paths) ? { paths: s.paths } : {}),
+      };
+    });
 
   const resolved = db.prepare(`
     SELECT c.country, c.name, cs.provider, cs.careers_url, cs.api, cs.status
