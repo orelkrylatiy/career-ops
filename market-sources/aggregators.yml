@@ -8,8 +8,8 @@ sources:
     url: https://hh.ru/vacancies
     source_type: aggregator
     status: live
-    access: browser
-    notes: Broad general-market source; keep as a discovery lane even when direct employer sites are also tracked.
+    access: browser_or_registered_api
+    notes: Broad general-market source; keep as a discovery lane even when direct employer sites are also tracked. Anonymous vacancy-search API access changed in 2026, so do not assume unauthenticated API search.
   - id: habr-career
     name: Habr Career
     country: RU
@@ -66,7 +66,7 @@ sources:
     url: https://hh.kz/vacancies
     source_type: aggregator
     status: live
-    access: browser
+    access: browser_or_registered_api
   - id: enbek-kz
     name: Enbek
     country: KZ
@@ -133,7 +133,7 @@ sources:
     url: https://hh.uz/vacancies
     source_type: aggregator
     status: live
-    access: browser
+    access: browser_or_registered_api
   - id: ishkop-uz
     name: Ishkop
     country: UZ
