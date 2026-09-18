@@ -177,7 +177,7 @@ This fork adds `autopilot.mjs` + `autopilot-browser.mjs` for users who explicitl
 The execution path is intentionally split into a reversible read phase and an irreversible-action phase:
 
 ```text
-scan -> deterministic queue -> open/read JD -> claim(job + cap slot)
+scan -> deterministic queue -> open/read JD -> claim(job mutex)
                                          -> fill -> submit -> report -> tracker
 ```
 
