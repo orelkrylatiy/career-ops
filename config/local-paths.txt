@@ -1,0 +1,14 @@
+# Fork-local system overlay.
+#
+# These files implement the autonomous application layer in this fork. The
+# upstream updater must never replace/prune them when syncing career-ops-hq.
+# validate-system-paths-coverage.mjs intentionally reads this committed file in
+# fork CI even though the template version is normally gitignored per install.
+
+autopilot.mjs
+autopilot-db.mjs
+autopilot-browser.mjs
+extract-contacts.mjs
+notify-tg.mjs
+modes/autopilot.md
+AUTOPILOT_SPEC.md
