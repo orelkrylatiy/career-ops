@@ -76,6 +76,15 @@ CREATE TABLE IF NOT EXISTS companies (
   metadata_json TEXT,
   UNIQUE(country, normalized_key)
 );
+CREATE TABLE IF NOT EXISTS company_memberships (
+  source_id TEXT NOT NULL,
+  company_id INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  last_seen TEXT NOT NULL,
+  metadata_json TEXT,
+  PRIMARY KEY(source_id, company_id),
+  FOREIGN KEY(company_id) REFERENCES companies(id) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS company_sources (
   company_id INTEGER NOT NULL,
   provider TEXT,
@@ -100,6 +109,7 @@ CREATE TABLE IF NOT EXISTS registry_runs (
 );
 CREATE INDEX IF NOT EXISTS idx_companies_country ON companies(country);
 CREATE INDEX IF NOT EXISTS idx_companies_priority ON companies(country, priority, rank);
+CREATE INDEX IF NOT EXISTS idx_company_memberships_status ON company_memberships(source_id, status);
 CREATE INDEX IF NOT EXISTS idx_company_sources_status ON company_sources(status);
 CREATE INDEX IF NOT EXISTS idx_sources_country ON sources(country);
 `;
@@ -221,7 +231,18 @@ function upsertCompany(country, source, company) {
     ts,
     metadata: JSON.stringify(company),
   });
-  return db.prepare('SELECT id FROM companies WHERE country = ? AND normalized_key = ?').get(country, key)?.id || null;
+  const companyId = db.prepare('SELECT id FROM companies WHERE country = ? AND normalized_key = ?').get(country, key)?.id || null;
+  if (companyId) {
+    db.prepare(`
+      INSERT INTO company_memberships(source_id, company_id, status, last_seen, metadata_json)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(source_id, company_id) DO UPDATE SET
+        status=excluded.status,
+        last_seen=excluded.last_seen,
+        metadata_json=excluded.metadata_json
+    `).run(source, companyId, company.status || 'listed', ts, JSON.stringify(company));
+  }
+  return companyId;
 }
 
 function pageUrl(raw, page) {
@@ -284,6 +305,10 @@ async function syncDirectories(country = null) {
   const summary = { directories: 0, parsed: 0, active: 0, byCountry: {} };
 
   for (const entry of entries) {
+    // Membership is refreshed as a snapshot. Anything not seen again remains
+    // in historical companies but no longer counts as a current directory member.
+    openRegistryDb().prepare("UPDATE company_memberships SET status='not_seen_current_refresh' WHERE source_id=?")
+      .run(entry.id);
     const rows = await fetchDirectory(entry, ctx);
     let kept = 0;
     for (const company of rows) {
@@ -490,6 +515,12 @@ function status(country = null) {
   const db = openRegistryDb();
   const companies = db.prepare('SELECT country, COUNT(*) AS n, SUM(priority) AS priority FROM companies GROUP BY country ORDER BY country').all();
   const sources = db.prepare('SELECT country, kind, COUNT(*) AS n FROM sources GROUP BY country, kind ORDER BY country, kind').all();
+  const memberships = db.prepare(`
+    SELECT c.country, cm.source_id, cm.status, COUNT(*) AS n
+    FROM company_memberships cm JOIN companies c ON c.id=cm.company_id
+    GROUP BY c.country, cm.source_id, cm.status
+    ORDER BY c.country, cm.source_id, cm.status
+  `).all();
   const resolved = db.prepare(`
     SELECT c.country, cs.status, COUNT(*) AS n
     FROM company_sources cs JOIN companies c ON c.id=cs.company_id
@@ -501,6 +532,7 @@ function status(country = null) {
     export: EXPORT_PATH,
     companies: country ? companies.filter((r) => r.country === country) : companies,
     sources: country ? sources.filter((r) => r.country === country || r.country == null) : sources,
+    memberships: country ? memberships.filter((r) => r.country === country) : memberships,
     companySources: country ? resolved.filter((r) => r.country === country) : resolved,
   };
   return out;
