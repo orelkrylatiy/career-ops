@@ -49,17 +49,10 @@ const SCAN_PATH = path.join(CODE_ROOT, 'scan.mjs');
 
 const OUTCOMES = ['applied', 'test_filled', 'failed', 'captcha', 'skipped'];
 const CHANNELS = ['browser', 'ats_api', 'email'];
-const DEFAULT_EXCLUDED_HOSTS = ['hh.ru', 'linkedin.com'];
-// Location gate (2026-09-18): the candidate is remote-only (config/profile.yml),
-// and aggregator location cells like "Berlin (hybrid)" mean an office the
-// candidate cannot work from. Latin forms are word-anchored so "home office"
-// never trips it; Cyrillic forms are plain substrings (ASCII \b is broken for
-// Cyrillic — every boundary between two Cyrillic letters is a word boundary).
-const LOCATION_NEGATIVE_RE = /((?:hybrid|onsite|on-?site|office[ -]based)|гибрид|в офисе|офис|chile|peru|argentina|colombia|brasil|brazil|mexico|latam)/i;
-// Conservative fallback when config/profile.yml carries no usable cap: an
-// autonomous applier without a configured limit should stop early, not never.
-const DEFAULT_DAILY_CAP = 10;
-
+// Funnel policy is configuration-only. The engine itself has no built-in
+// source/country/application-count exclusions; explicit user blacklist entries
+// remain respected.
+const REMOTE_ONLY_NEGATIVE_RE = /(\b(?:hybrid|onsite|on-?site|office[ -]based)\b|гибрид|в офисе|только офис|офисный формат)/i;
 // Set for the top-level catch so even a crash mid-dry-run cannot write an
 // error event into a DB the dry-run promised not to touch.
 let dryRunActive = false;
@@ -203,20 +196,45 @@ function loadBlacklistKeys() {
   return entries;
 }
 
-/** Hard-excluded source hosts (profile autopilot.blacklist_sources, with defaults). */
+/** Explicit user-configured source exclusions; absent list means exclude nothing. */
 function excludedHostTokens() {
   const list = loadYamlIfExists(PROFILE_PATH)?.autopilot?.blacklist_sources;
-  const tokens = (Array.isArray(list) ? list : [])
+  return (Array.isArray(list) ? list : [])
     .filter(t => typeof t === 'string' && t.trim())
-    .map(t => t.trim().toLowerCase());
-  for (const d of DEFAULT_EXCLUDED_HOSTS) if (!tokens.includes(d)) tokens.push(d);
-  return tokens;
+    .map(t => t.trim().toLowerCase().replace(/^\.+|\.$/g, ''));
+}
+
+export function hostMatchesToken(host, token) {
+  const h = String(host ?? '').toLowerCase().replace(/\.$/, '');
+  const t = String(token ?? '').toLowerCase().replace(/^\.+|\.$/g, '');
+  return Boolean(h && t && (h === t || h.endsWith(`.${t}`)));
 }
 
 function hostOf(url) {
   try { return new URL(url).hostname.toLowerCase(); } catch { return ''; }
 }
 
+function loadLocationPolicy() {
+  const a = loadYamlIfExists(PROFILE_PATH)?.autopilot ?? {};
+  return {
+    remoteOnly: a.remote_only === true,
+    blocked: (Array.isArray(a.blocked_locations) ? a.blocked_locations : [])
+      .filter(v => typeof v === 'string' && v.trim())
+      .map(v => v.trim().toLowerCase()),
+  };
+}
+
+export function gateLocation(location, policy = {}) {
+  const text = String(location ?? '').trim();
+  if (!text) return { ok: true };
+  if (policy.remoteOnly) {
+    const hit = text.match(REMOTE_ONLY_NEGATIVE_RE);
+    if (hit) return { ok: false, reason: `remote_only:${hit[0]}` };
+  }
+  const lower = text.toLowerCase();
+  const blocked = (policy.blocked ?? []).find(token => token && lower.includes(token));
+  return blocked ? { ok: false, reason: `blocked_location:${blocked}` } : { ok: true };
+}
 // ── queue file regeneration ─────────────────────────────────────────
 
 export function regenerateQueue() {
@@ -293,17 +311,10 @@ export async function cmdRun(flags) {
     let db = null;
     if (!flags.dryRun) db = openDb();
     else if (existsSync(DB_PATH)) db = openDb();
-    // Cross-source dedup index: the same posting arrives from two aggregators
-    // under two different URLs, so URL dedup passes both and the autopilot
-    // would apply twice. Key = normalizeTextKey(company) + '\n' + title.
-    // Built after `db` exists (a dry run without a DB file simply skips it).
-    const dbCompanyTitleIndex = new Map();
-    if (db) {
-      for (const j of listJobs()) {
-        const k = `${normalizeTextKey(j.company || '')}\n${normalizeTextKey(j.title || '')}`;
-        if (k !== '\n' && !dbCompanyTitleIndex.has(k)) dbCompanyTitleIndex.set(k, j);
-      }
-    }
+    // Exact posting identity only. Company+title is NOT a safe duplicate key:
+    // large employers routinely open several independent requisitions with the
+    // same title. Keeping both makes the funnel wider and matches tracker logic.
+    const locationPolicy = loadLocationPolicy();
 
     for (const entry of entries) {
       const urlKey = normalizeUrlKey(entry.url);
@@ -327,22 +338,16 @@ export async function cmdRun(flags) {
       // Exact-match sets only: a substring test made /job/123 match /job/1234.
       const inTracker = tracker.rawSet.has(entry.url) || tracker.keySet.has(urlKey);
       const blHit = blacklist.get(normalizeTextKey(entry.company || '')) || null;
-      const hostHit = excludedHosts.find(t => host.includes(t));
+      const hostHit = excludedHosts.find(t => hostMatchesToken(host, t));
 
       if (seenInDb) {
         decisions.push(`DUP: already in autopilot DB | ${label}`);
         counts.alreadyKnown += 1;
         continue;
       }
-      const dupOf = db ? dbCompanyTitleIndex.get(`${normalizeTextKey(entry.company || '')}\n${normalizeTextKey(entry.title || '')}`) : null;
-      if (dupOf) {
-        decisions.push(`DUP: same company+title already queued via ${dupOf.source || dupOf.url_key} | ${label}`);
-        counts.alreadyKnown += 1;
-        continue;
-      }
-      const locBad = LOCATION_NEGATIVE_RE.exec(String(entry.location || ''));
-      if (locBad) {
-        decisions.push(`SKIPPED: location "${locBad[0]}" in "${entry.location}" (remote-only candidate) | ${label}`);
+      const locationGate = gateLocation(entry.location, locationPolicy);
+      if (!locationGate.ok) {
+        decisions.push(`SKIPPED: ${locationGate.reason} | ${label}`);
         counts.gateSkipped += 1;
         continue;
       }
@@ -365,8 +370,6 @@ export async function cmdRun(flags) {
       // 5. survivor
       decisions.push(`QUALIFIED | ${label}`);
       survivors.push({ company: entry.company, title: entry.title, url: entry.url });
-      // Same-run cross-source duplicates must also collide with each other.
-      dbCompanyTitleIndex.set(`${normalizeTextKey(entry.company || '')}\n${normalizeTextKey(entry.title || '')}`, { url_key: urlKey, source: host });
       counts.qualifiedNew += 1;
       if (!flags.dryRun) {
         upsertJob({
@@ -454,16 +457,6 @@ export function cmdStatus() {
 
 // ── report command ──────────────────────────────────────────────────
 
-function loadDailyCap() {
-  try {
-    const cap = Number(loadYamlIfExists(PROFILE_PATH)?.autopilot?.max_applications_per_day);
-    if (Number.isFinite(cap) && cap > 0) return Math.floor(cap);
-  } catch {
-    // fall through to the default
-  }
-  return DEFAULT_DAILY_CAP;
-}
-
 // B1 guard: required personal fields must be real, not placeholders. The agent
 // must never type a fabricated contact into an employer form — if these are
 // unfilled, fill/submit attempts are refused until the user fills the profile.
@@ -498,13 +491,13 @@ export function cmdPreflight() {
 }
 
 export function cmdCap() {
+  // Backward-compatible telemetry command. Career-Ops does not impose an
+  // application-count ceiling; third-party platform limits still apply.
   const db = openDb();
   const today = localDateStr();
   const sent = db.prepare('SELECT applications_sent FROM daily_state WHERE date = ?').get(today)?.applications_sent ?? 0;
-  const cap = loadDailyCap();
-  const out = { date: today, sent, cap, allowed: sent < cap, remaining: Math.max(0, cap - sent) };
-  console.log(JSON.stringify(out, null, 2));
-  process.exitCode = out.allowed ? 0 : 1;
+  console.log(JSON.stringify({ date: today, sent, cap: null, allowed: true, remaining: null, policy: 'unlimited' }, null, 2));
+  process.exitCode = 0;
 }
 
 // Canonical tracker write (#3517, #1799): TSV with a header row, score sentinel
@@ -569,23 +562,7 @@ export async function cmdReport(target, outcome, note, channel) {
     }
   }
 
-  // Cap check BEFORE any write. A refusal after a real submit is the dangerous
-  // case (M2): the application may have been sent, so the job must LEAVE the
-  // queue (failed/cap_exceeded) instead of staying queued for a re-submit.
   let dailyRow = null;
-  if (outcome === 'applied') {
-    const cap = loadDailyCap();
-    const today = localDateStr();
-    const row = db.prepare('SELECT applications_sent FROM daily_state WHERE date = ?').get(today);
-    const sent = row?.applications_sent ?? 0;
-    if (sent >= cap) {
-      reportOutcome(job.url_key, 'failed', 'cap_exceeded_post_submit: application may have been sent — verify manually', null);
-      addEvent('cap', 'refused "applied": daily cap reached; job marked failed/cap_exceeded_post_submit', { date: today, sent, cap, url: job.url }, 'warn');
-      regenerateQueue();
-      throw new Error(`daily cap reached: ${sent}/${cap} for ${today}. Job moved OUT of the queue (application may have been sent — verify manually).`);
-    }
-  }
-
   const updated = reportOutcome(job.url_key, outcome, note ?? null, channel ?? null);
   if (!updated) throw new Error(`job row vanished before update (url_key=${job.url_key})`);
   addEvent('report', `${outcome} — ${job.company || '?'} — ${job.title || '?'}`, {
@@ -607,10 +584,7 @@ export async function cmdReport(target, outcome, note, channel) {
   console.log(`  url: ${job.url}`);
   if (note) console.log(`  note: ${note}`);
   if (channel) console.log(`  channel: ${channel}`);
-  if (dailyRow) {
-    const cap = loadDailyCap();
-    console.log(`  today: ${dailyRow.applications_sent}/${cap} applications sent`);
-  }
+  if (dailyRow) console.log(`  today: ${dailyRow.applications_sent} applications sent (no engine-side cap)`);
   console.log(`  queue regenerated without it -> ${QUEUE_PATH}`);
 }
 
@@ -628,7 +602,7 @@ function usage() {
   node autopilot.mjs [--no-scan] [--no-tg] [--dry-run]
   node autopilot.mjs status
   node autopilot.mjs preflight        (contacts+CV guard — must pass before fill/submit)
-  node autopilot.mjs cap              (JSON: {sent, cap, allowed, remaining} — check BEFORE each form)
+  node autopilot.mjs cap              (compat telemetry; engine-side cap is disabled)
   node autopilot.mjs report "<url or url_key>" <applied|test_filled|failed|captcha|skipped> [--note "..."] [--channel browser|ats_api|email]`);
 }
 
