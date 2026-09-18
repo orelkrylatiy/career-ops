@@ -104,7 +104,7 @@ node autopilot.mjs report "https://company.example/jobs/123" applied \
   --note "thank-you page confirmed"
 ```
 
-Default claim TTL is 45 minutes at the DB API layer. A future scheduler may expose this as a profile setting, but a claim must remain short-lived enough that a crashed worker cannot consume capacity forever.
+Default claim TTL is 45 minutes and can be changed with `autopilot.claim_ttl_minutes` (capped at 180). A claim must remain short-lived enough that a crashed worker cannot consume capacity forever.
 
 ## 7. Dedup policy
 
@@ -135,6 +135,8 @@ Recommended profile block:
 ```yaml
 autopilot:
   max_applications_per_day: 25
+  claim_ttl_minutes: 45
+  work_hours: { start: 8, end: 23 } # optional; omit for 24/7 claims
   remote_only: false
   blocked_locations: []
   blacklist_sources: []
