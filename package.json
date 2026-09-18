@@ -76,7 +76,8 @@
     "sources:stats": "node market-sources.mjs stats",
     "sources:verify": "node market-sources.mjs verify",
     "sources:export": "node market-sources.mjs export",
-    "sources:discover": "node market-sources.mjs discover"
+    "sources:discover": "node market-sources.mjs discover",
+    "scan:wide": "node wide-scan.mjs"
   },
   "keywords": [
     "ai",
