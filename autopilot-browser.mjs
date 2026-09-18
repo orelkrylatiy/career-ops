@@ -19,12 +19,16 @@
 // Security: only http/https targets; localhost/loopback/private/reserved hosts are refused.
 
 import { chromium } from 'playwright';
-import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, realpathSync, statSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import http from 'node:http';
+import { lookup } from 'node:dns/promises';
+import { BlockList } from 'node:net';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { isMainModule } from './lib/is-main-module.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const DATA_ROOT = getCareerOpsRoot();
@@ -38,33 +42,70 @@ const STATE_FILE = taged(resolve(DATA_ROOT, 'data', 'browser-state.json'));
 const SHOT_FILE = taged(resolve(DATA_ROOT, 'output', 'browser-state.png'));
 const SERVE_FILE = taged(resolve(DATA_ROOT, 'data', 'browser-serve.json'));
 
-// Private/loopback/link-local/CGNAT/benchmarking ranges + cloud-metadata hosts.
-// Anything resolving into these is refused before navigation (SSRF guard).
-const PRIVATE_HOST_RE = new RegExp(
-  '^(localhost' +
-  '|127\\.|0\\.|10\\.|192\\.168\\.|172\\.(1[6-9]|2\\d|3[01])\\.' +
-  '|169\\.254\\.' +                                   // link-local incl. AWS/GCP/Azure metadata
-  '|100\\.(6[4-9]|[7-9]\\d|1[01]\\d|12[0-7])\\.' +    // CGNAT incl. Alibaba metadata 100.100.100.200 is NOT here (public); 100.64/10 is
-  '|198\\.1[89]\\.' +                                 // benchmarking
-  '|\\[?::1\\]?$' +                                   // IPv6 loopback (canonical form)
-  '|::ffff:127\\.|::ffff:0:0' +                       // IPv4-mapped loopback / whole range
-  '|metadata\\.google\\.internal$' +                  // well-known metadata hostnames
-  '|metadata\\.azure\\.websites$' +
-  '|169\\.254\\.169\\.254$' +
-  ')', 'i');
-// Fallback for anything the URL parser left in non-canonical IPv6 forms.
-const PRIVATE_HOST_SUFFIX_RE = /(\[::1\]|::ffff:127\.|::ffff:0:0|^f[cd][0-9a-f]{2}:)/i;
+// Browser pages are untrusted input. Block loopback/private/link-local/CGNAT
+// destinations after DNS resolution, not only literal hostnames. A hostname
+// that resolves to 127.0.0.1 is just as dangerous as writing 127.0.0.1.
+const BLOCKED_IPS = new BlockList();
+for (const [network, prefix] of [
+  ['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8],
+  ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.168.0.0', 16], ['198.18.0.0', 15],
+]) BLOCKED_IPS.addSubnet(network, prefix, 'ipv4');
+for (const [network, prefix] of [
+  ['::', 128], ['::1', 128], ['fc00::', 7], ['fe80::', 10],
+]) BLOCKED_IPS.addSubnet(network, prefix, 'ipv6');
+const BLOCKED_HOSTS = new Set([
+  'localhost', 'metadata.google.internal', 'metadata.azure.websites', '169.254.169.254', '100.100.100.200',
+]);
+const HOST_SAFETY_CACHE = new Map();
 
-function assertSafeUrl(raw) {
+export function isBlockedIp(address, family) {
+  const type = family === 6 || String(address).includes(':') ? 'ipv6' : 'ipv4';
+  try { return BLOCKED_IPS.check(String(address), type); } catch { return true; }
+}
+
+async function assertPublicHost(hostname) {
+  const host = String(hostname || '').replace(/^\[|\]$/g, '').toLowerCase();
+  if (!host || BLOCKED_HOSTS.has(host)) throw new Error(`refusing non-public host: ${hostname}`);
+  if (HOST_SAFETY_CACHE.has(host)) return HOST_SAFETY_CACHE.get(host);
+  const check = (async () => {
+    const rows = await lookup(host, { all: true, verbatim: true });
+    if (!rows.length) throw new Error(`hostname did not resolve: ${host}`);
+    const blocked = rows.find(row => isBlockedIp(row.address, row.family));
+    if (blocked) throw new Error(`refusing host ${host}: resolves to non-public ${blocked.address}`);
+    return true;
+  })();
+  HOST_SAFETY_CACHE.set(host, check);
+  try { return await check; } catch (err) { HOST_SAFETY_CACHE.delete(host); throw err; }
+}
+
+export async function assertSafeUrl(raw) {
   let u;
   try { u = new URL(raw); } catch { throw new Error(`invalid URL: ${raw}`); }
   if (u.protocol !== 'https:' && u.protocol !== 'http:') {
     throw new Error(`only http/https is allowed, got ${u.protocol}`);
   }
-  if (PRIVATE_HOST_RE.test(u.hostname) || PRIVATE_HOST_SUFFIX_RE.test(u.hostname)) {
-    throw new Error(`refusing non-public host: ${u.hostname}`);
-  }
+  await assertPublicHost(u.hostname);
   return u.href;
+}
+
+function isInside(parent, child) {
+  const rel = path.relative(parent, child);
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+/** Resolve an upload only from the user data root and reject symlink escapes. */
+export function resolveUploadPath(raw) {
+  const lexical = path.isAbsolute(String(raw ?? '')) ? resolve(String(raw)) : resolve(DATA_ROOT, String(raw ?? ''));
+  if (!existsSync(lexical)) throw new Error(`upload file does not exist: ${lexical}`);
+  const real = realpathSync(lexical);
+  if (!statSync(real).isFile()) throw new Error(`upload path is not a file: ${real}`);
+  const roots = [resolve(DATA_ROOT, 'output'), resolve(DATA_ROOT, 'data')].map(root => {
+    try { return realpathSync(root); } catch { return root; }
+  });
+  if (!roots.some(root => isInside(root, real))) {
+    throw new Error(`upload path must resolve under ${roots.join(' or ')}; got ${real}`);
+  }
+  return real;
 }
 
 async function buildLocator(page, loc) {
