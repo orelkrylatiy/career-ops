@@ -68,7 +68,11 @@
     "build:dashboard": "node build-dashboard.mjs",
     "serve:dashboard": "cd dashboard && go run .",
     "postinstall": "npx playwright install chromium --with-deps || npx playwright install chromium --with-deps",
-    "manifesto": "node manifesto.mjs"
+    "manifesto": "node manifesto.mjs",
+    "autopilot": "node autopilot.mjs",
+    "autopilot:status": "node autopilot.mjs status",
+    "autopilot:preflight": "node autopilot.mjs preflight",
+    "test:autopilot": "node --test tests/autopilot.test.mjs"
   },
   "keywords": [
     "ai",
