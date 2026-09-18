@@ -72,7 +72,11 @@
     "autopilot": "node autopilot.mjs",
     "autopilot:status": "node autopilot.mjs status",
     "autopilot:preflight": "node autopilot.mjs preflight",
-    "test:autopilot": "node --test tests/autopilot.test.mjs"
+    "test:autopilot": "node --test tests/autopilot.test.mjs",
+    "sources:stats": "node market-sources.mjs stats",
+    "sources:verify": "node market-sources.mjs verify",
+    "sources:export": "node market-sources.mjs export",
+    "sources:discover": "node market-sources.mjs discover"
   },
   "keywords": [
     "ai",
