@@ -415,13 +415,39 @@ async function runOneStep(page, step, evalResults) {
  * Client commands (open/step/state) transparently POST here when the server
  * is up; the one-shot path below is the fallback.
  */
+function tokenMatches(expected, supplied) {
+  const a = Buffer.from(String(expected ?? ''));
+  const b = Buffer.from(String(supplied ?? ''));
+  return a.length > 0 && a.length === b.length && timingSafeEqual(a, b);
+}
+
 async function serve(insecure, headed, noproxy) {
   const ctx = await launchContext(insecure, headed, noproxy);
+  const token = randomBytes(32).toString('hex');
+  let shutdown = () => {};
+  let watchdog = null;
+  const touchWatchdog = () => {
+    if (watchdog) clearTimeout(watchdog);
+    watchdog = setTimeout(() => shutdown(), 30 * 60 * 1000);
+  };
   const server = http.createServer((req, res) => {
-    if (req.method !== 'POST' || req.url !== '/cmd') {
-      res.writeHead(404).end();
+    if (req.method !== 'POST') { res.writeHead(404).end(); return; }
+    const supplied = Array.isArray(req.headers['x-autopilot-token'])
+      ? req.headers['x-autopilot-token'][0]
+      : req.headers['x-autopilot-token'];
+    if (!tokenMatches(token, supplied)) {
+      res.writeHead(403, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'forbidden' }));
       return;
     }
+    touchWatchdog();
+    if (req.url === '/stop') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+      setTimeout(() => shutdown(), 10);
+      return;
+    }
+    if (req.url !== '/cmd') { res.writeHead(404).end(); return; }
     let body = '';
     req.on('data', (c) => { body += c; if (body.length > 1e6) req.destroy(); });
     req.on('end', async () => {
@@ -441,38 +467,32 @@ async function serve(insecure, headed, noproxy) {
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const { port } = server.address();
   mkdirSync(dirname(SERVE_FILE), { recursive: true });
-  writeFileSync(SERVE_FILE, JSON.stringify({ pid: process.pid, port, startedAt: new Date().toISOString() }));
+  writeFileSync(SERVE_FILE, JSON.stringify({ pid: process.pid, port, token, startedAt: new Date().toISOString() }), { mode: 0o600 });
   console.error(`[autopilot-browser] serve: listening on 127.0.0.1:${port} (pid ${process.pid}); stop with: node autopilot-browser.mjs stop`);
-  const shutdown = () => {
+  shutdown = () => {
     try { rmSync(SERVE_FILE); } catch {}
+    if (watchdog) clearTimeout(watchdog);
     ctx.close().catch(() => {});
     server.close();
     process.exit(0);
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
-  // Auto-shutdown watchdog: if no command arrives for 30 min, release the
-  // browser (a forgotten serve process must not linger with logged-in forms).
-  let watchdog = setTimeout(shutdown, 30 * 60 * 1000);
-  server.on('request', () => {
-    clearTimeout(watchdog);
-    watchdog = setTimeout(shutdown, 30 * 60 * 1000);
-  });
+  touchWatchdog();
 }
 
 /** POST the command to the serve process if one is alive; else null. */
 async function tryServeClient(payload) {
   let port = 0;
-  try { port = JSON.parse(readFileSync(SERVE_FILE, 'utf8')).port; } catch { return null; }
+  let token = '';
+  try { ({ port, token } = JSON.parse(readFileSync(SERVE_FILE, 'utf8'))); } catch { return null; }
+  if (!port || !token) return null;
   const res = await fetch(`http://127.0.0.1:${port}/cmd`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-autopilot-token': token },
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(120000),
   }).catch(() => null);
-  // A JSON response — even ok:false — means the serve is ALIVE and already
-  // ran (or refused) the command; surface its error instead of re-running
-  // one-shot against a profile the serve's browser still locks.
   if (!res) return null;
   const body = await res.json().catch(() => null);
   if (!body || typeof body.ok !== 'boolean') return null;
@@ -501,9 +521,14 @@ async function main() {
   if (cmd === 'serve') { await serve(insecure, headed, noproxy); return; }
   if (cmd === 'stop') {
     try {
-      const { pid } = JSON.parse(readFileSync(SERVE_FILE, 'utf8'));
-      process.kill(pid);
-      rmSync(SERVE_FILE);
+      const { pid, port, token } = JSON.parse(readFileSync(SERVE_FILE, 'utf8'));
+      if (!port || !token) throw new Error('stale serve metadata');
+      const res = await fetch(`http://127.0.0.1:${port}/stop`, {
+        method: 'POST',
+        headers: { 'x-autopilot-token': token },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) throw new Error(`stop returned HTTP ${res.status}`);
       console.log(`stopped serve pid ${pid}`);
     } catch { console.log('no serve process'); }
     return;
@@ -529,4 +554,6 @@ async function main() {
   }
 }
 
-main().catch((e) => { console.error(`[autopilot-browser] ${e.message}`); process.exit(1); });
+if (isMainModule(import.meta.url)) {
+  main().catch((e) => { console.error(`[autopilot-browser] ${e.message}`); process.exit(1); });
+}
