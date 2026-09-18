@@ -1,0 +1,20 @@
+version: 1
+policy:
+  # Prefer the language used by the actual vacancy/application form. These are
+  # only market fallbacks when the page language cannot be determined.
+  detect_page_language_first: true
+  preserve_factual_fields: true
+  translate_free_text_only: true
+markets:
+  RU:
+    fallback_order: [ru, en]
+    default: ru
+  KZ:
+    fallback_order: [ru, kk, en]
+    default: ru
+  AM:
+    fallback_order: [en, hy, ru]
+    default: en
+  UZ:
+    fallback_order: [ru, uz, en]
+    default: ru
