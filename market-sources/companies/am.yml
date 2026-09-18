@@ -10,17 +10,17 @@ source_basis:
   - https://www.myjob.am/
 companies:
   - { name: "Picsart" }
-  - { name: "ServiceTitan" }
+  - { name: "ServiceTitan", career_url: "https://www.servicetitan.com/job-openings", career_status: live }
   - { name: "Synopsys Armenia" }
-  - { name: "Digitain" }
+  - { name: "Digitain", career_url: "https://www.digitain.com/career/", career_status: live }
   - { name: "SoftConstruct" }
   - { name: "EPAM Armenia" }
   - { name: "DataArt Armenia" }
   - { name: "NVIDIA Armenia" }
   - { name: "TeamViewer Armenia" }
-  - { name: "Krisp" }
+  - { name: "Krisp", career_url: "https://krisp.ai/careers/", career_status: live }
   - { name: "Renderforest" }
-  - { name: "SuperAnnotate" }
+  - { name: "SuperAnnotate", career_url: "https://www.superannotate.com/careers", career_status: live }
   - { name: "DISQO" }
   - { name: "CodeSignal" }
   - { name: "Dexatel" }
