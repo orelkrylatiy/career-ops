@@ -75,7 +75,7 @@ export function checkPlaywrightCli() {
   if (!Number.isInteger(major) || major < 20) {
     return { ok: false, reason: `Playwright CLI requires Node 20+ (current ${process.version})` };
   }
-  const res = spawnSync(npxCommand(), ['--no-install', 'playwright', 'cli', '--version'], {
+  const res = spawnSync(npxCommand(), ['--no-install', 'playwright', 'cli', '--help'], {
     encoding: 'utf8',
     shell: false,
     timeout: 20_000,
@@ -84,7 +84,7 @@ export function checkPlaywrightCli() {
   if (res.status !== 0) {
     return { ok: false, reason: String(res.stderr || res.stdout || `exit ${res.status}`).trim().slice(0, 500) };
   }
-  return { ok: true, version: String(res.stdout || '').trim() || 'available' };
+  return { ok: true, version: 'project-local Playwright CLI available' };
 }
 
 function runCli(session, args, { raw = false, timeout = 30_000, allowFailure = false } = {}) {
@@ -204,6 +204,19 @@ function safeBody(session, command, index) {
   return res.status === 0 ? res.stdout.slice(0, 80_000) : '';
 }
 
+function sanitizedRequestUrl(raw) {
+  try {
+    const u = new URL(raw);
+    u.username = '';
+    u.password = '';
+    u.search = '';
+    u.hash = '';
+    return u.href;
+  } catch {
+    return String(raw || '').split(/[?#]/, 1)[0].slice(0, 1000);
+  }
+}
+
 function inspectNetwork(session) {
   const raw = runCli(session, ['requests'], { raw: true, timeout: 20_000 }).stdout;
   const rows = parseRequestList(raw);
@@ -225,7 +238,7 @@ function inspectNetwork(session) {
     sanitized.push({
       index: row.index,
       method: row.method,
-      url: row.url.slice(0, 1000),
+      url: sanitizedRequestUrl(row.url),
       status: row.status,
       statusText: row.statusText,
       requestLooksLikeApplication,
@@ -233,7 +246,8 @@ function inspectNetwork(session) {
       responseLooksError,
     });
   }
-  return { rawSummary: raw.slice(0, 12_000), requests: sanitized };
+  // Do not persist the raw request listing: query strings can contain PII.
+  return { requests: sanitized };
 }
 
 function hasSuccessText(text) {
@@ -246,7 +260,11 @@ export function classifyApplicationEvidence({ before = {}, after = {}, network =
   const explicitFailure = FAILURE_TEXT_RE.test(body);
   const errors = Array.isArray(after.validationErrors) ? after.validationErrors.filter(Boolean) : [];
   const invalid = Number(after.nativeInvalidCount || 0);
-  const strongUiSuccess = hasSuccessText(body) || SUCCESS_URL_RE.test(String(after.url || ''));
+  // A generic application page can already contain "thank you for applying"
+  // copy before Submit. Text only counts when it appears after the attempt;
+  // a success-shaped destination URL is independently strong.
+  const strongUiSuccess = SUCCESS_URL_RE.test(String(after.url || ''))
+    || (hasSuccessText(body) && !hasSuccessText(String(before.bodyText || '')));
   const rows = Array.isArray(network.requests) ? network.requests : [];
   const candidateRequests = rows.filter((r) => r
     && !['GET', 'HEAD', 'OPTIONS'].includes(String(r.method || '').toUpperCase())
