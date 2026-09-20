@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyApplicationEvidence, evidenceMatchesOutcome } from '../autopilot-verify.mjs';
+import { buildPageProbeCode, classifyApplicationEvidence, evidenceMatchesOutcome } from '../autopilot-verify.mjs';
 
 test('explicit confirmation is a confirmed application', () => {
   const out = classifyApplicationEvidence({
@@ -143,4 +143,11 @@ test('failed submit-like request is classified as failed', () => {
     },
   });
   assert.equal(out.outcome, 'failed');
+});
+
+test('generated cross-frame Playwright probe is valid JavaScript', () => {
+  const source = buildPageProbeCode(2000);
+  const factory = new Function('return (' + source + ')');
+  const probe = factory();
+  assert.equal(typeof probe, 'function');
 });

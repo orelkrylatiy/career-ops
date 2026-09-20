@@ -123,7 +123,7 @@ function parseJsonish(text) {
   throw new Error(`could not parse Playwright CLI JSON result: ${raw.slice(0, 300)}`);
 }
 
-function pageProbeCode(settleMs = 0) {
+export function buildPageProbeCode(settleMs = 0) {
   const wait = Math.max(0, Math.min(10_000, Number(settleMs) || 0));
   return `async page => {
     if (${wait} > 0) await page.waitForTimeout(${wait});
@@ -210,7 +210,7 @@ function pageProbeCode(settleMs = 0) {
 }
 
 function inspectPage(session, settleMs = 0) {
-  const out = runCli(session, ['run-code', pageProbeCode(settleMs)], { raw: true, timeout: 40_000 }).stdout;
+  const out = runCli(session, ['run-code', buildPageProbeCode(settleMs)], { raw: true, timeout: 40_000 }).stdout;
   const parsed = parseJsonish(out);
   if (!parsed || typeof parsed !== 'object') throw new Error('Playwright page probe returned non-object');
   return parsed;
