@@ -50,8 +50,8 @@ const profile = {
 };
 
 test('title matches carry more weight than body matches', () => {
-  const rn = scoreResumeVariant(profile.autopilot.resumes.variants['react-native'], 'Senior React Native Engineer', 'typescript react');
-  const react = scoreResumeVariant(profile.autopilot.resumes.variants.react, 'Senior React Native Engineer', 'typescript react');
+  const rn = scoreResumeVariant(profile.autopilot.resumes.variants['react-native'], 'Senior Mobile Engineer', 'typescript react');
+  const react = scoreResumeVariant(profile.autopilot.resumes.variants.react, 'Senior Mobile Engineer', 'typescript react');
   assert.ok(rn.score > react.score);
 });
 
