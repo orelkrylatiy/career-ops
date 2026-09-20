@@ -3058,7 +3058,11 @@ async function main() {
   // rows with tomorrow, which then read one day old on the next recheck (#3070).
   const date = localToday();
   const windows = loadReApplyWindows();
-  const cooldownFilter = buildCooldownFilter(windows, date);
+  // Re-apply cooldowns are a preference in autonomous --wide mode. Exact URL
+  // history still dedups, but a same-title/new-requisition role is allowed in.
+  const cooldownFilter = wide
+    ? (() => ({ skip: false }))
+    : buildCooldownFilter(windows, date);
   let totalFilteredCooldown = 0;
   const cooldownOffers = [];
   let totalFound = 0;
@@ -3252,7 +3256,10 @@ async function main() {
         // the company, so two same-titled posts are two employers' jobs: only
         // the URL dedups there, and the key is null.
         const baseKey = companyRoleDedupKey(job.company, job.title, canonicalizeCompany);
-        const key = company.aggregator === true
+        // Wide mode deliberately dedups only by canonical posting URL here.
+        // Company+title is not a safe identity: large employers can open
+        // multiple independent requisitions with identical titles.
+        const key = wide || company.aggregator === true
           ? null
           : (dedupIncludeLocation
             ? companyRoleDedupKey(job.company, job.title, canonicalizeCompany, job.location)
