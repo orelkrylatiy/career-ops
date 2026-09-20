@@ -379,7 +379,7 @@ export function reportOutcome(urlKey, outcome, note = null, channel = null, meta
       resumePath,
       durationMs,
       outcome,
-      outcome === 'failed' ? (note ?? null) : null,
+      ['failed', 'validation_failed', 'captcha'].includes(outcome) ? (note ?? null) : null,
       details,
       now,
     );
