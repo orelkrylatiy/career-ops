@@ -1,5 +1,7 @@
 # Autonomous Worker Architecture
 
+> Target architecture and 2026 source/API/browser research: [WEB_AUTOPILOT_RESEARCH.md](./WEB_AUTOPILOT_RESEARCH.md).
+
 This document describes the **fork-specific** autonomous job-search layer. The upstream Career-Ops modes remain review-first; the fork's `autopilot` mode is an explicit opt-in worker.
 
 ## Mental model
