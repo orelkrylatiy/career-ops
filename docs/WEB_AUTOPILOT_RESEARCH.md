@@ -44,15 +44,15 @@ The most important policy is wide-funnel collection: ranking controls order, not
 
 The browser should not be used to discover every job one page at a time. Discovery is primarily a data-engineering problem; browser automation is the last mile for application forms and the minority of sources without a stable structured feed.
 
-Recommended browser stack:
+Production v1 browser stack:
 
-1. Playwright CLI as the default browser interface for Codex/Claude-style coding agents.
-2. Browser Use / browser-harness as the adaptive fallback for forms where plain Playwright CLI repeatedly fails or where arbitrary CDP/Python helpers materially improve recovery.
-3. Playwright MCP only when the host agent benefits from structured MCP tools more than it benefits from lower context/token overhead.
-4. Computer Use only as a last-resort fallback for interfaces that cannot be handled reliably through DOM/browser tooling.
-5. Deprecate the custom step-file protocol in autopilot-browser.mjs after the new browser path is proven.
+1. Playwright CLI is the only application-browser engine.
+2. One named session uses one dedicated persistent Chrome profile.
+3. The coding agent drives the form directly with snapshots/refs and Playwright CLI commands.
+4. A separate deterministic verifier decides whether Submit succeeded from DOM/URL/validation/network evidence.
+5. Browser Use, Playwright MCP and Computer Use are deliberately deferred until measured failures justify another execution engine.
 
-Why CLI first: Playwright's own coding-agent documentation explicitly positions playwright-cli as the lower-token option versus MCP. It avoids loading large tool schemas into the model context, uses concise commands, returns accessibility snapshots by file/reference, and keeps a daemon-backed browser session alive between calls.
+Why CLI first: Playwright's own coding-agent documentation explicitly positions playwright-cli as the lower-token option versus MCP. It avoids loading large tool schemas into the model context, uses concise commands, returns accessibility snapshots by file/reference, keeps a daemon-backed browser session alive between calls, supports arbitrary Playwright `run-code`, and exposes network/tracing commands needed by the verifier.
 
 ## 1. What already exists in this fork
 
@@ -604,46 +604,13 @@ Our worker is already a coding agent with shell access. It does not need MCP jus
 
 Use MCP only if a particular agent runtime handles MCP materially better than shell/skills or if structured tool invocation proves more reliable in measurement.
 
-### Browser Use / browser-harness: adaptive fallback, not rejected
+### Deferred browser alternatives
 
-Browser Use is also a strong fit, and it solves a different problem.
+Browser Use/browser-harness, Playwright MCP and Computer Use were evaluated, but they are not part of the first production path.
 
-Current Browser Use CLI 3.0 / browser-harness:
+The reason is architectural rather than a claim that they are weak tools: the worker first needs one measurable browser path. Playwright CLI already supplies snapshots/refs, direct form actions, arbitrary Playwright code, persistent sessions/profiles, network inspection and tracing. Adding a second engine now would duplicate browser lifecycle, success semantics, debugging, session storage and test coverage before we know which real failures require it.
 
-- connects to a real Chrome through CDP;
-- keeps a long-lived daemon/browser connection;
-- lets the coding agent execute Python/browser helpers rather than being restricted to a fixed click/type menu;
-- exposes raw JS/CDP escape hatches;
-- can create reusable domain helpers when a site requires special behavior;
-- can later scale to Browser Use Cloud if parallel remote browsers become useful.
-
-That freedom is useful on difficult forms. It is also exactly why it should not be the first tool for every ordinary application: an unconstrained coding agent can start writing task-specific helper code again. The SimSpace/Ashby log showed how quickly that turns into gen-accordion.js, probes, maps and repeated debugging.
-
-Target policy:
-
-~~~text
-normal ATS/form
-    -> Playwright CLI
-
-CLI repeatedly cannot represent/control the widget
-    -> Browser Use/browser-harness adaptive fallback
-
-DOM/browser semantics unavailable
-    -> Computer Use last resort
-~~~
-
-Browser Use should be evaluated with a real benchmark set of difficult Ashby/Workday/custom forms. If it reduces failures enough to outweigh additional agent work, it can be promoted later.
-
-Docs:
-https://browser-use.com/coding-agents
-https://github.com/browser-use/browser-harness
-https://github.com/browser-use/browser-harness/blob/main/docs/MCP.md
-
-### Computer Use
-
-General computer-use tools operate a graphical environment through screenshots and mouse/keyboard actions. They are valuable for non-DOM desktop/UI cases.
-
-They should not be the primary web-form engine here because ATS forms expose DOM/accessibility state and Playwright can act on that state more deterministically and with lower token cost. Use Computer Use only when DOM/CDP automation is not viable.
+If production evidence later shows a repeated class of forms that Playwright CLI cannot handle reliably, that evidence can justify a separate decision. Until then there is no browser fallback.
 
 ## 11. Browser profile/session design
 
@@ -850,13 +817,12 @@ This document. No behavioral change.
 
 ### P2 - browser execution replacement
 
-- add BrowserExecutor abstraction;
-- integrate Playwright CLI first;
-- install the Playwright CLI agent skill;
+- remove the custom `autopilot-browser.mjs` step DSL;
+- integrate Playwright CLI as the single browser path;
 - configure a named dedicated persistent profile/session;
-- generic agent prompt + structured result;
-- universal pre-submit validator;
-- retain autopilot-browser only as temporary fallback.
+- use a generic agent prompt + structured result;
+- add deterministic pre/post-submit evidence verification;
+- require verified evidence before a browser attempt can be recorded as `applied`.
 
 ### P3 - Russia high-value integrations
 
@@ -943,7 +909,7 @@ No manual browsing is required in the normal cycle. Human intervention is for in
 6. Global collection should be API/feed heavy and browser light.
 7. Do not filter the funnel aggressively. Dedup and known-impossible technical states are hard stops; fit signals are ranking.
 8. Playwright CLI is the best default browser layer for this coding-agent workflow: Playwright explicitly positions it as the lower-token interface, with daemon sessions, accessibility refs, persistent profiles and CDP attach.
-9. Browser Use/browser-harness is the preferred adaptive fallback/benchmark candidate for difficult forms because it gives the agent freer Python/CDP control and reusable domain helpers.
+9. Do not add Browser Use/MCP/Computer Use fallback in v1. First measure Playwright CLI failure classes; add another engine only if the evidence shows a recurring gap that Playwright CLI plus `run-code` cannot solve.
 10. One dedicated persistent automation Chrome profile is enough initially. Parallel workers require separate profiles.
 11. The agent should receive a structured job packet and generic application prompt, not site-specific step scripts.
 12. Telegram/SMS/notification features are outside the web-autopilot core and should not shape the architecture.
@@ -994,6 +960,5 @@ Browser:
 - Playwright CLI sessions/profiles: https://playwright.dev/agent-cli/sessions
 - Playwright CLI attach/CDP: https://playwright.dev/agent-cli/commands/attach
 - Playwright MCP (optional alternative): https://playwright.dev/docs/getting-started-mcp
-- Browser Harness: https://github.com/browser-use/browser-harness
-- Browser Harness MCP: https://github.com/browser-use/browser-harness/blob/main/docs/MCP.md
-- Browser Use coding-agent setup: https://browser-use.com/coding-agents
+- Browser Harness (evaluated, deferred): https://github.com/browser-use/browser-harness
+- Browser Use coding-agent setup (evaluated, deferred): https://browser-use.com/coding-agents

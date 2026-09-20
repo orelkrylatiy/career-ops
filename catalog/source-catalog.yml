@@ -147,16 +147,6 @@ job_sources:
     status: live
     locales: [ru]
     notes: "API requires X-Api-App-Id; keep outside zero-auth core."
-  - id: ru-telegram-jobforjunior
-    country: RU
-    kind: channel
-    name: Telegram @jobforjunior
-    provider: telegram-channel
-    channel: jobforjunior
-    access: public-html
-    status: live
-    locales: [ru]
-
   # Kazakhstan
   - id: kz-enbek
     country: KZ

@@ -92,7 +92,7 @@
 </p>
 
 
-> **Fork note — autonomous worker:** default Career-Ops modes remain review-first. This fork also ships an explicit opt-in `autopilot` mode. Its first live run of a new site or form type is fill-only; automatic Submit is allowed only after that channel/form type has been validated. See [Autonomous Worker Architecture](docs/AUTOPILOT_ARCHITECTURE.md). <!-- fork-autopilot: explicit opt-in autonomous submit -->
+> **Fork note — autonomous web worker:** default Career-Ops modes remain review-first. This fork also ships an explicit opt-in `autopilot` mode that uses wide-funnel discovery, a priority SQLite queue, prepared/tailored resume fallback, and direct Playwright CLI control of a persistent Chrome profile. Browser submissions are counted as applied only after deterministic post-submit evidence confirms them. See [Autonomous Worker Architecture](docs/AUTOPILOT_ARCHITECTURE.md). <!-- fork-autopilot: wide-funnel autonomous submit -->
 
 ## What Is This
 
@@ -105,7 +105,7 @@ career-ops ([career-ops.org](https://career-ops.org), also known as **careerops*
 - **Tracks everything** in a single source of truth with integrity checks
 - **Researches companies and finds the right person to contact** -- applications get you in the queue; research gets you a conversation
 
-> **Important: This is NOT a spray-and-pray tool.** career-ops is a filter -- it helps you find the few offers worth your time out of hundreds. The system strongly recommends against applying to anything scoring below 4.0/5. Your time is valuable, and so is the recruiter's. Always review before submitting.
+> **Default modes remain selective and review-first.** The fork-specific `autopilot` is intentionally different: it keeps a wide application funnel, uses fit/preferences to order work rather than discard it, and autonomously submits web forms through Playwright CLI.
 
 career-ops is agentic: whichever AI coding CLI you choose navigates career pages with Playwright, evaluates fit by reasoning about your CV vs the job description (not keyword matching), and adapts your resume per listing.
 
@@ -132,7 +132,7 @@ career-ops is the first reference implementation of [the CareerOps Manifesto](ht
 | **Funded Company Discovery** | Review-first `company:funded` command surfaces recently funded companies and source diagnostics from structured public feeds without editing your data |
 | **Batch Processing**     | Parallel evaluation with headless CLI workers (`claude -p` / `opencode run`)                                                             |
 | **Dashboard TUI**        | Terminal UI to browse, filter, and sort your pipeline                                                                                    |
-| **Human-in-the-Loop by default** | Default Career-Ops modes remain review-first. The fork's explicit opt-in autopilot is the only autonomous-submit exception, and a new site/form type is fill-only before validation. <!-- fork-autopilot: explicit opt-in autonomous submit --> |
+| **Human-in-the-Loop by default** | Default Career-Ops modes remain review-first. The fork's explicit opt-in `autopilot` is an autonomous wide-funnel exception with deterministic submit verification. |
 | **Pipeline Integrity**   | Automated merge, dedup, status normalization, health checks                                                                              |
 | **Interview Suite**      | Time-blocked prep plans, practice sessions with feedback, post-interview debriefs ([`interview/`](modes/interview/README.md)), and a company red-flag detector ([`interview-redflag`](modes/interview-redflag.md)) |
 | **Offer Stage**          | Contract reading companion -- clause walk plus a lawyer question list ([`offer-prep`](modes/offer-prep.md)) -- and a desired/advertised/actual salary-gap analyzer (`salary-gap.mjs`) |
