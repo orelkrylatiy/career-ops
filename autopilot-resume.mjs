@@ -52,8 +52,15 @@ export function scoreResumeVariant(variant, title = '', description = '') {
   const titleHits = titleKeywords.filter((k) => titleText.includes(k));
   const bodyHits = bodyKeywords.filter((k) => bodyText.includes(k));
   const priority = Number.isFinite(Number(variant?.priority)) ? Number(variant.priority) : 0;
+  // Title matches dominate body mentions. Longer title phrases are also more
+  // specific, so "react native" wins over a generic "react" hit in the same
+  // title. priority stays a tiny deterministic tie-breaker only.
+  const titleScore = titleHits.reduce(
+    (sum, keyword) => sum + 10 + Math.min(keyword.length, 30),
+    0,
+  );
   return {
-    score: titleHits.length * 10 + bodyHits.length * 2 + priority / 1000,
+    score: titleScore + bodyHits.length * 2 + priority / 1000,
     titleHits,
     bodyHits,
     priority,
