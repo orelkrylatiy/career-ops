@@ -1,0 +1,53 @@
+name: Regional source registry
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "autopilot*.mjs"
+      - "scan-regional.mjs"
+      - "source-registry.mjs"
+      - "catalog/**"
+      - "providers/trudvsem.mjs"
+      - "providers/staffam.mjs"
+      - "providers/careercenter-am.mjs"
+      - "providers/ishuz.mjs"
+      - "tests/autopilot-*.test.mjs"
+      - "tests/source-registry.test.mjs"
+      - "tests/providers/regional-cis.test.mjs"
+      - "package.json"
+      - ".github/workflows/regional-sources.yml"
+  pull_request:
+    paths:
+      - "autopilot*.mjs"
+      - "scan-regional.mjs"
+      - "source-registry.mjs"
+      - "catalog/**"
+      - "providers/trudvsem.mjs"
+      - "providers/staffam.mjs"
+      - "providers/careercenter-am.mjs"
+      - "providers/ishuz.mjs"
+      - "tests/autopilot-*.test.mjs"
+      - "tests/source-registry.test.mjs"
+      - "tests/providers/regional-cis.test.mjs"
+      - "package.json"
+      - ".github/workflows/regional-sources.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regional-sources:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      - run: npm install --ignore-scripts
+      - name: Syntax gate
+        run: node scripts/check-syntax.mjs
+      - name: Regional and autonomous-worker tests
+        run: node --test tests/source-registry.test.mjs tests/providers/regional-cis.test.mjs tests/autopilot-resume.test.mjs tests/autopilot-log.test.mjs tests/autopilot-db-metadata.test.mjs

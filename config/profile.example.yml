@@ -256,6 +256,45 @@ cover_letter:
 #   # default_sender_note: "the email used to send this message"
 #   # signature_name: "Jane Smith"
 
+# ── Autonomous worker (fork extension) ────────────────────────────────────────
+#
+# The fork's autopilot is an explicit opt-in autonomous application mode.
+# Default Career-Ops modes remain review-first.
+#
+# autopilot:
+#   # Legacy/final fallback. Existing setups with only this key keep working.
+#   cv_pdf: "output/resumes/general.pdf"
+#
+#   # Optional prepared resume variants. Routing uses the vacancy title + JD text.
+#   # A successfully generated tailored PDF can be preferred first; when that
+#   # file is missing (generation failed), routing falls back to a prepared CV.
+#   resumes:
+#     prefer_generated: true
+#     fallback: general
+#     variants:
+#       react-native:
+#         file: "output/resumes/react-native.pdf"
+#         title_keywords: ["react native", "mobile"]
+#         keywords: ["react native", "expo", "ios", "android"]
+#         priority: 30
+#       nextjs:
+#         file: "output/resumes/nextjs.pdf"
+#         title_keywords: ["next.js", "nextjs"]
+#         keywords: ["next.js", "nextjs", "app router", "server components"]
+#         priority: 20
+#       react:
+#         file: "output/resumes/react.pdf"
+#         title_keywords: ["frontend", "react"]
+#         keywords: ["react", "typescript", "javascript"]
+#         priority: 10
+#       general:
+#         file: "output/resumes/general.pdf"
+#         keywords: []
+#
+#   remote_only: false
+#   blocked_locations: []
+#   blacklist_sources: []
+#
 # ── Scan / JD extractor ─────────────────────────────────────────────────────
 #
 # How the scan and JD-extraction steps read SPA job pages.

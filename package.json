@@ -68,7 +68,21 @@
     "build:dashboard": "node build-dashboard.mjs",
     "serve:dashboard": "cd dashboard && go run .",
     "postinstall": "npx playwright install chromium --with-deps || npx playwright install chromium --with-deps",
-    "manifesto": "node manifesto.mjs"
+    "manifesto": "node manifesto.mjs",
+    "sources:init": "node source-registry.mjs init",
+    "sources:sync": "node source-registry.mjs sync",
+    "sources:verify": "node source-registry.mjs verify",
+    "sources:enrich": "node source-registry.mjs enrich",
+    "sources:resolve": "node source-registry.mjs resolve",
+    "sources:full": "node source-registry.mjs full",
+    "sources:status": "node source-registry.mjs status",
+    "scan:regional": "node scan-regional.mjs",
+    "test:sources": "node --test tests/source-registry.test.mjs tests/providers/regional-cis.test.mjs",
+    "autopilot": "node autopilot.mjs",
+    "autopilot:status": "node autopilot.mjs status",
+    "autopilot:resume": "node autopilot-resume.mjs",
+    "autopilot:logs": "node autopilot.mjs logs",
+    "autopilot:analytics": "node autopilot.mjs analytics"
   },
   "keywords": [
     "ai",
@@ -98,6 +112,7 @@
     "@google/generative-ai": "^0.24.1",
     "dotenv": "^17.0.0",
     "js-yaml": "^5.3.0",
-    "playwright": "1.63.0"
+    "playwright": "1.63.0",
+    "better-sqlite3": "^13.0.3"
   }
 }

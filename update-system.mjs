@@ -101,9 +101,9 @@ function isLegacyReexec() {
   }
 }
 
-const CANONICAL_REPO = 'https://github.com/career-ops-hq/career-ops.git';
-const RAW_VERSION_URL = 'https://raw.githubusercontent.com/career-ops-hq/career-ops/main/VERSION';
-const RELEASES_API = 'https://api.github.com/repos/career-ops-hq/career-ops/releases/latest';
+const CANONICAL_REPO = 'https://github.com/orelkrylatiy/career-ops.git';
+const RAW_VERSION_URL = 'https://raw.githubusercontent.com/orelkrylatiy/career-ops/main/VERSION';
+const RELEASES_API = 'https://api.github.com/repos/orelkrylatiy/career-ops/releases/latest';
 
 // Matches a semver, with or without a leading `v` and an optional
 // Release Please component prefix (e.g. `career-ops-v1.9.0` → `1.9.0`).
@@ -284,6 +284,19 @@ const SYSTEM_PATHS = [
 
   'reserve-report-num.mjs',
   'scan.mjs',
+  // Fork-owned autonomous/regional system layer. The updater points at this
+  // fork, so these paths remain upgrade-managed instead of being pruned as
+  // files absent from the canonical upstream project.
+  'scan-regional.mjs',
+  'source-registry.mjs',
+  'catalog/',
+  'autopilot.mjs',
+  'autopilot-db.mjs',
+  'autopilot-browser.mjs',
+  'autopilot-resume.mjs',
+  'autopilot-log.mjs',
+  'extract-contacts.mjs',
+  'notify-tg.mjs',
   'pipeline-lock.mjs',
   'portal-health-lock.mjs',
   'classify-tier.mjs',
