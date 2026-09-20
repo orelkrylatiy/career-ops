@@ -157,7 +157,9 @@ function pageProbeCode(settleMs = 0) {
             name: el.getAttribute('name') || el.id || el.getAttribute('aria-label') || el.getAttribute('placeholder') || ''
           }));
           const dedupRequired = [...new Map(requiredMissing.map((item) => [
-            item.type === 'radio' ? `radio:${item.name}` : `${item.tag}:${item.type}:${item.name}`,
+            item.type === 'radio'
+              ? 'radio:' + item.name
+              : item.tag + ':' + item.type + ':' + item.name,
             item
           ])).values()].slice(0, 30);
           const errorSelectors = [

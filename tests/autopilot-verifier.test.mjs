@@ -101,3 +101,46 @@ test('a success-shaped URL that was already present before submit is not confirm
   });
   assert.equal(out.outcome, 'submitted_unconfirmed');
 });
+
+test('pre-existing success copy is not accepted as a new confirmation', () => {
+  const out = classifyApplicationEvidence({
+    before: {
+      url: 'https://jobs.example/apply',
+      bodyText: 'Before you apply: thank you for applying responsibly.',
+      formCount: 1,
+    },
+    after: {
+      url: 'https://jobs.example/apply',
+      bodyText: 'Before you apply: thank you for applying responsibly.',
+      formCount: 1,
+      validationErrors: [],
+      nativeInvalidCount: 0,
+    },
+    network: { requests: [] },
+  });
+  assert.equal(out.outcome, 'submitted_unconfirmed');
+});
+
+test('failed submit-like request is classified as failed', () => {
+  const out = classifyApplicationEvidence({
+    before: { url: 'https://jobs.example/apply', formCount: 1 },
+    after: {
+      url: 'https://jobs.example/apply',
+      bodyText: 'Application form',
+      formCount: 1,
+      validationErrors: [],
+      nativeInvalidCount: 0,
+    },
+    network: {
+      requests: [{
+        method: 'POST',
+        url: 'https://jobs.example/api/application',
+        status: 500,
+        requestLooksLikeApplication: true,
+        responseLooksSuccess: false,
+        responseLooksError: true,
+      }],
+    },
+  });
+  assert.equal(out.outcome, 'failed');
+});
