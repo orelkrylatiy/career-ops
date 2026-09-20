@@ -51,8 +51,11 @@ process.env.CAREER_OPS_PIPELINE = path.join(ROOT, 'data', 'pipeline.md');
 const autopilot = await import(
   pathToFileURL(path.resolve('autopilot.mjs')).href + '?wide=' + Date.now()
 );
+// autopilot.mjs imports this exact URL internally; importing it without a
+// cache-busting query gives the test the SAME DB handle so Windows cleanup can
+// close it before removing the temporary directory.
 const dbMod = await import(
-  pathToFileURL(path.resolve('autopilot-db.mjs')).href + '?wide-test=' + Date.now()
+  pathToFileURL(path.resolve('autopilot-db.mjs')).href
 );
 
 test('wide queue keeps weak title/location matches and only hard-stops explicit blacklist', async () => {
