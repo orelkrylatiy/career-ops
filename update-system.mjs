@@ -297,6 +297,10 @@ const SYSTEM_PATHS = [
   'autopilot-verify.mjs',
   'autopilot-resume.mjs',
   'autopilot-log.mjs',
+  // Legacy tombstones overwrite stale pre-refactor implementations on update.
+  'autopilot-browser.mjs',
+  'notify-tg.mjs',
+  'extract-contacts.mjs',
   'pipeline-lock.mjs',
   'portal-health-lock.mjs',
   'classify-tier.mjs',
