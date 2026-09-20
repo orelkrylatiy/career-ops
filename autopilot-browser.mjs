@@ -329,10 +329,10 @@ async function runOneStep(page, step, evalResults) {
         // For "click → native file dialog" dropzones (no persistent
         // input[type=file]): click and catch Playwright's filechooser
         // event, then attach the file. Same allowlist as `upload`.
-        const file = resolve(ROOT, String(step.value ?? ''));
-        const rel = path.relative(ROOT, file);
+        const file = resolve(DATA_ROOT, String(step.value ?? ''));
+        const rel = path.relative(DATA_ROOT, file);
         if (rel.startsWith('..') || path.isAbsolute(rel)) {
-          throw new Error(`upload path escapes repo: ${file}`);
+          throw new Error(`upload path escapes data root: ${file}`);
         }
         if (!/^(output|data)[\\/]/.test(rel)) {
           throw new Error(`upload path must be under output/ or data/: ${rel}`);
@@ -345,13 +345,13 @@ async function runOneStep(page, step, evalResults) {
         await chooser.setFiles(file);
       }
       else if (act === 'upload') {
-        const file = resolve(ROOT, String(step.value ?? ''));
+        const file = resolve(DATA_ROOT, String(step.value ?? ''));
         // Upload allowlist: only CV/artifact directories may be attached —
         // a tricked step file must not be able to exfiltrate .env or any
         // other machine file as a "resume".
-        const rel = path.relative(ROOT, file);
+        const rel = path.relative(DATA_ROOT, file);
         if (rel.startsWith('..') || path.isAbsolute(rel)) {
-          throw new Error(`upload path escapes repo: ${file}`);
+          throw new Error(`upload path escapes data root: ${file}`);
         }
         if (!/^(output|data)[\\/]/.test(rel)) {
           throw new Error(`upload path must be under output/ or data/: ${rel}`);

@@ -267,6 +267,7 @@ export function reportOutcome(urlKey, outcome, note = null, channel = null, meta
     const res = db.prepare(
       'UPDATE jobs SET status = ?, note = COALESCE(?, note), updated_at = ? WHERE url_key = ?',
     ).run(outcome, note, now, urlKey);
+    if (res.changes === 0) return false;
     db.prepare(`
       INSERT INTO applications
         (job_url_key, channel, ats, resume_variant, resume_path, duration_ms, outcome, error, details_json, created_at)

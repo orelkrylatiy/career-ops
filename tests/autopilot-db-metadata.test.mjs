@@ -42,6 +42,17 @@ test('application journal records ATS, resume and duration metadata', () => {
   assert.equal(row.outcome, 'applied');
 });
 
+test('unknown job does not create an orphan application attempt', () => {
+  const before = openDb().prepare('SELECT COUNT(*) AS n FROM applications').get().n;
+  const changed = reportOutcome('https://missing.example/job', 'failed', 'missing', 'browser', {
+    ats: 'unknown',
+    resumeVariant: 'react',
+  });
+  const after = openDb().prepare('SELECT COUNT(*) AS n FROM applications').get().n;
+  assert.equal(changed, false);
+  assert.equal(after, before);
+});
+
 test('analytics groups outcomes and resume variants', () => {
   const stats = applicationAnalytics();
   assert.equal(stats.total, 1);
