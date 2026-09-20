@@ -43,7 +43,13 @@ CREATE TABLE IF NOT EXISTS jobs (
   status    TEXT DEFAULT 'queued',
   first_seen TEXT,
   updated_at TEXT,
-  note      TEXT
+  note      TEXT,
+  priority INTEGER DEFAULT 50,
+  rank_reasons_json TEXT,
+  posted_at TEXT,
+  claimed_at TEXT,
+  claim_owner TEXT,
+  claim_until TEXT
 );
 CREATE TABLE IF NOT EXISTS applications (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -128,6 +134,22 @@ export function openDb() {
   addApplicationColumn('resume_path', 'TEXT');
   addApplicationColumn('duration_ms', 'INTEGER');
   addApplicationColumn('details_json', 'TEXT');
+
+  const jobColumns = new Set(
+    db.prepare('PRAGMA table_info(jobs)').all().map((row) => row.name),
+  );
+  const addJobColumn = (name, type) => {
+    if (!jobColumns.has(name)) {
+      db.exec(`ALTER TABLE jobs ADD COLUMN ${name} ${type}`);
+      jobColumns.add(name);
+    }
+  };
+  addJobColumn('priority', 'INTEGER DEFAULT 50');
+  addJobColumn('rank_reasons_json', 'TEXT');
+  addJobColumn('posted_at', 'TEXT');
+  addJobColumn('claimed_at', 'TEXT');
+  addJobColumn('claim_owner', 'TEXT');
+  addJobColumn('claim_until', 'TEXT');
   dbHandle = db;
   return db;
 }
@@ -200,9 +222,14 @@ export function upsertContact({ name, role, company, email, linkedin, source }) 
 export function upsertJob(job) {
   const db = openDb();
   const now = new Date().toISOString();
+  const rankReasons = Array.isArray(job.rankReasons) ? JSON.stringify(job.rankReasons) : null;
   db.prepare(`
-    INSERT INTO jobs (url_key, url, source, company, title, location, status, first_seen, updated_at, note)
-    VALUES (@urlKey, @url, @source, @company, @title, @location, COALESCE(@status, 'queued'), @now, @now, @note)
+    INSERT INTO jobs
+      (url_key, url, source, company, title, location, status, first_seen, updated_at, note,
+       priority, rank_reasons_json, posted_at, claimed_at, claim_owner, claim_until)
+    VALUES
+      (@urlKey, @url, @source, @company, @title, @location, COALESCE(@status, 'queued'), @now, @now, @note,
+       @priority, @rankReasons, @postedAt, NULL, NULL, NULL)
     ON CONFLICT(url_key) DO UPDATE SET
       url        = COALESCE(NULLIF(excluded.url, ''), jobs.url),
       source     = COALESCE(NULLIF(excluded.source, ''), jobs.source),
@@ -210,6 +237,9 @@ export function upsertJob(job) {
       title      = COALESCE(NULLIF(excluded.title, ''), jobs.title),
       location   = COALESCE(NULLIF(excluded.location, ''), jobs.location),
       note       = CASE WHEN excluded.note IS NOT NULL AND excluded.note != '' THEN excluded.note ELSE jobs.note END,
+      priority   = COALESCE(excluded.priority, jobs.priority, 50),
+      rank_reasons_json = COALESCE(excluded.rank_reasons_json, jobs.rank_reasons_json),
+      posted_at  = COALESCE(excluded.posted_at, jobs.posted_at),
       updated_at = excluded.updated_at
   `).run({
     urlKey: job.urlKey,
@@ -220,6 +250,11 @@ export function upsertJob(job) {
     location: job.location ?? null,
     status: job.status ?? 'queued',
     note: job.note ?? null,
+    priority: Number.isFinite(Number(job.priority))
+      ? Math.max(0, Math.min(100, Math.round(Number(job.priority))))
+      : 50,
+    rankReasons,
+    postedAt: job.postedAt ?? null,
     now,
   });
 }
@@ -235,10 +270,74 @@ export function getJob(urlKey) {
  */
 export function listJobs(status) {
   const db = openDb();
+  if (status === 'queued') {
+    return db.prepare(
+      `SELECT * FROM jobs WHERE status = 'queued'
+       ORDER BY COALESCE(priority, 50) DESC,
+                COALESCE(posted_at, first_seen) DESC,
+                rowid ASC`,
+    ).all();
+  }
   const sql = status
     ? 'SELECT * FROM jobs WHERE status = ? ORDER BY first_seen ASC, rowid ASC'
     : 'SELECT * FROM jobs ORDER BY first_seen ASC, rowid ASC';
   return status ? db.prepare(sql).all(status) : db.prepare(sql).all();
+}
+
+/**
+ * Atomically lease the highest-priority queued job. Expired leases are
+ * returned first, so a crashed worker cannot strand jobs forever.
+ */
+export function claimNextJob(owner = 'worker-0', leaseMinutes = 60) {
+  const db = openDb();
+  const minutes = Number(leaseMinutes);
+  if (!Number.isFinite(minutes) || minutes <= 0) {
+    throw new Error('claimNextJob: leaseMinutes must be > 0');
+  }
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const until = new Date(now.getTime() + minutes * 60_000).toISOString();
+  return db.transaction(() => {
+    db.prepare(
+      `UPDATE jobs
+       SET status='queued', claimed_at=NULL, claim_owner=NULL, claim_until=NULL, updated_at=?
+       WHERE status='claimed' AND claim_until IS NOT NULL AND claim_until < ?`,
+    ).run(nowIso, nowIso);
+
+    const row = db.prepare(
+      `SELECT * FROM jobs WHERE status='queued'
+       ORDER BY COALESCE(priority, 50) DESC,
+                COALESCE(posted_at, first_seen) DESC,
+                rowid ASC
+       LIMIT 1`,
+    ).get();
+    if (!row) return null;
+
+    const changed = db.prepare(
+      `UPDATE jobs
+       SET status='claimed', claimed_at=?, claim_owner=?, claim_until=?, updated_at=?
+       WHERE url_key=? AND status='queued'`,
+    ).run(nowIso, String(owner || 'worker-0'), until, nowIso, row.url_key);
+    if (!changed.changes) return null;
+    return db.prepare('SELECT * FROM jobs WHERE url_key=?').get(row.url_key);
+  })();
+}
+
+export function releaseClaim(urlKey, owner = null) {
+  const db = openDb();
+  const now = new Date().toISOString();
+  const res = owner
+    ? db.prepare(
+      `UPDATE jobs
+       SET status='queued', claimed_at=NULL, claim_owner=NULL, claim_until=NULL, updated_at=?
+       WHERE url_key=? AND status='claimed' AND claim_owner=?`,
+    ).run(now, urlKey, String(owner))
+    : db.prepare(
+      `UPDATE jobs
+       SET status='queued', claimed_at=NULL, claim_owner=NULL, claim_until=NULL, updated_at=?
+       WHERE url_key=? AND status='claimed'`,
+    ).run(now, urlKey);
+  return res.changes > 0;
 }
 
 /**
@@ -265,7 +364,7 @@ export function reportOutcome(urlKey, outcome, note = null, channel = null, meta
     : null;
   const run = db.transaction(() => {
     const res = db.prepare(
-      'UPDATE jobs SET status = ?, note = COALESCE(?, note), updated_at = ? WHERE url_key = ?',
+      'UPDATE jobs SET status = ?, note = COALESCE(?, note), claimed_at = NULL, claim_owner = NULL, claim_until = NULL, updated_at = ? WHERE url_key = ?',
     ).run(outcome, note, now, urlKey);
     if (res.changes === 0) return false;
     db.prepare(`
@@ -306,6 +405,7 @@ export function applicationAnalytics() {
   ).all();
   const total = db.prepare('SELECT COUNT(*) AS n FROM applications').get().n;
   const success = db.prepare("SELECT COUNT(*) AS n FROM applications WHERE outcome = 'applied'").get().n;
+  const unconfirmed = db.prepare("SELECT COUNT(*) AS n FROM applications WHERE outcome = 'submitted_unconfirmed'").get().n;
   const topErrors = db.prepare(
     `SELECT error AS name, COUNT(*) AS n
      FROM applications
@@ -315,6 +415,7 @@ export function applicationAnalytics() {
   return {
     total,
     applied: success,
+    submitted_unconfirmed: unconfirmed,
     success_rate: total ? success / total : 0,
     by_outcome: grouped('outcome'),
     by_channel: grouped('channel'),
@@ -345,7 +446,10 @@ export function incrementDaily(date, delta = 1) {
 }
 
 /** Canonical lifecycle statuses, in lifecycle order (for zero-filled reports). */
-export const JOB_STATUSES = ['queued', 'applied', 'test_filled', 'failed', 'captcha', 'skipped'];
+export const JOB_STATUSES = [
+  'queued', 'claimed', 'applied', 'submitted_unconfirmed',
+  'validation_failed', 'failed', 'captcha', 'skipped', 'test_filled',
+];
 
 /** Per-status job counts, zero-filled over JOB_STATUSES plus any stray value. */
 export function statusCounts() {
