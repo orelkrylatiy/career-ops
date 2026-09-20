@@ -2805,7 +2805,7 @@ function guardStatusFor(code) {
 const KNOWN_FLAGS = [
   '--dry-run', '--verify', '--headed-fallback', '--throttle', '--rediscover-404',
   '--include-blacklisted', '--company', '--posted-after', '--posted-before',
-  '--since', '--quiet', '--json', '--help', '-h',
+  '--since', '--wide', '--quiet', '--json', '--help', '-h',
 ];
 
 // Flags whose space-separated value is the NEXT argv token (the `--flag=value`
@@ -2835,6 +2835,10 @@ async function main() {
   const args = process.argv.slice(2);
   validateFlags(args, KNOWN_FLAGS, USAGE, { valueFlags: VALUE_FLAGS });
   const dryRun = args.includes('--dry-run');
+  // Autonomous ingestion mode. It preserves source safety, explicit blacklist,
+  // URL identity and dedup, while turning fit/preferences into downstream
+  // ranking concerns instead of silently deleting jobs before the agent sees them.
+  const wide = args.includes('--wide');
   const jsonMode = args.includes('--json');
   if (jsonMode) console.log = console.error.bind(console);
   const verify = args.includes('--verify');
@@ -2941,32 +2945,39 @@ async function main() {
   const config = rawConfig && typeof rawConfig === 'object' ? rawConfig : {};
   const companies = Array.isArray(config.tracked_companies) ? config.tracked_companies : [];
   const boards = Array.isArray(config.job_boards) ? config.job_boards : [];
-  const titleFilter = buildTitleFilter(config.title_filter);
+  const titleFilter = wide ? (() => true) : buildTitleFilter(config.title_filter);
 
   // Seniority tier classifier integration
   let classifyTier = null;
   const skipTiers = Array.isArray(config.skip_tiers)
     ? config.skip_tiers.filter(t => typeof t === 'string').map(t => t.toLowerCase())
     : [];
-  if (skipTiers.length > 0) {
+  if (!wide && skipTiers.length > 0) {
     const mod = await import('./classify-tier.mjs');
     classifyTier = mod.classifyTier || mod.default;
   }
 
-  const locationFilter = buildLocationFilter(config.location_filter);
-  const postingAgeFilter = buildPostingAgeFilter(config.max_posting_age_days);
+  const pass = () => true;
+  const locationFilter = wide ? pass : buildLocationFilter(config.location_filter);
+  const postingAgeFilter = wide ? pass : buildPostingAgeFilter(config.max_posting_age_days);
+  // Explicit CLI date bounds remain explicit even in --wide mode.
   const postedDateFilter = buildPostedDateFilter(effectiveAfter, postedBefore);
 
-  // Same bound the filter above uses, widened by max_posting_age_days when set.
-  // Derived by the same helper so the hint and the filter cannot disagree.
-  const earlyStopSinceMs = resolveEarlyStopMs(effectiveAfter, config.max_posting_age_days);
-  const salaryFilter = buildSalaryFilter(config.salary_filter);
+  // In wide mode only an explicit CLI date bound may stop provider pagination;
+  // max_posting_age_days is a preference and must not silently narrow discovery.
+  const earlyStopSinceMs = resolveEarlyStopMs(
+    effectiveAfter,
+    wide ? null : config.max_posting_age_days,
+  );
+  const salaryFilter = wide ? pass : buildSalaryFilter(config.salary_filter);
   const trustValidator = buildTrustValidator(config.trust_filter);
-  const contentFilter = buildContentFilter(config.content_filter);
+  const contentFilter = wide ? pass : buildContentFilter(config.content_filter);
   const candidateCountry = loadCandidateCountry();
-  const countryEligibilityFilter = buildCountryEligibilityFilter(config.country_eligibility_filter, candidateCountry);
-  const visaFilter = buildVisaFilter(config.visa_filter);
-  const visaEnabled = Boolean(config.visa_filter) && config.visa_filter.enabled !== false;
+  const countryEligibilityFilter = wide
+    ? pass
+    : buildCountryEligibilityFilter(config.country_eligibility_filter, candidateCountry);
+  const visaFilter = wide ? pass : buildVisaFilter(config.visa_filter);
+  const visaEnabled = !wide && Boolean(config.visa_filter) && config.visa_filter.enabled !== false;
 
   // 3. Resolve a provider for each enabled company / board
   const targets = [];

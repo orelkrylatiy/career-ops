@@ -34,19 +34,19 @@ function runNode(script, args = [], extraEnv = {}) {
 function parse(argv) {
   const refresh = argv.includes('--refresh');
   const dryRun = argv.includes('--dry-run');
-  const noTg = argv.includes('--no-tg');
+
   const idx = argv.indexOf('--country');
   const eq = argv.find((a) => a.startsWith('--country='));
   const country = String(eq ? eq.slice('--country='.length) : (idx >= 0 ? argv[idx + 1] : '')).trim().toUpperCase() || null;
   if (country && !['RU', 'KZ', 'AM', 'UZ'].includes(country)) throw new Error('country must be RU, KZ, AM, or UZ');
-  const allowed = new Set(['--refresh', '--dry-run', '--no-tg', '--country']);
+  const allowed = new Set(['--refresh', '--dry-run', '--country']);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--country') { i += 1; continue; }
     if (a.startsWith('--country=')) continue;
     if (!allowed.has(a)) throw new Error('unknown argument: ' + a);
   }
-  return { refresh, dryRun, noTg, country };
+  return { refresh, dryRun, country };
 }
 
 function main() {
@@ -63,18 +63,18 @@ function main() {
   // Keep the scanner as the one canonical ingestion path. It receives the
   // generated catalog as an env override while every other user-owned config
   // file remains untouched.
-  const scanArgs = [];
+  const scanArgs = ['--wide'];
+  if (opts.dryRun) scanArgs.push('--dry-run');
   runNode('scan.mjs', scanArgs, { CAREER_OPS_PORTALS: GENERATED });
 
-  // Queue newly scanned jobs into the autonomous execution DB without running a
-  // second network scan. Autopilot title/location gates remain deterministic.
-  const autopilotArgs = ['--no-scan'];
-  if (opts.dryRun) autopilotArgs.push('--dry-run');
-  if (opts.noTg) autopilotArgs.push('--no-tg');
-  runNode('autopilot.mjs', autopilotArgs, { CAREER_OPS_PORTALS: GENERATED });
+  // Queue newly scanned jobs without a second network scan. A dry run does not
+  // mutate the autonomous DB at all.
+  if (!opts.dryRun) {
+    runNode('autopilot.mjs', ['--no-scan'], { CAREER_OPS_PORTALS: GENERATED });
+  }
 
   console.log('');
-  console.log('regional scan complete');
+  console.log('regional wide-funnel scan complete');
   console.log('  portals: ' + GENERATED);
   console.log('  source discovery queue: ' + path.join(DATA_ROOT, 'data', 'source-discovery-queue.md'));
 }
