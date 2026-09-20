@@ -10,7 +10,7 @@ You detect drift between the code and the documentation of career-ops. `AGENTS.m
 Given a window (default: the last 7 days on `main`):
 
 1. `git log --since=<window> --stat -- modes/ '*.mjs' docs/ README.md CONTRIBUTING.md` to list what changed and where.
-2. For each behavior change (a new flag, a renamed script, a changed output format, a new or removed mode block), search `docs/`, `README.md`, `README.md` and `CONTRIBUTING.md` for the text that describes the old behavior.
+2. For each behavior change (a new flag, a renamed script, a changed output format, a new or removed mode block), search `docs/`, `README.md` and `CONTRIBUTING.md` for the text that describes the old behavior.
 3. Do not edit anything. Report, inside the `===CO-CLOUD-REPORT===` block, one entry per drift: the documentation file and section, the commit or pull request that made it stale, the exact sentence that is now wrong, and the corrected sentence you would write. Group by file.
 
 If nothing drifted, say so with the commands you ran.

@@ -87,7 +87,7 @@ export function resolveResume({
 
   const ranked = Object.entries(variants)
     .map(([name, variant]) => ({ name, variant, ...scoreResumeVariant(variant, title, description) }))
-    .filter((row) => row.score > 0)
+    .filter((row) => row.titleHits.length > 0 || row.bodyHits.length > 0)
     .sort((a, b) => b.score - a.score || b.priority - a.priority || a.name.localeCompare(b.name));
 
   for (const row of ranked) {
