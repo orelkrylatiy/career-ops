@@ -182,6 +182,7 @@ package-lock.json
 
 # Playwright MCP server run artifacts (ephemeral, machine-local)
 .playwright-mcp/
+.playwright-cli/
 test-results/
 playwright-report/
 

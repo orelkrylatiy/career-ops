@@ -82,7 +82,10 @@
     "autopilot:status": "node autopilot.mjs status",
     "autopilot:resume": "node autopilot-resume.mjs",
     "autopilot:logs": "node autopilot.mjs logs",
-    "autopilot:analytics": "node autopilot.mjs analytics"
+    "autopilot:analytics": "node autopilot.mjs analytics",
+    "autopilot:next": "node autopilot.mjs next --json",
+    "autopilot:verify": "node autopilot-verify.mjs",
+    "autopilot:browser:doctor": "node autopilot-verify.mjs doctor"
   },
   "keywords": [
     "ai",
