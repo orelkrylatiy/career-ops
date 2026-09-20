@@ -30,7 +30,7 @@ jobs:
       - run: npm run lint
       - run: node test-all.mjs --quick
       - name: Fork-focused tests
-        run: node --test tests/source-registry.test.mjs tests/providers/regional-cis.test.mjs tests/autopilot-resume.test.mjs tests/autopilot-log.test.mjs tests/autopilot-db-metadata.test.mjs tests/autopilot-ranking.test.mjs tests/autopilot-verifier.test.mjs tests/readme-english-only.test.mjs
+        run: node --test tests/source-registry.test.mjs tests/providers/regional-cis.test.mjs tests/autopilot-resume.test.mjs tests/autopilot-log.test.mjs tests/autopilot-db-metadata.test.mjs tests/autopilot-db-migration.test.mjs tests/autopilot-wide-queue.test.mjs tests/autopilot-ranking.test.mjs tests/autopilot-verifier.test.mjs tests/readme-english-only.test.mjs
       - name: Go dashboard tests
         run: go test ./...
         working-directory: dashboard
