@@ -91,3 +91,13 @@ test('report evidence must be verified, job-bound and outcome-bound', () => {
     false,
   );
 });
+
+
+test('a success-shaped URL that was already present before submit is not confirmation', () => {
+  const out = classifyApplicationEvidence({
+    before: { url: 'https://jobs.example/thank-you', urls: ['https://jobs.example/thank-you'], bodyText: 'Application form', formCount: 1 },
+    after: { url: 'https://jobs.example/thank-you', urls: ['https://jobs.example/thank-you'], bodyText: 'Application form', formCount: 1, validationErrors: [], nativeInvalidCount: 0 },
+    network: { requests: [] },
+  });
+  assert.equal(out.outcome, 'submitted_unconfirmed');
+});

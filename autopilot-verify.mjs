@@ -123,56 +123,92 @@ function parseJsonish(text) {
   throw new Error(`could not parse Playwright CLI JSON result: ${raw.slice(0, 300)}`);
 }
 
-function pageProbeCode() {
-  return `async page => JSON.stringify(await page.evaluate(() => {
-    const visible = (el) => {
-      const s = getComputedStyle(el);
-      const r = el.getBoundingClientRect();
-      return s.visibility !== 'hidden' && s.display !== 'none' && r.width > 0 && r.height > 0;
-    };
-    const textOf = (el) => String(el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim();
-    const controls = [...document.querySelectorAll('input, textarea, select')].filter(visible);
-    const requiredMissing = controls.filter((el) => {
-      if (!el.required) return false;
-      if (el.type === 'checkbox' || el.type === 'radio') return !el.checked;
-      return !String(el.value || '').trim();
-    }).map((el) => ({
-      tag: el.tagName.toLowerCase(),
-      type: el.type || '',
-      name: el.getAttribute('name') || el.id || el.getAttribute('aria-label') || el.getAttribute('placeholder') || ''
-    })).slice(0, 30);
-    const errorSelectors = [
-      '[role="alert"]',
-      '[aria-live="assertive"]',
-      '[aria-invalid="true"]',
-      '.field-error',
-      '.form-error',
-      '[class*="error-message"]',
-      '[data-error]'
-    ];
-    const validationErrors = [...new Set(errorSelectors.flatMap((sel) =>
-      [...document.querySelectorAll(sel)].filter(visible).map(textOf).filter(Boolean)
-    ))].slice(0, 30);
-    const bodyText = String(document.body?.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 12000);
-    const forms = [...document.querySelectorAll('form')].filter(visible);
-    const submits = [...document.querySelectorAll('button[type="submit"], input[type="submit"], button')]
-      .filter(visible)
-      .filter((el) => /submit|apply|send|continue|отправ|отклик/i.test(textOf(el) || el.value || el.getAttribute('aria-label') || ''));
-    return {
-      url: location.href,
-      title: document.title,
+function pageProbeCode(settleMs = 0) {
+  const wait = Math.max(0, Math.min(10_000, Number(settleMs) || 0));
+  return `async page => {
+    if (${wait} > 0) await page.waitForTimeout(${wait});
+    const frames = [];
+    for (const frame of page.frames()) {
+      try {
+        const state = await frame.evaluate(() => {
+          const visible = (el) => {
+            const s = getComputedStyle(el);
+            const r = el.getBoundingClientRect();
+            return s.visibility !== 'hidden' && s.display !== 'none' && r.width > 0 && r.height > 0;
+          };
+          const textOf = (el) => String(el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim();
+          const controls = [...document.querySelectorAll('input, textarea, select')].filter(visible);
+          const radioGroupChecked = (el) => {
+            const name = el.getAttribute('name');
+            if (!name) return el.checked;
+            return controls.some((other) =>
+              other.type === 'radio' && other.getAttribute('name') === name && other.checked
+            );
+          };
+          const requiredMissing = controls.filter((el) => {
+            const required = el.required || el.getAttribute('aria-required') === 'true';
+            if (!required) return false;
+            if (el.type === 'radio') return !radioGroupChecked(el);
+            if (el.type === 'checkbox') return !el.checked;
+            return !String(el.value || '').trim();
+          }).map((el) => ({
+            tag: el.tagName.toLowerCase(),
+            type: el.type || '',
+            name: el.getAttribute('name') || el.id || el.getAttribute('aria-label') || el.getAttribute('placeholder') || ''
+          }));
+          const dedupRequired = [...new Map(requiredMissing.map((item) => [
+            item.type === 'radio' ? `radio:${item.name}` : `${item.tag}:${item.type}:${item.name}`,
+            item
+          ])).values()].slice(0, 30);
+          const errorSelectors = [
+            '[role="alert"]',
+            '[aria-live="assertive"]',
+            '[aria-invalid="true"]',
+            '.field-error',
+            '.form-error',
+            '[class*="error-message"]',
+            '[data-error]'
+          ];
+          const validationErrors = [...new Set(errorSelectors.flatMap((sel) =>
+            [...document.querySelectorAll(sel)].filter(visible).map(textOf).filter(Boolean)
+          ))].slice(0, 30);
+          const bodyText = String(document.body?.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 12000);
+          const forms = [...document.querySelectorAll('form')].filter(visible);
+          const submits = [...document.querySelectorAll('button[type="submit"], input[type="submit"], button')]
+            .filter(visible)
+            .filter((el) => /submit|apply|send|continue|отправ|отклик/i.test(textOf(el) || el.value || el.getAttribute('aria-label') || ''));
+          return {
+            url: location.href,
+            bodyText,
+            formCount: forms.length,
+            submitCount: submits.length,
+            requiredMissing: dedupRequired,
+            validationErrors,
+            nativeInvalidCount: controls.filter((el) => typeof el.checkValidity === 'function' && !el.checkValidity()).length
+          };
+        });
+        frames.push(state);
+      } catch {
+        // A frame may detach while the SPA navigates; the next probe will see it.
+      }
+    }
+    const bodyText = frames.map((f) => f.bodyText).filter(Boolean).join(' ').slice(0, 24000);
+    return JSON.stringify({
+      url: page.url(),
+      urls: [...new Set(frames.map((f) => f.url).filter(Boolean))],
+      title: await page.title(),
       bodyText,
-      formCount: forms.length,
-      submitCount: submits.length,
-      requiredMissing,
-      validationErrors,
-      nativeInvalidCount: controls.filter((el) => typeof el.checkValidity === 'function' && !el.checkValidity()).length
-    };
-  }))`;
+      formCount: frames.reduce((n, f) => n + Number(f.formCount || 0), 0),
+      submitCount: frames.reduce((n, f) => n + Number(f.submitCount || 0), 0),
+      requiredMissing: frames.flatMap((f) => (f.requiredMissing || []).map((x) => ({ ...x, frame: f.url }))).slice(0, 40),
+      validationErrors: [...new Set(frames.flatMap((f) => f.validationErrors || []))].slice(0, 40),
+      nativeInvalidCount: frames.reduce((n, f) => n + Number(f.nativeInvalidCount || 0), 0)
+    });
+  }`;
 }
 
-function inspectPage(session) {
-  const out = runCli(session, ['run-code', pageProbeCode()], { raw: true, timeout: 30_000 }).stdout;
+function inspectPage(session, settleMs = 0) {
+  const out = runCli(session, ['run-code', pageProbeCode(settleMs)], { raw: true, timeout: 40_000 }).stdout;
   const parsed = parseJsonish(out);
   if (!parsed || typeof parsed !== 'object') throw new Error('Playwright page probe returned non-object');
   return parsed;
@@ -263,7 +299,16 @@ export function classifyApplicationEvidence({ before = {}, after = {}, network =
   // A generic application page can already contain "thank you for applying"
   // copy before Submit. Text only counts when it appears after the attempt;
   // a success-shaped destination URL is independently strong.
-  const strongUiSuccess = SUCCESS_URL_RE.test(String(after.url || ''))
+  const beforeUrls = new Set([
+    String(before.url || ''),
+    ...(Array.isArray(before.urls) ? before.urls.map(String) : []),
+  ].filter(Boolean));
+  const afterUrls = [
+    String(after.url || ''),
+    ...(Array.isArray(after.urls) ? after.urls.map(String) : []),
+  ].filter(Boolean);
+  const newSuccessUrl = afterUrls.some((url) => SUCCESS_URL_RE.test(url) && !beforeUrls.has(url));
+  const strongUiSuccess = newSuccessUrl
     || (hasSuccessText(body) && !hasSuccessText(String(before.bodyText || '')));
   const rows = Array.isArray(network.requests) ? network.requests : [];
   const candidateRequests = rows.filter((r) => r
@@ -405,7 +450,9 @@ export function finishVerification(receiptPath) {
     throw new Error(`receipt is not armed (phase=${receipt.phase || 'unknown'})`);
   }
   const s = safeSession(receipt.session);
-  const after = inspectPage(s);
+  // Give SPA mutations, validation banners and redirects a short deterministic
+  // settle window before classifying the post-submit state.
+  const after = inspectPage(s, 2_000);
   const network = inspectNetwork(s);
   const afterShot = abs.replace(/\.json$/i, '-after.png');
   screenshot(s, afterShot);
