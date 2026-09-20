@@ -1,165 +1,287 @@
-# Autonomous Worker Architecture
+# Autonomous Web Worker Architecture
 
-> Target architecture and 2026 source/API/browser research: [WEB_AUTOPILOT_RESEARCH.md](./WEB_AUTOPILOT_RESEARCH.md).
+> Detailed source/API/browser research: [WEB_AUTOPILOT_RESEARCH.md](./WEB_AUTOPILOT_RESEARCH.md).
 
-This document describes the **fork-specific** autonomous job-search layer. The upstream Career-Ops modes remain review-first; the fork's `autopilot` mode is an explicit opt-in worker.
+This document describes the fork-specific autonomous web application layer.
 
-## Mental model
+## Target system
 
-- **Codex / Claude Code / another coding agent is the brain.** It reads the queue, job description, profile and mode instructions, then decides the next action.
-- **Career-Ops is the toolkit and state layer.** It discovers jobs, filters them, stores queue/state, resolves resumes, records outcomes and exposes deterministic commands.
-- **Playwright/Chrome is the hands.** The agent drives the application form through `autopilot-browser.mjs`.
-- **cron/systemd/launchd/Task Scheduler is the clock.** Career-Ops does not secretly install its own scheduler.
+~~~text
+SOURCE CATALOG / COMPANY REGISTRY
+          |
+          v
+DISCOVERY ENGINE
+public API / ATS feed / RSS / XML / SSR HTML
+browser extraction only where structured discovery is unavailable
+          |
+          v
+NORMALIZED PIPELINE
+          |
+          v
+AUTOPILOT SQLITE
+exact dedup + explicit blacklist + soft ranking
+          |
+          v
+ATOMIC PRIORITY QUEUE
+          |
+          v
+CODING AGENT
+read full JD -> choose/generate CV -> decide form answers
+          |
+          v
+PLAYWRIGHT CLI
+named persistent Chrome session/profile
+          |
+          v
+REAL APPLICATION FORM
+          |
+          v
+DETERMINISTIC SUBMIT VERIFIER
+DOM + URL + validation + network + trace
+          |
+          v
+APPLICATION JOURNAL / ANALYTICS
+~~~
 
-## Discovery flow
+## Responsibility boundaries
 
-```text
-portals.yml + source registry
+**Providers/scanners** answer: where are the jobs?
+
+They should use structured network surfaces first because one request can enumerate many postings more cheaply and reliably than interactive browsing.
+
+**Autopilot state/ranking** answers: what should the worker attempt next?
+
+It does not decide that a weak match is forbidden. Preferences are priority signals.
+
+**The LLM/coding agent** answers: how should this candidate apply to this particular job?
+
+It reads the full JD, selects or generates a resume, interprets the form and controls the browser.
+
+**Playwright CLI** is the browser interface.
+
+There is no Career-Ops browser action DSL between the coding agent and Playwright.
+
+**The verifier** answers: did the browser submission actually succeed?
+
+It is deterministic and does not trust the agent's self-report.
+
+## Discovery
+
+The existing provider ecosystem remains the core collection layer.
+
+~~~text
+portals.yml + source-registry.db + catalog/source-catalog.yml
         |
         v
-scan.mjs / scan-regional.mjs
+scan.mjs --wide / scan-regional.mjs
         |
         v
-provider adapters (Greenhouse, Lever, Workday, regional sources, ...)
+providers/*
+        |
+        +--> public API / JSON
+        +--> RSS / XML / Atom
+        +--> server-rendered HTML parser
+        +--> browser extraction only when necessary
         |
         v
-public API / HTML feed
+data/pipeline.md
         |
         v
-normalized jobs
+autopilot.mjs
         |
         v
-title/location/blacklist/dedup gates
-        |
-        v
-data/pipeline.md -> data/autopilot-queue.md + SQLite
-```
+data/autopilot.db
+~~~
 
-A provider is an adapter that knows how one job source exposes listings. Discovery normally uses HTTP/API calls because that is cheaper and more reliable than opening every careers site in a browser. Browser extraction/liveness is used where a source needs it.
+`scan.mjs --wide` is deliberately different from the normal review-first scanner configuration. It bypasses preference/fit filters such as title, tier, location, configured posting age, salary, description/content, country eligibility and visa. Explicit CLI date bounds remain explicit.
 
-## Application flow
+It still keeps source safety checks, explicit blacklist behavior and canonical URL dedup.
 
-1. Run `node autopilot.mjs preflight`.
-2. Run `node autopilot.mjs` to refresh the queue.
-3. Start `node autopilot-browser.mjs serve` for a long-lived browser page/context.
-4. For each queued job, the agent opens the posting, confirms it is live, and archives the JD.
-5. The agent resolves a resume with `autopilot-resume.mjs`.
-6. It fills the real employer/ATS form from `config/profile.yml` + `cv.md`, uploads the selected PDF and observes the result after every meaningful action.
-7. A **new site/form type is fill-only** and is reported as `test_filled`. A previously validated channel may be submitted automatically by the opt-in autopilot.
-8. Every job ends with `node autopilot.mjs report ...`, which updates SQLite, the tracker and the queue.
+In wide mode, company+title is not treated as posting identity: two independent requisitions may legitimately share the same title.
 
-The scanner APIs are not application-submit APIs. The normal application channel is the real browser. `ats_api` is a reporting channel label unless a source-specific direct-submission implementation actually exists.
+## Queue policy
 
-## Browser lifetime
+Hard queue stops:
 
-`autopilot-browser.mjs serve` keeps one Playwright persistent context alive and accepts local commands over loopback. This preserves live SPA/wizard state between actions. It has an idle watchdog and exits after 30 minutes without commands.
+- invalid posting URL;
+- exact/canonical posting already recorded;
+- URL already present in the applications tracker;
+- explicit company blacklist;
+- explicit source blacklist.
 
-The profile directory under `data/browser-profile` persists cookies/login state across browser processes. A persistent profile does **not** mean Chrome must run forever.
+Everything else can be queued.
 
-Use `AUTOPILOT_TAG` to isolate parallel workers into separate profiles/state files.
+`autopilot-ranking.mjs` produces a 0..100 priority from explainable signals such as:
 
-## Multi-resume routing
+- target-title similarity;
+- negative-title hints;
+- candidate country/city;
+- remote wording;
+- configured priority locations/sources;
+- freshness.
 
-Configure prepared variants in `config/profile.yml`:
+A low score means "later", not "discard".
 
-```yaml
-autopilot:
-  cv_pdf: "output/resumes/general.pdf"   # legacy/final fallback
-  resumes:
-    prefer_generated: true
-    fallback: general
-    variants:
-      react-native:
-        file: "output/resumes/react-native.pdf"
-        title_keywords: ["react native", "mobile"]
-        keywords: ["react native", "expo", "ios", "android"]
-        priority: 30
-      nextjs:
-        file: "output/resumes/nextjs.pdf"
-        title_keywords: ["next.js", "nextjs"]
-        keywords: ["next.js", "nextjs", "app router", "server components"]
-        priority: 20
-      react:
-        file: "output/resumes/react.pdf"
-        title_keywords: ["frontend", "react"]
-        keywords: ["react", "typescript", "javascript"]
-        priority: 10
-      general:
-        file: "output/resumes/general.pdf"
-        keywords: []
-```
+SQLite is authoritative. `data/autopilot-queue.md` is regenerated as an inspection surface.
 
-Selection precedence:
+## Atomic work claiming
 
-1. explicitly requested prepared variant;
-2. an existing tailored/generated PDF supplied by the agent;
-3. best matching prepared variant using title + JD text;
-4. configured fallback variant;
-5. legacy `autopilot.cv_pdf`.
+Jobs now support:
 
-If tailored generation fails or its expected file is missing, passing that path as `--generated` automatically falls back to a prepared resume. Paths are restricted to `output/` or `data/`.
+- `priority`;
+- `rank_reasons_json`;
+- `posted_at`;
+- `claimed_at`;
+- `claim_owner`;
+- `claim_until`.
 
-Examples:
+`node autopilot.mjs next --json` atomically leases the highest-priority queued job. Expired leases are returned automatically.
 
-```bash
-node autopilot-resume.mjs validate
-node autopilot-resume.mjs select --title "Senior React Native Engineer" --jd-file data/autopilot/jds/job.md --json
-node autopilot-resume.mjs select --variant nextjs --json
-node autopilot-resume.mjs select --generated output/tailored/acme.pdf --title "Frontend Engineer" --jd-file data/autopilot/jds/acme.md --json
-```
+This allows a single autonomous worker now and safe multi-worker expansion later.
 
-## State, logs and analytics
+## Browser
 
-Queryable state lives in `data/autopilot.db`:
+The first implementation uses **only Playwright CLI**.
 
-- `jobs`: lifecycle per posting;
-- `applications`: every attempt, channel, ATS, selected resume and duration;
-- `events`: structured worker events;
-- `contacts`, `llm_calls`, `daily_state`.
+Why:
 
-Human-readable audit events are appended to:
+- designed specifically for coding agents;
+- compact, token-efficient commands;
+- accessibility snapshots with stable refs;
+- direct click/fill/select/check/upload;
+- arbitrary `run-code` escape hatch;
+- named browser sessions;
+- persistent profiles;
+- request/response inspection;
+- traces and screenshots.
 
-```text
-data/autopilot/logs/YYYY-MM-DD.jsonl
-```
+One initial worker should use:
 
-The audit logger intentionally redacts form values, credentials, tokens, email/phone fields and answers.
+~~~text
+session: career-ops-worker-0
+profile: data/browser-profile
+browser: Chrome
+headed: yes while stabilizing
+~~~
 
-The browser keeps the latest machine-readable state and screenshot at:
+The profile is user/runtime data and must never be committed.
 
-```text
-data/browser-state.json
-output/browser-state.png
-```
+The worker processes many jobs in the same browser session. Parallel workers, when added later, must use separate sessions/profiles.
 
-Useful commands:
+Browser Use, MCP and Computer Use are not part of the first production path. They can be reevaluated from measured failure data later rather than adding a second execution engine preemptively.
 
-```bash
-node autopilot.mjs status
-node autopilot.mjs logs --limit 50
-node autopilot.mjs analytics
-```
+## Resume routing
 
-Report metadata explicitly so later analytics can explain what happened:
+Prepared resume variants remain configured under `autopilot.resumes`.
 
-```bash
-node autopilot.mjs report "<url>" applied \
-  --channel browser \
-  --ats greenhouse \
-  --resume react-native \
-  --resume-path output/resumes/react-native.pdf \
-  --duration-ms 84213 \
-  --note "success page confirmed"
-```
+Target selection:
 
-Do not put personal form values or secrets in `--note`.
+1. agent reads the full JD;
+2. agent chooses the best prepared variant;
+3. optionally generate a tailored CV for a useful/high-priority job;
+4. use tailored PDF if generation and validation succeed;
+5. otherwise fall back to the prepared selection;
+6. deterministic `autopilot-resume.mjs` routing is the reliability fallback;
+7. configured general/legacy PDF is the last fallback.
+
+Resume generation failure never cancels an application.
+
+## Submit evidence
+
+`autopilot-verify.mjs` is not a browser controller. It attaches to the same Playwright CLI session before and after Submit.
+
+### Before Submit
+
+`begin`:
+
+- probes live DOM;
+- refuses to arm when obvious required/native-invalid controls remain;
+- clears the CLI request log;
+- starts tracing;
+- captures before state/screenshot;
+- creates a job-bound receipt.
+
+### After Submit
+
+`finish`:
+
+- probes URL/DOM again;
+- collects visible validation state;
+- inspects post-clear network requests;
+- inspects request/response bodies in memory for submit classification;
+- persists only sanitized network metadata;
+- captures after screenshot;
+- stops trace;
+- classifies the attempt.
+
+### Outcomes
+
+`applied`
+: Explicit post-submit success state. This is the only browser outcome counted as confirmed.
+
+`submitted_unconfirmed`
+: A submit-like request or meaningful transition happened, but no explicit success state was proved. Do not auto-retry because it may already have submitted.
+
+`validation_failed`
+: Browser stayed in the form with validation errors/native invalid controls.
+
+`blocked`
+: CAPTCHA/human verification/anti-bot challenge.
+
+`failed`
+: Explicit failure state or failed submit-like request.
+
+The LLM cannot promote an attempt to `applied` by assertion. `autopilot.mjs report ... applied --channel browser` requires a verified receipt for the same canonical job URL with outcome `applied`.
+
+## Evidence/privacy
+
+Local evidence lives under:
+
+~~~text
+data/autopilot/evidence/
+~~~
+
+Raw request/response bodies can contain PII and are inspected in memory only; they are not copied into SQLite/audit JSON.
+
+Playwright traces may contain browser/request data and remain machine-local under `.playwright-cli/`.
+
+The normal JSONL audit logger records lifecycle metadata, not form values/cookies/tokens.
+
+## Application state
+
+Canonical active/terminal states include:
+
+~~~text
+queued
+claimed
+applied
+submitted_unconfirmed
+validation_failed
+failed
+captcha
+skipped
+~~~
+
+Legacy `test_filled` can still exist in old databases but is not part of the new autonomous flow.
+
+Only confirmed `applied` increments the confirmed daily counter and writes the Applied tracker row.
 
 ## Scheduling
 
-A scheduler should start the **agent harness**, not only `autopilot.mjs`, if unattended applications are desired. Running `autopilot.mjs` alone discovers/queues work but does not provide the reasoning loop that fills forms.
+Scheduling is outside the core loop.
 
-A typical unattended run is:
+A future scheduler starts the agent harness, not only `autopilot.mjs`.
 
-```text
-scheduler -> Codex/Claude worker -> scan/queue -> browser serve -> jobs -> report -> exit
-```
+Typical run:
+
+~~~text
+scheduler
+  -> coding agent
+  -> autopilot preflight
+  -> wide scan + enqueue
+  -> open persistent Playwright CLI session
+  -> claim/apply/verify/report until queue empty
+  -> exit
+~~~
+
+Discovery and application execution can later run as separate processes; atomic leases already prepare the state layer for that split.
