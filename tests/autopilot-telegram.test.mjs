@@ -27,6 +27,7 @@ test('telegram config keeps credentials in env and filters outcomes', () => {
   assert.equal(settings.enabled, true);
   assert.equal(settings.token, 'secret-token');
   assert.equal(settings.chatId, '12345');
+  assert.equal(settings.timeoutMs, 15000);
   assert.equal(shouldNotifyOutcome(settings, 'applied'), true);
   assert.equal(shouldNotifyOutcome(settings, 'failed'), false);
 });
@@ -63,6 +64,7 @@ test('application message includes safe operational metadata and escapes HTML', 
 test('sender posts JSON and never needs response body', async () => {
   let seenUrl = '';
   let seenBody = null;
+  let seenSignal = null;
   await sendTelegramMessage(
     { token: '123:abc', chatId: '99', disableWebPreview: true },
     'hello',
@@ -70,6 +72,7 @@ test('sender posts JSON and never needs response body', async () => {
       fetchImpl: async (url, init) => {
         seenUrl = url;
         seenBody = JSON.parse(init.body);
+        seenSignal = init.signal;
         return { ok: true, status: 200 };
       },
     },
@@ -78,6 +81,7 @@ test('sender posts JSON and never needs response body', async () => {
   assert.equal(seenBody.chat_id, '99');
   assert.equal(seenBody.text, 'hello');
   assert.equal(seenBody.parse_mode, 'HTML');
+  assert.ok(seenSignal instanceof AbortSignal);
 });
 
 test('sender error does not expose the bot token in its message', async () => {
