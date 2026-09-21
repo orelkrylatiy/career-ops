@@ -103,7 +103,8 @@ test('old autopilot DB migrates additively without losing queued jobs', () => {
   );
   for (const name of [
     'id', 'channel', 'event_type', 'job_url_key', 'payload_json',
-    'status', 'attempts', 'next_attempt_at', 'created_at', 'sent_at', 'last_error',
+    'status', 'attempts', 'next_attempt_at', 'claim_owner', 'claim_until',
+    'created_at', 'sent_at', 'last_error',
   ]) {
     assert.equal(outboxCols.has(name), true, `notification_outbox.${name}`);
   }
