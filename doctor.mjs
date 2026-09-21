@@ -80,21 +80,21 @@ function checkNodeVersion() {
     return { pass: true, label: `Node.js >= 22.5 (v${versionStr})` };
   }
 
-  if (major >= 18) {
+  if (major >= 20) {
     return {
       warn: true,
-      label: `Node.js v${versionStr} detected. Node >= 22.5.0 is highly recommended because tracker.mjs (SQLite database indexing) requires node:sqlite.`,
+      label: `Node.js v${versionStr} detected. Node >= 20 satisfies the autonomous Playwright CLI; Node >= 22.5.0 is still recommended because tracker.mjs (SQLite database indexing) requires node:sqlite.`,
       fix: [
         'Upgrade Node.js to v22.5.0 or later to enable full tracker database support.',
-        'The markdown tracker keeps working without it — the index is optional.',
+        'Autopilot/browser operation is supported on Node 20+, while the markdown tracker remains available without node:sqlite.',
       ],
     };
   }
 
   return {
     pass: false,
-    label: `Node.js >= 18 (found v${versionStr})`,
-    fix: 'Install Node.js 22.5.0 or later from https://nodejs.org',
+    label: `Node.js >= 20 (found v${versionStr})`,
+    fix: 'Install Node.js 22.5.0 or later from https://nodejs.org (Node 20 is the autonomous minimum)',
   };
 }
 

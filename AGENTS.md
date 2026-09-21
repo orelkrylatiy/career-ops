@@ -381,7 +381,11 @@ Every other mode keeps the upstream review-first behavior.
 
 ## Offer Verification -- MANDATORY
 
-**NEVER trust WebSearch/WebFetch to verify if an offer is still active.** ALWAYS use Playwright:
+**NEVER trust WebSearch/WebFetch to verify if an offer is still active.** ALWAYS use Playwright.
+
+For the explicit `autopilot` mode, this means direct Playwright CLI (`goto/open` + `snapshot`/live DOM), followed by the deterministic submit verifier. The legacy command names below apply to the normal interactive browser-tool workflow.
+
+ALWAYS use Playwright:
 1. `browser_navigate` to the URL
 2. `browser_snapshot` to read content
 3. Only footer/navbar without JD = closed. Title + description + Apply = active.
@@ -413,6 +417,8 @@ Headless worker command per CLI:
 | Qwen | `qwen -p "prompt"` |
 | Antigravity CLI | `agy -p "prompt"` |
 | Grok Build CLI | `grok -p "prompt"` |
+
+**Autonomous web worker:** a scheduler can launch a coding CLI with a prompt such as `Run modes/autopilot.md autonomously until the queue is empty; use worker-0 and the persistent Playwright CLI profile.` The scheduler does not need its own browser logic — the mode owns scan → claim → apply → verify → report.
 
 **Parallel fan-outs — reserve report numbers first.** Before spawning N parallel evaluators, reserve the range: `node reserve-report-num.mjs --count N` (prints e.g. `042-049`); hand each worker its own number. The allocator treats report files, sentinels, tracker row IDs, and tracker report links as occupied; each slot claim is individually atomic (on collision, claimed slots are released and the reservation restarts past it — permanent, harmless gaps). Release with `node reserve-report-num.mjs --release 042-049` when done; stale sentinels are GC'd after 4h, so reserve right before spawning. Never let parallel workers compute `max+1` themselves — that is the #749 race.
 
