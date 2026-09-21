@@ -92,7 +92,7 @@
 </p>
 
 
-> **Fork note — autonomous web worker:** default Career-Ops modes remain review-first. This fork also ships an explicit opt-in `autopilot` mode that uses wide-funnel discovery, a priority SQLite queue, prepared/tailored resume fallback, and direct Playwright CLI control of a persistent Chromium profile. Browser submissions are counted as applied only after deterministic post-submit evidence confirms them. See [Autonomous Worker Architecture](docs/AUTOPILOT_ARCHITECTURE.md). <!-- fork-autopilot: wide-funnel autonomous submit -->
+> **Fork note — autonomous web worker:** default Career-Ops modes remain review-first. This fork also ships an explicit opt-in `autopilot` mode that uses wide-funnel discovery, a priority SQLite queue, prepared/tailored resume fallback, profile/stack analytics, optional Telegram application notifications, and direct Playwright CLI control of a persistent Chromium profile. Browser submissions are counted as applied only after deterministic post-submit evidence confirms them. See [Autonomous Worker Architecture](docs/AUTOPILOT_ARCHITECTURE.md). <!-- fork-autopilot: wide-funnel autonomous submit -->
 
 ## What Is This
 
@@ -132,6 +132,7 @@ career-ops is the first reference implementation of [the CareerOps Manifesto](ht
 | **Funded Company Discovery** | Review-first `company:funded` command surfaces recently funded companies and source diagnostics from structured public feeds without editing your data |
 | **Batch Processing**     | Parallel evaluation with headless CLI workers (`claude -p` / `opencode run`)                                                             |
 | **Dashboard TUI**        | Terminal UI to browse, filter, and sort your pipeline                                                                                    |
+| **Autopilot observability** | Fork-only profile/stack analytics plus optional Telegram notifications after verified application outcomes; delivery is backed by a SQLite outbox so notification failures do not change application state. |
 | **Human-in-the-Loop by default** | Default Career-Ops modes remain review-first. The fork's explicit opt-in `autopilot` is an autonomous wide-funnel exception with deterministic submit verification. |
 | **Pipeline Integrity**   | Automated merge, dedup, status normalization, health checks                                                                              |
 | **Interview Suite**      | Time-blocked prep plans, practice sessions with feedback, post-interview debriefs ([`interview/`](modes/interview/README.md)), and a company red-flag detector ([`interview-redflag`](modes/interview-redflag.md)) |
@@ -177,6 +178,9 @@ npm run autopilot                    # normal wide refresh + queue
 npm run autopilot:deep-scan          # broad ATS + regional/global discovery
 npm run autopilot:refresh-registry   # deep scan + refresh company/source resolution
 npm run autopilot:status
+npm run autopilot:analytics          # outcome / ATS / resume / profile statistics
+npm run autopilot:telegram:status    # Telegram config + pending outbox
+npm run autopilot:telegram           # flush pending Telegram notifications
 ```
 
 > The public `@santifer/career-ops` npm package belongs to the upstream project and is **not** the installer for this fork. Do not use it when you want the autonomous fork.
