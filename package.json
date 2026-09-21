@@ -88,7 +88,9 @@
     "autopilot:browser:doctor": "node autopilot-verify.mjs doctor",
     "autopilot:preflight": "node autopilot.mjs preflight",
     "autopilot:deep-scan": "node autopilot.mjs --deep-scan",
-    "autopilot:refresh-registry": "node autopilot.mjs --deep-scan --refresh-registry"
+    "autopilot:refresh-registry": "node autopilot.mjs --deep-scan --refresh-registry",
+    "autopilot:telegram": "node autopilot.mjs telegram flush",
+    "autopilot:telegram:status": "node autopilot.mjs telegram status"
   },
   "keywords": [
     "ai",
