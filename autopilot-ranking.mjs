@@ -9,6 +9,7 @@ import { compileKeyword, compilePositiveKeyword } from './title-keywords.mjs';
 
 const REMOTE_RE = /\b(remote|worldwide|anywhere|distributed|work from home|wfh|удал[её]н|дистанц)\b/i;
 const ONSITE_RE = /\b(hybrid|onsite|on-site|office[- ]based|in office|гибрид|офис)\b/i;
+const RUSSIA_LOCATION_RE = /\b(russia|russian federation|росси(?:я|и|йская|йской)|москва|moscow|санкт[- ]?петербург|saint petersburg|st\.? petersburg)\b/i;
 
 function strings(value) {
   return (Array.isArray(value) ? value : [])
@@ -100,6 +101,16 @@ export function scoreJob(job, { titleFilter = {}, profile = {}, nowMs = Date.now
   }
 
   const host = hostname(job?.url);
+
+  // Product policy for this fork: Russia is the first market, but never an
+  // eligibility gate. An equivalent Russian posting is drained earlier while
+  // every worldwide posting remains queued.
+  const russianMarket = host.endsWith('.ru') || RUSSIA_LOCATION_RE.test(location);
+  if (russianMarket) {
+    priority += 12;
+    reasons.push('russia_market:+12');
+  }
+
   const prioritySources = strings(ap.priority_sources)
     .map((v) => v.toLowerCase().replace(/^\.+|\.+$/g, ''))
     .filter((token) => token && (host === token || host.endsWith(`.${token}`)));

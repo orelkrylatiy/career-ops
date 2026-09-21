@@ -45,3 +45,21 @@ test('location preferences are penalties, never rejection decisions', () => {
   assert.ok(row.reasons.some((r) => r.startsWith('location_deprioritized:')));
   assert.ok(row.reasons.includes('remote_preference_conflict:-12'));
 });
+
+test('Russia-first is a priority boost, not a global-market filter', () => {
+  const neutralProfile = { autopilot: {} };
+  const russian = scoreJob({
+    title: 'Frontend Engineer',
+    location: 'Moscow, Russia',
+    url: 'https://example.ru/jobs/1',
+  }, { profile: neutralProfile, titleFilter: {} });
+  const global = scoreJob({
+    title: 'Frontend Engineer',
+    location: 'Remote, Europe',
+    url: 'https://example.com/jobs/1',
+  }, { profile: neutralProfile, titleFilter: {} });
+
+  assert.ok(russian.priority > global.priority);
+  assert.ok(russian.reasons.includes('russia_market:+12'));
+  assert.ok(global.priority >= 0);
+});
