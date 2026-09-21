@@ -336,9 +336,36 @@ export async function fetchYCCompanies({ timeoutMs = DEFAULT_TIMEOUT_MS, maxPage
   // stray Infinity) can never spin the walk past the runaway guard.
   const limit = Math.min(maxPages, YC_MAX_PAGES);
 
+  // The walk is strictly sequential — 250 pages at a measured 1.7-6.5 s/page is
+  // 7-27 minutes on a healthy link, and up to timeoutMs per page on a degraded
+  // one (250 × 20 s ≈ 83 min). It logs nothing per page, so from the outside a
+  // healthy walk is indistinguishable from a hung scan. Report every page, and
+  // honour an optional wall-clock budget (CAREER_OPS_YC_WALK_BUDGET_MS, 0 =
+  // off) that stops the walk early with the partial portfolio — the same
+  // "partial data is fine" contract a page-2 failure already has.
+  const budgetMs = Number(process.env.CAREER_OPS_YC_WALK_BUDGET_MS) || 0;
+  const startedAt = Date.now();
+  const elapsedS = () => Math.round((Date.now() - startedAt) / 1000);
+
   let page = 1;
+  let totalPages = 0;
   for (let fetched = 0; fetched < limit; fetched++) {
+    if (budgetMs > 0 && fetched > 0 && Date.now() - startedAt >= budgetMs) {
+      process.stderr.write(
+        `vc-portfolios: yc walk stopped at page ${page}${totalPages ? `/${totalPages}` : ''}`
+        + ` after ${elapsedS()}s (CAREER_OPS_YC_WALK_BUDGET_MS) — keeping ${all.length} companies\n`,
+      );
+      break;
+    }
     const url = `https://api.ycombinator.com/v0.1/companies?page=${page}&per_page=1000`;
+    // Every 10th page keeps a 250-page walk visible (~1 line per 20-60 s)
+    // without flooding a redirected or CI log.
+    if (page === 1 || page % 10 === 0) {
+      process.stderr.write(
+        `vc-portfolios: yc page ${page}${totalPages ? `/${totalPages}` : ''}`
+        + ` — ${all.length} companies (${elapsedS()}s)\n`,
+      );
+    }
     let payload;
     try {
       const res = await fetchWithTimeout(url, { timeoutMs });
@@ -362,6 +389,7 @@ export async function fetchYCCompanies({ timeoutMs = DEFAULT_TIMEOUT_MS, maxPage
     // reports totalPages — follow its signal instead of guessing from batch size.
     const raw = /** @type {any} */ (payload);
     if (Number.isInteger(raw?.totalPages) && raw.totalPages > 0) {
+      totalPages = raw.totalPages;
       if (page >= raw.totalPages) break;
       page += 1;
       continue;

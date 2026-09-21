@@ -231,20 +231,37 @@ export function regenerateQueue() {
 }
 
 function runNodeDiscoveryStep(label, script, args, extraEnv = {}) {
+  // Discovery steps are long (the deep lane's ats-full sweep alone runs for
+  // tens of minutes) and inherit stdio, so without these lines the parent is
+  // silent for the whole step and a healthy crawl looks like a dead process.
+  // Opt-in wall clock per step: 0/unset disables, so no legitimate long sweep
+  // is ever killed by default. scan-ats-full checkpoints every 500 boards, so
+  // a timed-out step stays resumable with --resume.
+  const stepTimeoutMs = Number(process.env.CAREER_OPS_SCAN_STEP_TIMEOUT_MS) || 0;
+  const startedAt = Date.now();
+  const timeoutLabel = stepTimeoutMs > 0
+    ? ` (timeout ${stepTimeoutMs % 60_000 === 0 ? `${stepTimeoutMs / 60_000}m` : `${Math.round(stepTimeoutMs / 1000)}s`})`
+    : '';
+  console.error(`[autopilot] step ${label} -> ${path.basename(script)} ${args.join(' ')}${timeoutLabel}`);
   const res = spawnSync(process.execPath, [script, ...args], {
     cwd: CODE_ROOT,
     stdio: 'inherit',
     shell: false,
     env: { ...process.env, ...extraEnv },
+    timeout: stepTimeoutMs > 0 ? stepTimeoutMs : undefined,
   });
+  const secs = Math.round((Date.now() - startedAt) / 1000);
   if (res.error) {
+    console.error(`[autopilot] step ${label} FAILED after ${secs}s: ${res.error.message}`);
     addEvent('scan', `${label}: spawn failed: ${res.error.message}`, null, 'error');
     return `${label}:spawn-failed`;
   }
   if (res.status !== 0) {
+    console.error(`[autopilot] step ${label} exited ${res.status} after ${secs}s; continuing`);
     addEvent('scan', `${label}: exited ${res.status}; continuing`, null, 'warn');
     return `${label}:failed`;
   }
+  console.error(`[autopilot] step ${label} ok (${secs}s)`);
   addEvent('scan', `${label}: completed`);
   return `${label}:ok`;
 }

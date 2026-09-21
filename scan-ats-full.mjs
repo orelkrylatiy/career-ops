@@ -554,7 +554,7 @@ const SEED_PROVIDERS = [greenhouse, lever, ashby];
  * @param {string}   label       Human-readable source label for logs.
  * @returns {Promise<object[]>}  New job offers (same shape as ATS scan offers).
  */
-export async function runSeedScan(seedId, opts, ctx, seenUrls, label) {
+export async function runSeedScan(seedId, opts, ctx, seenUrls, label, onProgress = null) {
   const source = SEED_SOURCES[seedId];
   if (!source) throw new Error(`runSeedScan: unknown seed "${seedId}"`);
 
@@ -565,6 +565,9 @@ export async function runSeedScan(seedId, opts, ctx, seenUrls, label) {
     console.error(`⚠️  ${seedId}: could not fetch portfolio — ${err.message}`);
     return [];
   }
+  // The portfolio walk (yc: 250 sequential API pages) can run for many minutes
+  // before this line, so say what the per-company pass is about to chew on.
+  console.error(`  ${seedId}: ${companies.length} portfolio entries`);
 
   // Apply the --limit cap here too (by slug, consistent with sampleCompanies).
   const capped = opts.limit < companies.length
@@ -592,7 +595,10 @@ export async function runSeedScan(seedId, opts, ctx, seenUrls, label) {
 
     let jobs;
     try {
-      jobs = await provider.fetch(entry, ctx);
+      // Same per-company watchdog the directory sweep uses: without it one
+      // stalled board (DNS, a provider bug) holds a worker slot for the rest
+      // of the seed pass with no upper bound.
+      jobs = await withTimeout(provider.fetch(entry, ctx), COMPANY_TIMEOUT_MS, `${seedId}/${entry.name}`);
     } catch (err) {
       errors++;
       if (opts.verbose) console.error(`  ✗ ${seedId}/${entry.name}: ${err.message}`);
@@ -621,7 +627,7 @@ export async function runSeedScan(seedId, opts, ctx, seenUrls, label) {
       seenUrls.add(dedupToken);
       offers.push({ ...job, source: sourceName, dateStatus: job.postedAt ? 'dated' : 'unknown' });
     }
-  });
+  }, onProgress ? (state) => onProgress(state) : null);
 
   return { offers, errors, total: capped.length };
 }
@@ -1105,7 +1111,11 @@ async function main() {
   for (const seedId of opts.seeds) {
     const seedSource = SEED_SOURCES[seedId];
     log(`\n🌱 ${seedSource.label} (${seedId}-seed) — fetching portfolio...`);
-    const result = await runSeedScan(seedId, opts, ctx, seenUrls, seedSource.label);
+    const result = await runSeedScan(seedId, opts, ctx, seenUrls, seedSource.label, ({ done }) => {
+      // Same signal the directory sweep prints — a seed pass over thousands of
+      // portfolio companies must not look like a hang.
+      if (done % 200 === 0) progress(`  ${seedId}: ${done} companies probed, ${newOffers.length} total matches\r`);
+    });
     if (result && result.offers) {
       totalCompaniesScanned += result.total || 0;
       totalErrors += result.errors || 0;
