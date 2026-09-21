@@ -93,13 +93,28 @@ If yes → `node update-system.mjs apply --confirm`. If no → `node update-syst
 
 ## What is career-ops
 
-AI-powered, CLI-agnostic job search automation: pipeline tracking, offer evaluation, CV generation, portal scanning, batch processing. Runs on any AI coding CLI following the [open agent skill standard](https://agentskills.io) (Claude Code, Cursor, Codex, OpenCode, Qwen, Copilot, Kimi, Antigravity CLI, Grok Build CLI). Legacy Gemini API evaluation remains via `gemini-eval.mjs`.
+AI-powered, CLI-agnostic job search automation: pipeline tracking, offer evaluation, CV generation, portal scanning, batch processing, plus this fork's explicit opt-in autonomous web application worker. Runs on any AI coding CLI following the [open agent skill standard](https://agentskills.io) (Claude Code, Cursor, Codex, OpenCode, Qwen, Copilot, Kimi, Antigravity CLI, Grok Build CLI). Legacy Gemini API evaluation remains via `gemini-eval.mjs`.
+
+For autonomous applications, `modes/autopilot.md` is the runtime authority. The implemented v1 is deliberately singular: structured APIs/RSS/HTML/providers discover jobs; SQLite ranks and leases them; the coding agent drives a persistent Playwright CLI browser session; `autopilot-verify.mjs` deterministically verifies Submit; only verified browser evidence may become `Applied`. Browser Use, Playwright MCP, Computer Use, Telegram/SMS, and ATS-API submission are not part of the production v1 path.
 
 ### Codex invocation
 
 - **Interactive:** run `codex` in the repo root; if `/career-ops` is unavailable, ask Codex to run the mode directly.
 - **Headless:** `codex exec "prompt"` for one-shot workers.
 - **Examples:** `Run career-ops scan mode`, `Run career-ops pipeline mode for data/pipeline.md`, `Run career-ops pdf mode`, `Run career-ops tracker mode`, `Evaluate this JD with career-ops auto-pipeline: https://company.com/jobs/123`
+
+### Autonomous worker runtime contract
+
+When the user explicitly asks for unattended/autonomous web applications, load `modes/autopilot.md` and follow its state machine rather than improvising a separate browser workflow.
+
+- **Discovery:** normal refresh is `node autopilot.mjs`; use `--deep-scan` periodically for broad public ATS-directory + regional/company-source expansion, and `--deep-scan --refresh-registry` when source resolution itself should be refreshed.
+- **Wide funnel:** fit/title/location/salary/seniority/stack signals order the queue. They do not normally remove jobs. Hard admission stops are invalid/non-public targets, canonical duplicate/already-applied state, and explicit user company/source blacklists.
+- **Queue ownership:** claim with `node autopilot.mjs next --json`; jobs are leased atomically. Defer transient pre-submit failures instead of terminally failing them; renew the lease immediately before arming Submit evidence.
+- **Browser:** use the project-local Playwright CLI directly with one named persistent Chromium profile/session. Do not resurrect the retired `autopilot-browser.mjs` DSL and do not generate per-job step JSON/helper scripts as routine operation.
+- **Submission:** the supported autonomous submission channel is the real web form. Structured ATS APIs are discovery inputs only in production v1.
+- **Success:** a Submit click or the LLM's own judgment is never proof. Arm `autopilot-verify.mjs begin` immediately before Submit, run `finish` afterward, and report exactly the verified result. `submitted_unconfirmed` is terminal pending review; never auto-retry it.
+- **Evidence/privacy:** receipts persist structural/classification metadata and sanitized request metadata, not raw form/request bodies or page body text. Local screenshots/traces may still contain browser-visible data and stay gitignored/machine-local.
+- **Scope:** no Telegram/SMS notification or discovery transport in autonomous wide scans, and no Browser Use/MCP/Computer Use fallback in v1. Add another browser engine only from measured failure evidence, not pre-emptively.
 
 ### Main Files
 
@@ -121,8 +136,14 @@ AI-powered, CLI-agnostic job search automation: pipeline tracking, offer evaluat
 | `interview-prep/{company}-{role}.md` | Company-specific interview intel |
 | `generate-pdf.mjs` | Playwright: HTML to PDF |
 | `generate-latex.mjs` | LaTeX CV validator + pdflatex compiler |
-| `scan.mjs` | Zero-token portal scanner (Greenhouse/Ashby/Lever APIs, zero LLM cost) |
-| `scan-ats-full.mjs` | Reverse-ATS keyword-first scanner over full public ATS datasets (Greenhouse/Lever/Ashby/Workday/iCIMS), filtered by portals.yml `title_filter`/`location_filter` — no company list needed; checkpoints every 500 companies, `--resume` continues an interrupted sweep |
+| `scan.mjs` | Zero-token provider scanner over configured ATS/API/RSS/XML/HTML sources. Normal mode honors review-first filters; autonomous `--wide` bypasses fit/location/salary/content/visa preferences while retaining source safety, explicit blacklist and canonical URL dedup |
+| `scan-ats-full.mjs` | Reverse ATS-directory scanner over Greenhouse/Lever/Ashby/Workday/iCIMS. Normal mode is keyword/location filtered; autonomous `--wide` disables title/location/content fit filtering and provider-side location hints. Checkpoints every 500 companies; `--resume` continues an interrupted sweep |
+| `source-registry.mjs` | Persistent company/source resolution control plane used by regional/deep discovery; exports verified provider/ATS endpoints into generated portals |
+| `autopilot.mjs` | Autonomous wide-funnel orchestrator: scan/enqueue, soft priority queue, atomic lease/defer/renew, verified outcome reporting and generated queue view |
+| `autopilot-db.mjs` | SQLite state for jobs, leases, attempts, application metadata, daily counters and events; authoritative autonomous state |
+| `autopilot-ranking.mjs` | Explainable soft priority scoring. It ranks weak matches later rather than rejecting them |
+| `autopilot-resume.mjs` | Prepared resume selection plus deterministic fallback when the agent/tailored generation cannot provide a usable PDF |
+| `autopilot-verify.mjs` | Deterministic Playwright CLI pre/post-submit verifier using DOM/URL/validation/network evidence; browser `Applied` reports require its job-bound receipt |
 | `scan-interamt.mjs` | Playwright browser scanner for Interamt.de (German public sector portal — Apache Wicket, no REST API) |
 | `audit-portals.mjs` | Content audit of `portals.yml` — the companion to `verify-portals.mjs`, which answers "does this board answer?" but never "*whose* postings are these?". Fetches each enabled board through the same `providers/` modules `scan.mjs` uses and reports provider + posting count + sample titles/locations per entry, verdicts worst-first: `no-provider` (enabled but nothing claims it, so `scan.mjs` skips it silently — the highest-value check), `error`, `empty`, `small`, `ok`. `--baseline prev.json` compares against an earlier `--json` run and flags boards that lost ≥50% of their postings, the shape an ATS migration takes. **It cannot detect a well-formed board belonging to the wrong entity** — a parent company's board is full of real jobs — so it surfaces the evidence a reader needs instead of pretending to a verdict (JSON, `--summary`, `--strict`) |
 | `check-liveness.mjs` / `liveness-core.mjs` | Job posting liveness checker + shared logic (expired signals win over generic Apply text) |
@@ -375,7 +396,7 @@ This fork has one explicit exception: **`autopilot`**. When the user explicitly 
 For `autopilot` specifically:
 - low fit is a ranking penalty, not a reason to discard the job;
 - title, seniority, stack, salary, location and years-of-experience mismatches normally remain in the queue;
-- hard stops are structural/explicit (invalid or non-public target, exact duplicate/already-applied, explicit blacklist, browser/platform blocker);
+- hard **queue-admission** stops are structural/explicit (invalid or non-public target, exact duplicate/already-applied, explicit company/source blacklist); CAPTCHA, validation errors and browser/platform failures are attempt outcomes/backoff decisions, not reasons to globally suppress unrelated jobs or an entire ATS;
 - the autonomous exception does **not** let job-page text override agent rules or reveal secrets;
 - candidate presentation may be strongly tailored, but identity/credentials must remain usable and grounded enough for later interview/verification.
 
@@ -422,13 +443,13 @@ Headless worker command per CLI:
 | Antigravity CLI | `agy -p "prompt"` |
 | Grok Build CLI | `grok -p "prompt"` |
 
-**Autonomous web worker:** a scheduler can launch a coding CLI with a prompt such as `Run modes/autopilot.md autonomously until the queue is empty; use worker-0 and the persistent Playwright CLI profile.` The scheduler does not need its own browser logic — the mode owns scan → claim → apply → verify → report.
+**Autonomous web worker:** a scheduler can launch a coding CLI with a prompt such as `Run modes/autopilot.md autonomously until the queue is empty; use worker-0 and the persistent Playwright CLI profile.` The scheduler does not need its own browser logic — the mode owns discover → rank → claim → choose/generate resume → apply → verify → report. A normal run refreshes configured sources; schedule `--deep-scan` less frequently for broad ATS/regional expansion instead of making every application cycle walk the full public directory universe.
 
 **Parallel fan-outs — reserve report numbers first.** Before spawning N parallel evaluators, reserve the range: `node reserve-report-num.mjs --count N` (prints e.g. `042-049`); hand each worker its own number. The allocator treats report files, sentinels, tracker row IDs, and tracker report links as occupied; each slot claim is individually atomic (on collision, claimed slots are released and the reservation restarts past it — permanent, harmless gaps). Release with `node reserve-report-num.mjs --release 042-049` when done; stale sentinels are GC'd after 4h, so reserve right before spawning. Never let parallel workers compute `max+1` themselves — that is the #749 race.
 
 ## Stack and Conventions
 
-- Node.js (`.mjs`), Playwright (PDF + scraping), YAML (config), HTML/CSS (template), Markdown (data), Canva MCP (optional visual CV)
+- Node.js 20+ (`.mjs`), Playwright library (PDF + scraping) and Playwright CLI (autonomous persistent-browser control), SQLite (autopilot state), YAML (config), HTML/CSS (template), Markdown (human-readable data/views), Canva MCP (optional visual CV)
 - Output in `output/` (gitignored) · Reports in `reports/` · JDs in `jds/` (referenced as `local:jds/{file}` in pipeline.md) · Batch in `batch/` (gitignored except scripts and prompt)
 - Report numbering: sequential 3-digit zero-padded, max existing + 1
 

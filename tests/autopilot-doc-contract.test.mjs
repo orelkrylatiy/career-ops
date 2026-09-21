@@ -24,6 +24,13 @@ test('root agent contract routes explicit autonomous work to autopilot', () => {
   assert.match(agents, /Explicitly asks for autonomous \/ unattended job applications/);
   assert.match(agents, /This fork has one explicit exception: \*\*`autopilot`\*\*/);
   assert.match(agents, /records `Applied` only when `autopilot-verify\.mjs` confirms/);
+  assert.match(agents, /### Autonomous worker runtime contract/);
+  assert.match(agents, /project-local Playwright CLI directly/);
+  assert.match(agents, /submitted_unconfirmed.*terminal pending review/s);
+  assert.match(agents, /Structured ATS APIs are discovery inputs only in production v1/);
+  assert.match(agents, /no Browser Use\/MCP\/Computer Use fallback in v1/);
+  assert.match(agents, /`scan\.mjs` \| Zero-token provider scanner[\s\S]*autonomous `--wide` bypasses/);
+  assert.match(agents, /`autopilot-verify\.mjs` \| Deterministic Playwright CLI pre\/post-submit verifier/);
   assert.match(modesReadme, /`autopilot\.md` \| `autopilot`/);
 });
 
