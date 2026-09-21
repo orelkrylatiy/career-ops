@@ -530,7 +530,12 @@ export function recentEvents(limit = 50) {
 export function applicationAnalytics({ profile = null } = {}) {
   const db = openDb();
   const profileId = profile == null || String(profile).trim() === '' ? null : String(profile).trim();
-  const where = profileId ? 'WHERE profile = ?' : '';
+  const unclassifiedFilter = profileId === 'unclassified';
+  const where = profileId
+    ? (unclassifiedFilter
+      ? "WHERE COALESCE(NULLIF(profile, ''), 'unclassified') = ?"
+      : 'WHERE profile = ?')
+    : '';
   const args = profileId ? [profileId] : [];
 
   const grouped = (column) => db.prepare(
@@ -569,7 +574,11 @@ export function applicationAnalytics({ profile = null } = {}) {
     ...row,
     success_rate: row.n ? row.applied / row.n : 0,
   }));
-  const sourceWhere = profileId ? 'WHERE a.profile = ?' : '';
+  const sourceWhere = profileId
+    ? (unclassifiedFilter
+      ? "WHERE COALESCE(NULLIF(a.profile, ''), 'unclassified') = ?"
+      : 'WHERE a.profile = ?')
+    : '';
   const bySource = db.prepare(
     `SELECT COALESCE(NULLIF(j.source, ''), '(unknown)') AS name, COUNT(*) AS n
      FROM applications a
