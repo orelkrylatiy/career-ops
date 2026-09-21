@@ -638,7 +638,7 @@ function exportPortals(country = null) {
   const existingCompanies = Array.isArray(base.tracked_companies) ? base.tracked_companies : [];
   const existingBoards = Array.isArray(base.job_boards) ? base.job_boards : [];
 
-  const catalogBoards = (catalog.job_sources || [])
+  const regionalBoards = (catalog.job_sources || [])
     .filter((s) => countryMatch(s.country, country) && s.provider)
     .map((s) => {
       const locales = sourceLocale(s.country, s.locales);
@@ -655,6 +655,25 @@ function exportPortals(country = null) {
         ...(Array.isArray(s.paths) ? { paths: s.paths } : {}),
       };
     });
+
+  // Board-wide/global providers are independent of a company registry and
+  // should participate in a full export. A country-scoped regional export
+  // intentionally excludes them so --country RU/KZ/AM/UZ remains local.
+  const globalBoards = country
+    ? []
+    : (catalog.global_sources || [])
+      .filter((s) => s.provider && s.status !== 'disabled')
+      .map((s) => ({
+        name: s.name,
+        ...(s.url ? { careers_url: s.url } : {}),
+        provider: s.provider,
+        enabled: true,
+        notes: 'global source ' + s.id,
+        ...(Array.isArray(s.search_queries) ? { search_queries: s.search_queries } : {}),
+        ...(Array.isArray(s.paths) ? { paths: s.paths } : {}),
+      }));
+
+  const catalogBoards = [...regionalBoards, ...globalBoards];
 
   const resolved = db.prepare(`
     SELECT c.country, c.name, cs.provider, cs.careers_url, cs.api, cs.status

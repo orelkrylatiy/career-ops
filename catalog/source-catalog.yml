@@ -263,3 +263,27 @@ global_sources:
     name: CryptocurrencyJobs
     provider: cryptocurrencyjobs
     status: live
+  - id: global-remotive
+    name: Remotive
+    provider: remotive
+    status: live
+  - id: global-remoteok
+    name: RemoteOK
+    provider: remoteok
+    status: live
+  - id: global-workingnomads
+    name: Working Nomads
+    provider: workingnomads
+    status: live
+  - id: global-weworkremotely
+    name: We Work Remotely
+    provider: weworkremotely
+    status: live
+  - id: global-nodesk
+    name: NoDesk
+    provider: nodesk
+    status: live
+  - id: global-jobspresso
+    name: Jobspresso
+    provider: jobspresso
+    status: live
