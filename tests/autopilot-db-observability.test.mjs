@@ -67,8 +67,13 @@ test('application profile analytics and notification outbox are persisted togeth
   assert.equal(pending[0].event_type, 'application_result');
   assert.match(pending[0].dedupe_key, /^application:\d+:telegram$/);
 
-  assert.equal(dbmod.markNotificationSent(pending[0].id), true);
+  const leased = dbmod.claimNextNotification('telegram', 'tg-worker-a', 5);
+  assert.equal(leased.id, pending[0].id);
+  assert.equal(leased.status, 'sending');
+  assert.equal(dbmod.claimNextNotification('telegram', 'tg-worker-b', 5), null);
   assert.equal(dbmod.pendingNotifications('telegram').length, 0);
+
+  assert.equal(dbmod.markNotificationSent(leased.id, 'tg-worker-a'), true);
   assert.equal(dbmod.notificationCounts().sent, 1);
 });
 
