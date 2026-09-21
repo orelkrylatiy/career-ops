@@ -1,7 +1,7 @@
 {
   "name": "@santifer/career-ops",
   "version": "1.33.0",
-  "description": "One-command installer for career-ops — the AI-powered job search pipeline built on Claude Code.",
+  "description": "Local scaffolder for the orelkrylatiy/career-ops autonomous fork.",
   "bin": {
     "career-ops": "bin/cli.mjs"
   },
@@ -23,14 +23,14 @@
     "cli"
   ],
   "author": "Santiago Fernández de Valderrama <hi@santifer.io> (https://santifer.io)",
-  "homepage": "https://github.com/career-ops-hq/career-ops#readme",
+  "homepage": "https://github.com/orelkrylatiy/career-ops#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/career-ops-hq/career-ops.git",
+    "url": "git+https://github.com/orelkrylatiy/career-ops.git",
     "directory": "scaffolder"
   },
   "bugs": {
-    "url": "https://github.com/career-ops-hq/career-ops/issues"
+    "url": "https://github.com/orelkrylatiy/career-ops/issues"
   },
   "license": "MIT",
   "dependencies": {}

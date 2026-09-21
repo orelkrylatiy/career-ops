@@ -143,86 +143,31 @@ career-ops is the first reference implementation of [the CareerOps Manifesto](ht
 
 ## Quick Start
 
-### Autonomous fork
-
-The autonomous worker described in this README lives in **this fork**, not in the published upstream npm installer. Clone the fork directly:
+This repository is an autonomous fork. Install **this fork**, not the upstream npm scaffolder:
 
 ```bash
-# Autonomous mode requires Node.js 20+
 git clone https://github.com/orelkrylatiy/career-ops.git
 cd career-ops
 npm install
-node autopilot.mjs preflight
+
+# Browser used by the autonomous worker / PDF pipeline:
+npx playwright install chromium
+
+# Validate the workspace and browser CLI:
+npm run doctor
+npm run autopilot:browser:doctor
 ```
 
-Then open your coding agent in this checkout (`codex`, `claude`, etc.) and use the opt-in `autopilot` mode. For a broad discovery refresh, run `node autopilot.mjs --deep-scan`.
-
-> The published `npx @santifer/career-ops init` package is the upstream review-first distribution. It does **not** install this fork's autonomous worker. The fork keeps upstream attribution and compatibility, but its updater and autonomous runtime track `orelkrylatiy/career-ops`.
-
-### Upstream review-first installer
+Then create/configure your user-layer files (or let the coding agent run onboarding) and start your coding agent in the repository:
 
 ```bash
-npx @santifer/career-ops init
+claude   # or codex / opencode / qwen / another AGENTS.md-compatible coding agent
 ```
 
-This installs the upstream review-first Career-Ops release.
+For the autonomous web-applier flow, ask it to run **autopilot mode**. The normal loop is documented in [modes/autopilot.md](modes/autopilot.md) and [Autonomous Worker Architecture](docs/AUTOPILOT_ARCHITECTURE.md).
 
-**On first launch, career-ops walks you through setup — your CV, profile and target roles — just by chatting. Nothing to edit by hand.**
+> The public `@santifer/career-ops` npm package belongs to the upstream project and is **not** the installer for this fork. Do not use it when you want the autonomous fork.
 
-<details>
-<summary><b>Prefer to set it up manually? (git clone)</b></summary>
-
-```bash
-git clone https://github.com/orelkrylatiy/career-ops.git
-cd career-ops && npm install
-npx playwright install chromium   # PDF + autonomous browser runtime (npm install normally does this)
-
-# 2. Check setup
-npm run doctor                     # Validates all prerequisites
-
-# 3. Configure
-cp config/profile.example.yml config/profile.yml  # Edit with your details
-cp templates/portals.example.yml portals.yml       # Customize companies
-
-# 4. Add your CV
-# Create cv.md in the project root with your CV in markdown
-
-# 5. Open your AI CLI in this directory
-claude   # or codex / opencode / qwen / agy / grok
-
-# Then ask your CLI to adapt the system to you:
-# "Change the archetypes to backend engineering roles"
-# "Translate the modes to English"
-# "Add these 5 companies to portals.yml"
-# "Update my profile with this CV I'm pasting"
-
-# 6. Start using
-# Paste a job URL or JD text to trigger auto-pipeline
-# If your CLI supports slash commands, use /career-ops (or its CLI-specific alias)
-# In Codex, ask for the same mode in plain language, e.g.:
-# "Run the career-ops scan mode"
-# "Run the career-ops pipeline mode for data/pipeline.md"
-# "Run the career-ops pdf mode for the latest evaluated role"
-# "Run the career-ops tracker mode and summarize the current statuses"
-```
-
-</details>
-
-### Global install
-
-```bash
-npm i -g @santifer/career-ops
-```
-
-This installs the `career-ops` binary globally so you can run it directly instead of via `npx`. Unlike `npx @santifer/career-ops init` (which bootstraps a project directory), the global install gives you a persistent `career-ops` command available anywhere in your terminal.
-
-**Which one should you use?**
-- `npx @santifer/career-ops init` — best for first use; creates a dedicated project folder.
-- `npm i -g @santifer/career-ops` — best once you have a project folder and want to run career-ops commands directly.
-
-> **The system is designed to be customized by your AI coding CLI itself.** Modes, archetypes, scoring weights, negotiation scripts -- just ask it to change them. It reads the same files it uses, so it knows exactly what to edit.
-
-See [docs/SETUP.md](docs/SETUP.md) for the full setup guide, [docs/RUNNING_ON_A_BUDGET.md](docs/RUNNING_ON_A_BUDGET.md) for instructions on running career-ops cheaply using custom or local models (and [docs/FREE_TIER.md](docs/FREE_TIER.md) for running it at zero cost on Antigravity CLI's free tier), [docs/AUTOMATION.md](docs/AUTOMATION.md) for scheduling recurring scans and a zero-token triage-to-shortlist recipe, [docs/APPLY_AUTOFILL.md](docs/APPLY_AUTOFILL.md) for details on the ATS auto-fill flow, [docs/LINKEDIN_JOIN.md](docs/LINKEDIN_JOIN.md) for cross-referencing a LinkedIn connections export against the companies in your funnel, and [docs/FAQ.md](docs/FAQ.md) for answers to common setup questions, including [how story provenance prevents invented numbers](docs/FAQ.md#why-does-career-ops-refuse-to-use-a-number-from-my-story-bank). Design principles live in [ARCHITECTURE.md](ARCHITECTURE.md); runtime flows in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Antigravity CLI Integration
 
