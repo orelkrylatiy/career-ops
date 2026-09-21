@@ -51,6 +51,8 @@ const SUCCESS_TEXT_RE = [
   /thanks for applying/i,
   /application (?:has been )?(?:received|submitted)/i,
   /successfully submitted/i,
+  /sent successfully/i,
+  /erfolgreich gesendet/i,
   /we(?:'|’)ve received your application/i,
   /application complete/i,
   /спасибо.{0,60}(?:отклик|заявк)/i,
@@ -175,7 +177,14 @@ export function buildPageProbeCode(settleMs = 0) {
             return s.visibility !== 'hidden' && s.display !== 'none' && r.width > 0 && r.height > 0;
           };
           const textOf = (el) => String(el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim();
-          const controls = [...document.querySelectorAll('input, textarea, select')].filter(visible);
+          const controls = [...document.querySelectorAll('input, textarea, select')]
+            .filter(visible)
+            .filter((el) => {
+              // Newsletter/subscribe forms sharing the page are not part of the
+              // application; their required fields must not block the submit gate.
+              const f = el.closest('form');
+              return !f || !/subscribe|newsletter|подписк|рассылк/i.test(String(f.innerText || f.textContent || ''));
+            });
           const radioGroupChecked = (el) => {
             const name = el.getAttribute('name');
             if (!name) return el.checked;
@@ -288,8 +297,13 @@ export function buildPageProbeCode(settleMs = 0) {
 }
 
 function inspectPage(session, settleMs = 0) {
-  const out = runCli(session, ['run-code', buildPageProbeCode(settleMs)], { raw: true, timeout: 40_000 }).stdout;
-  const parsed = parseJsonish(out);
+  const run = () => runCli(session, ['run-code', buildPageProbeCode(settleMs)], { raw: true, timeout: 40_000 }).stdout;
+  // `run-code` intermittently returns empty output; an empty probe (no URL,
+  // no body text) is unreliable, so retry once before giving up on the shape.
+  let parsed = parseJsonish(run());
+  if ((!parsed || typeof parsed !== 'object' || (!parsed.url && !parsed.bodyText))) {
+    parsed = parseJsonish(run());
+  }
   if (!parsed || typeof parsed !== 'object') throw new Error('Playwright page probe returned non-object');
   return parsed;
 }
@@ -425,19 +439,30 @@ export function classifyApplicationEvidence({ before = {}, after = {}, network =
     && !['GET', 'HEAD', 'OPTIONS'].includes(String(r.method || '').toUpperCase())
     && r.requestLooksLikeApplication);
   const networkSuccess = candidateRequests.some((r) => r.status != null && r.status >= 200 && r.status < 400 && !r.responseLooksError);
+  // A definitive successful submit (the real application endpoint answered 2xx
+  // with a success-shaped body) outranks ambient "blocked" noise: ad frames,
+  // reCAPTCHA copy and non-interactive Cloudflare clearance pings
+  // (cdn-cgi/challenge-platform/...) are present on ordinary pages and must
+  // not downgrade a confirmed submission to `blocked`.
+  const CHALLENGE_TELEMETRY_RE = /cdn-cgi\/challenge-platform|challenge-platform\/h\//i;
+  const definitiveSubmitSuccess = candidateRequests.some((r) =>
+    r.status != null && r.status >= 200 && r.status < 300
+    && r.responseLooksSuccess
+    && !CHALLENGE_TELEMETRY_RE.test(String(r.url || '')));
+  const effectiveBlocked = blocked && !definitiveSubmitSuccess;
   const networkFailure = candidateRequests.some((r) => r.status != null && r.status >= 400);
   const formGone = Number(before.formCount || 0) > 0 && Number(after.formCount || 0) === 0;
   const urlChanged = Boolean(before.url && after.url && before.url !== after.url);
 
-  if (strongUiSuccess && !blocked && (networkSuccess || formGone || urlChanged)) {
+  if (strongUiSuccess && !effectiveBlocked && (networkSuccess || formGone || urlChanged)) {
     return {
       outcome: 'applied',
       confidence: networkSuccess ? 'high' : 'medium',
       signals: { strongUiSuccess, networkSuccess, formGone, urlChanged },
     };
   }
-  if (blocked) {
-    return { outcome: 'blocked', confidence: 'high', signals: { blocked: true, networkSuccess } };
+  if (effectiveBlocked) {
+    return { outcome: 'blocked', confidence: 'high', signals: { blocked: true, networkSuccess, definitiveSubmitSuccess } };
   }
   if (errorCount || invalid > 0) {
     return {
