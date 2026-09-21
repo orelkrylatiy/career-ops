@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 import * as yaml from 'js-yaml';
 import { getCareerOpsRoot, resolveTrackerPath } from './path-resolver.mjs';
 import { normalizeUrl } from './url-key.mjs';
-import { normalizeTextKey } from './tracker-parse.mjs';
+import { normalizeTextKey, resolveColumns } from './tracker-parse.mjs';
 import {
   openDb, addEvent, upsertJob, getJob, listJobs, reportOutcome,
   incrementDaily, normalizeUrlKey, statusCounts, recentEvents, applicationAnalytics,
@@ -121,15 +121,48 @@ function loadTitleFilter() {
   return { positive: norm(tf.positive), negative: norm(tf.negative) };
 }
 
-function loadTrackerUrlIndex() {
-  const text = readTextIfExists(TRACKER_PATH);
+const SUBMITTED_TRACKER_STATUSES = new Set([
+  'applied', 'responded', 'interview', 'offer', 'rejected', 'hired',
+]);
+
+function cleanTrackerStatus(raw) {
+  return String(raw || '')
+    .replace(/\*\*/g, '')
+    .replace(/\(?\d{4}-\d{2}-\d{2}\)?/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * URLs from tracker rows that prove an application was actually sent.
+ *
+ * Evaluated/SKIP/Discarded rows are deliberately NOT hard dedup: in the
+ * autonomous wide funnel, "we saw this job before" is not equivalent to
+ * "we already applied". When a custom URL column exists, use only that cell;
+ * legacy layouts fall back to URLs present on the submitted row (often Notes).
+ */
+export function loadTrackerUrlIndex(text = readTextIfExists(TRACKER_PATH)) {
   if (!text) return { rawSet: new Set(), keySet: new Set() };
+  const lines = String(text).replace(/\r/g, '').split('\n');
+  const colmap = resolveColumns(lines);
   const rawSet = new Set();
   const keySet = new Set();
-  for (const match of text.matchAll(/https?:\/\/[^\s|)\]'"]+/g)) {
-    rawSet.add(match[0]);
-    const key = normalizeUrl(match[0]);
-    if (key) keySet.add(key);
+
+  for (const line of lines) {
+    if (!line.trim().startsWith('|')) continue;
+    const cells = line.split('|').map((s) => s.trim());
+    const status = cleanTrackerStatus(cells[colmap.status] || '');
+    if (!SUBMITTED_TRACKER_STATUSES.has(status)) continue;
+
+    const haystack = colmap.url != null
+      ? String(cells[colmap.url] || '')
+      : line;
+    for (const match of haystack.matchAll(/https?:\/\/[^\s|)\]'"]+/g)) {
+      const raw = match[0];
+      rawSet.add(raw);
+      const key = normalizeUrl(raw);
+      if (key) keySet.add(key);
+    }
   }
   return { rawSet, keySet };
 }
@@ -349,7 +382,7 @@ export async function cmdRun(flags = {}) {
         continue;
       }
       if (inTracker) {
-        decisions.push(`DUP: URL already in applications tracker | ${label}`);
+        decisions.push(`DUP: URL already submitted in applications tracker | ${label}`);
         counts.dupTracker++;
         continue;
       }
