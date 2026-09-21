@@ -92,10 +92,10 @@ export function resolveApplicationProfile({
     // Resume routing is the strongest automatic signal because the application
     // actually used that CV. Title keywords are next; stack words are a weak
     // tie-breaker because many stacks never appear in the title.
-    const score = (resumeHit ? 1000 : 0)
+    const signalScore = (resumeHit ? 1000 : 0)
       + (titleHits.length * 100)
-      + (stackHits.length * 10)
-      + def.priority;
+      + (stackHits.length * 10);
+    const score = signalScore > 0 ? signalScore + def.priority : 0;
     return { def, score, resumeHit, titleHits, stackHits, index };
   }).sort((a, b) => b.score - a.score || a.index - b.index);
 
