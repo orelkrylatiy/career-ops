@@ -143,6 +143,15 @@ export async function sendTelegramMessage({ token, chatId, text, silent = false,
   return body?.result || null;
 }
 
+export function sanitizeTelegramError(error, token = '') {
+  let message = error instanceof Error ? error.message : String(error ?? 'unknown Telegram error');
+  if (token) message = message.split(String(token)).join('[redacted-bot-token]');
+  // Defense in depth for URL-shaped errors even if the exact token argument
+  // was transformed by an HTTP implementation before surfacing.
+  message = message.replace(/bot\d+:[A-Za-z0-9_-]+/g, 'bot[redacted-bot-token]');
+  return message.slice(0, 1000);
+}
+
 function nextRetryIso(attempts) {
   const minutes = Math.min(360, 5 * (2 ** Math.max(0, attempts)));
   return new Date(Date.now() + minutes * 60_000).toISOString();
@@ -208,7 +217,7 @@ export async function flushTelegramOutbox({
     } catch (err) {
       markNotificationFailed(
         row.id,
-        err instanceof Error ? err.message : String(err),
+        sanitizeTelegramError(err, cfg.token),
         nextRetryIso(row.attempts || 0),
         owner,
       );
