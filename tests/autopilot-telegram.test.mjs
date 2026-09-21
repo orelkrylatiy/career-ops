@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   formatTelegramApplication,
   sendTelegramMessage,
+  sanitizeTelegramError,
   telegramConfig,
   telegramPreflight,
 } from '../autopilot-telegram.mjs';
@@ -77,3 +78,12 @@ test('sendTelegramMessage posts JSON to Bot API', async () => {
   assert.equal(seen.url, 'https://api.telegram.org/botabc/sendMessage');
   assert.equal(JSON.parse(seen.opts.body).chat_id, '123');
 });
+
+test('Telegram retry errors redact bot tokens', () => {
+  const token = '123456:secret-token';
+  const error = new Error(`fetch https://api.telegram.org/bot${token}/sendMessage failed`);
+  const sanitized = sanitizeTelegramError(error, token);
+  assert.equal(sanitized.includes(token), false);
+  assert.match(sanitized, /redacted-bot-token/);
+});
+
