@@ -45,3 +45,8 @@ test('scaffolder README clearly identifies the npm package as upstream-only', ()
   assert.match(SCAFFOLDER_README, /public npm package .* upstream/is);
   assert.match(SCAFFOLDER_README, /git clone https:\/\/github\.com\/orelkrylatiy\/career-ops\.git/);
 });
+
+test('fork scaffolder enforces the same Node floor as the autonomous runtime', () => {
+  assert.equal(SCAFFOLDER_PACKAGE.engines.node, '>=20');
+  assert.match(CLI, /requires Node\.js 20\+/);
+});

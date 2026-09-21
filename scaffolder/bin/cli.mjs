@@ -11,6 +11,14 @@ import { existsSync, readdirSync } from "node:fs";
 import { join, delimiter } from "node:path";
 import { ensureSkillEntrypoints } from "./skill-entrypoints.mjs";
 
+const NODE_MAJOR = Number(process.versions.node.split(".")[0]);
+if (!Number.isInteger(NODE_MAJOR) || NODE_MAJOR < 20) {
+  console.error(
+    `\n✗ This autonomous fork requires Node.js 20+ (current ${process.version}).\n`,
+  );
+  process.exit(1);
+}
+
 const REPO = "https://github.com/orelkrylatiy/career-ops.git";
 const LATEST_RELEASE = "https://api.github.com/repos/orelkrylatiy/career-ops/releases/latest";
 const NPM = process.platform === "win32" ? "npm.cmd" : "npm";
