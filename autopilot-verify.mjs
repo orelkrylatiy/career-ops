@@ -65,7 +65,7 @@ const SUCCESS_TEXT_RE = [
 const SUCCESS_URL_RE = /\/(?:thank(?:-?you)?|success|confirmation|submitted|application[-_/]?complete|application[-_/]?success)(?:[/?#]|$)/i;
 const BLOCKED_RE = /captcha|verify you are human|are you a human|cloudflare|access denied|bot detection|robot check/i;
 const FAILURE_TEXT_RE = /submission failed|application failed|unable to submit|could not submit|something went wrong/i;
-const SUBMISSION_URL_RE = /apply|application|candidate|submission|submit|job[-_/]?application|graphql/i;
+const SUBMISSION_URL_RE = /apply|application|candidate|submission|submit|job[-_/]?application/i;
 const SUBMISSION_BODY_RE = /application|candidate|resume|cv|job(?:Id|Posting|Requisition)|firstName|lastName|email|answers?/i;
 const RESPONSE_SUCCESS_RE = /success|submitted|received|application(?:Id|_id)?/i;
 const RESPONSE_ERROR_RE = /error|invalid|required|failed|failure/i;
@@ -417,13 +417,13 @@ export function classifyApplicationEvidence({ before = {}, after = {}, network =
   const rows = Array.isArray(network.requests) ? network.requests : [];
   const candidateRequests = rows.filter((r) => r
     && !['GET', 'HEAD', 'OPTIONS'].includes(String(r.method || '').toUpperCase())
-    && (r.requestLooksLikeApplication || r.responseLooksSuccess || SUBMISSION_URL_RE.test(String(r.url || ''))));
+    && r.requestLooksLikeApplication);
   const networkSuccess = candidateRequests.some((r) => r.status != null && r.status >= 200 && r.status < 400 && !r.responseLooksError);
   const networkFailure = candidateRequests.some((r) => r.status != null && r.status >= 400);
   const formGone = Number(before.formCount || 0) > 0 && Number(after.formCount || 0) === 0;
   const urlChanged = Boolean(before.url && after.url && before.url !== after.url);
 
-  if (strongUiSuccess && !blocked) {
+  if (strongUiSuccess && !blocked && (networkSuccess || formGone || urlChanged)) {
     return {
       outcome: 'applied',
       confidence: networkSuccess ? 'high' : 'medium',

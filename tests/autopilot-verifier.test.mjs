@@ -223,3 +223,51 @@ test('generated probe checks custom ARIA-required widgets and role buttons', () 
   assert.match(source, /role="button"/);
   assert.match(source, /complete\|finish/);
 });
+
+test('new success copy alone does not confirm an application without a transition', () => {
+  const out = classifyApplicationEvidence({
+    before: {
+      url: 'https://jobs.example/apply',
+      successTextSeen: false,
+      formCount: 1,
+    },
+    after: {
+      url: 'https://jobs.example/apply',
+      successTextSeen: true,
+      formCount: 1,
+      validationErrorCount: 0,
+      nativeInvalidCount: 0,
+    },
+    network: { requests: [] },
+  });
+  assert.equal(out.outcome, 'submitted_unconfirmed');
+});
+
+test('generic successful GraphQL traffic is not treated as application submission', () => {
+  const out = classifyApplicationEvidence({
+    before: {
+      url: 'https://jobs.example/apply',
+      successTextSeen: false,
+      formCount: 1,
+    },
+    after: {
+      url: 'https://jobs.example/apply',
+      successTextSeen: false,
+      formCount: 1,
+      validationErrorCount: 0,
+      nativeInvalidCount: 0,
+    },
+    network: {
+      requests: [{
+        method: 'POST',
+        url: 'https://jobs.example/graphql',
+        status: 200,
+        requestLooksLikeApplication: false,
+        responseLooksSuccess: true,
+        responseLooksError: false,
+      }],
+    },
+  });
+  assert.equal(out.outcome, 'submitted_unconfirmed');
+  assert.equal(out.signals.networkSuccess, false);
+});
