@@ -145,7 +145,8 @@ export function checkpointCompatible(cp, opts) {
     && !opts.shuffle
     && JSON.stringify(cp.ats) === JSON.stringify(opts.ats)
     && (cp.limit ?? null) === (opts.limit === Infinity ? null : opts.limit)
-    && cp.includeUndated === opts.includeUndated;
+    && cp.includeUndated === opts.includeUndated
+    && Boolean(cp.wide) === Boolean(opts.wide);
 }
 
 // Never throws: this runs from parallelEach's `finally`, so an escaping error
@@ -286,7 +287,7 @@ export const SOURCES = {
 const KNOWN_FLAGS = [
   '--since', '--limit', '--ats', '--seeds', '--dry-run', '--liveness',
   '--verbose', '--md-out', '--json', '--include-undated', '--include-blacklisted',
-  '--shuffle', '--resume', '--help', '-h',
+  '--shuffle', '--resume', '--wide', '--help', '-h',
 ];
 
 // Flags that consume the next argv token as a value (space-separated form —
@@ -304,6 +305,7 @@ const USAGE = `Usage:
   node scan-ats-full.mjs --verbose            # log per-board fetch failures
   node scan-ats-full.mjs --md-out <dir>       # also write a dated markdown digest to <dir>
   node scan-ats-full.mjs --resume             # continue an interrupted sweep from its checkpoint
+  node scan-ats-full.mjs --wide               # bypass title/location/content preferences
   node scan-ats-full.mjs --help               # print this usage block and exit`;
 
 function parseArgs(argv) {
@@ -375,6 +377,7 @@ function parseArgs(argv) {
     includeBlacklisted: args.includes('--include-blacklisted'),
     shuffle: args.includes('--shuffle'),
     resume: args.includes('--resume'),
+    wide: args.includes('--wide'),
   };
 }
 
@@ -734,16 +737,19 @@ async function main() {
   }
   const config = yaml.load(readFileSync(PORTALS_PATH, 'utf-8'));
   const fullTitleFilterConfig = resolveTitleFilterConfig(config);
-  // title_filter_overrides is independent of title_filter_full: it broadens
-  // the net for specific companies on top of whichever title filter config
-  // (title_filter or title_filter_full) this run is already using.
-  const titleFilterOverrides = buildTitleFilterOverrides(config?.title_filter_overrides);
-  const titleFilter = buildTitleFilterWithOverrides(fullTitleFilterConfig, titleFilterOverrides);
-  const locationFilter = buildLocationFilter(config?.location_filter);
-  // Same content_filter (incl. by_title_keyword scoping) scan.mjs applies —
-  // see #1846. Built once here from the same portals.yml config.
-  const contentFilter = buildContentFilter(config?.content_filter);
-  if (!fullTitleFilterConfig?.positive?.length) {
+  // --wide is the autonomous reverse-discovery lane: the directory sweep
+  // should enumerate jobs first and rank them later, rather than deleting weak
+  // title/location/content matches before the agent ever sees them.
+  const pass = () => true;
+  const titleFilterOverrides = opts.wide
+    ? new Map()
+    : buildTitleFilterOverrides(config?.title_filter_overrides);
+  const titleFilter = opts.wide
+    ? pass
+    : buildTitleFilterWithOverrides(fullTitleFilterConfig, titleFilterOverrides);
+  const locationFilter = opts.wide ? pass : buildLocationFilter(config?.location_filter);
+  const contentFilter = opts.wide ? pass : buildContentFilter(config?.content_filter);
+  if (!opts.wide && !fullTitleFilterConfig?.positive?.length) {
     const key = config?.title_filter_full ? 'title_filter_full' : 'title_filter';
     console.error(`⚠️  portals.yml has no ${key}.positive — every fresh posting on every board will match. Consider adding keywords.`);
   }
@@ -789,7 +795,7 @@ async function main() {
     sinceMs: cutoff,
     includeUndated: opts.includeUndated,
     syntheticEntries: true,
-    locationHints: config?.location_filter,
+    locationHints: opts.wide ? null : config?.location_filter,
   };
   // The LOCAL calendar day, not the UTC one. This value lands in
   // scan-history.tsv's first_seen, which shouldDedupScanHistoryRow measures the
@@ -848,6 +854,7 @@ async function main() {
     ats: opts.ats,
     limit: opts.limit === Infinity ? null : opts.limit,
     includeUndated: opts.includeUndated,
+    wide: Boolean(opts.wide),
     completedSources: [...completedSources],
     offers: newOffers,
     savedAt: new Date().toISOString(),

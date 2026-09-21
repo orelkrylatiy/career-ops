@@ -45,6 +45,10 @@ const TRACKER_PATH = resolveTrackerPath(DATA_ROOT);
 const BLACKLIST_PATH = path.join(DATA_ROOT, 'data', 'blacklist.md');
 export const QUEUE_PATH = path.join(DATA_ROOT, 'data', 'autopilot-queue.md');
 const SCAN_PATH = path.join(CODE_ROOT, 'scan.mjs');
+const ATS_FULL_PATH = path.join(CODE_ROOT, 'scan-ats-full.mjs');
+const SOURCE_REGISTRY_PATH = path.join(CODE_ROOT, 'source-registry.mjs');
+const REGIONAL_PORTALS_PATH = process.env.CAREER_OPS_EXPANDED_PORTALS
+  || path.join(DATA_ROOT, 'data', 'portals-regional.generated.yml');
 
 const OUTCOMES = [
   'applied', 'submitted_unconfirmed', 'validation_failed',
@@ -191,29 +195,68 @@ export function regenerateQueue() {
   return queued.length;
 }
 
-function runScanStep() {
-  const res = spawnSync(process.execPath, [SCAN_PATH, '--wide'], {
+function runNodeDiscoveryStep(label, script, args, extraEnv = {}) {
+  const res = spawnSync(process.execPath, [script, ...args], {
     cwd: CODE_ROOT,
     stdio: 'inherit',
     shell: false,
+    env: { ...process.env, ...extraEnv },
   });
   if (res.error) {
-    addEvent('scan', `failed to spawn scan.mjs: ${res.error.message}`, null, 'error');
-    console.error(`autopilot: scan spawn failed (${res.error.message}); using existing pipeline`);
-    return 'spawn-failed';
+    addEvent('scan', `${label}: spawn failed: ${res.error.message}`, null, 'error');
+    return `${label}:spawn-failed`;
   }
   if (res.status !== 0) {
-    addEvent(
-      'scan',
-      `scan.mjs --wide exited with status ${res.status}; using existing pipeline`,
-      null,
-      'warn',
-    );
-    console.error(`autopilot: scan.mjs --wide exited ${res.status}; using existing pipeline`);
-    return 'failed';
+    addEvent('scan', `${label}: exited ${res.status}; continuing`, null, 'warn');
+    return `${label}:failed`;
   }
-  addEvent('scan', 'scan.mjs --wide completed');
-  return 'ok';
+  addEvent('scan', `${label}: completed`);
+  return `${label}:ok`;
+}
+
+function runScanStep({ deep = false, refreshRegistry = false } = {}) {
+  const results = [
+    runNodeDiscoveryStep('configured', SCAN_PATH, ['--wide']),
+  ];
+
+  if (!deep) return results.join(' ');
+
+  // Regional registry export merges the user's portals with verified catalog
+  // boards/companies. Full refresh is explicit because it can perform a much
+  // larger discovery/verification crawl.
+  const registryCommand = refreshRegistry ? 'full' : 'export';
+  const registry = runNodeDiscoveryStep(
+    `registry-${registryCommand}`,
+    SOURCE_REGISTRY_PATH,
+    [registryCommand],
+  );
+  results.push(registry);
+
+  if (registry.endsWith(':ok')) {
+    results.push(runNodeDiscoveryStep(
+      'regional',
+      SCAN_PATH,
+      ['--wide'],
+      { CAREER_OPS_PORTALS: REGIONAL_PORTALS_PATH },
+    ));
+  }
+
+  // Broad reverse scan over public ATS directories plus the maintained VC seed
+  // sets. This is deliberately a deep-scan lane rather than every refresh:
+  // walking thousands of boards is useful, but needlessly expensive hourly.
+  results.push(runNodeDiscoveryStep(
+    'ats-full',
+    ATS_FULL_PATH,
+    [
+      '--wide',
+      '--since', '7',
+      '--include-undated',
+      '--ats', 'greenhouse,lever,ashby,workday,icims',
+      '--seeds', 'yc,a16z',
+    ],
+  ));
+
+  return results.join(' ');
 }
 
 export async function cmdRun(flags = {}) {
@@ -229,12 +272,29 @@ export async function cmdRun(flags = {}) {
   let scanResult = 'skipped';
 
   if (!flags.dryRun) {
-    addEvent('run', 'start', { noScan: !!flags.noScan, policy: 'wide-funnel' });
-    auditLog('run_start', { no_scan: !!flags.noScan, policy: 'wide-funnel' });
+    addEvent('run', 'start', {
+      noScan: !!flags.noScan,
+      deepScan: !!flags.deepScan,
+      refreshRegistry: !!flags.refreshRegistry,
+      policy: 'wide-funnel',
+    });
+    auditLog('run_start', {
+      no_scan: !!flags.noScan,
+      deep_scan: !!flags.deepScan,
+      refresh_registry: !!flags.refreshRegistry,
+      policy: 'wide-funnel',
+    });
   }
 
   try {
-    if (!flags.noScan) scanResult = runScanStep();
+    if (!flags.noScan && !flags.dryRun) {
+      scanResult = runScanStep({
+        deep: !!flags.deepScan,
+        refreshRegistry: !!flags.refreshRegistry,
+      });
+    } else if (flags.dryRun) {
+      scanResult = 'dry-run:no-network-scan';
+    }
 
     const entries = parsePipelinePending(readTextIfExists(PIPELINE_PATH));
     counts.pending = entries.length;
@@ -259,15 +319,33 @@ export async function cmdRun(flags = {}) {
         continue;
       }
 
-      const seenInDb = db ? Boolean(getJob(urlKey)) : false;
+      const existingJob = db ? getJob(urlKey) : null;
       const inTracker = tracker.rawSet.has(entry.url) || tracker.keySet.has(urlKey);
       const blacklistedCompany = blacklist.get(normalizeTextKey(entry.company || '')) || null;
       const host = hostOf(entry.url);
       const blacklistedSource = excludedHosts.find((t) => hostMatchesToken(host, t));
 
-      if (seenInDb) {
-        decisions.push(`DUP: already in autopilot DB | ${label}`);
+      if (existingJob) {
         counts.alreadyKnown++;
+        if (!flags.dryRun && existingJob.status === 'queued') {
+          const rank = scoreJob(entry, { titleFilter, profile });
+          upsertJob({
+            urlKey,
+            url: entry.url,
+            source: hostOf(entry.url),
+            company: entry.company,
+            title: entry.title,
+            location: entry.location,
+            postedAt: entry.posted || null,
+            note: entry.note || null,
+            priority: rank.priority,
+            rankReasons: rank.reasons,
+            status: 'queued',
+          });
+          decisions.push(`REFRESHED P${rank.priority}: existing queued job | ${label}`);
+        } else {
+          decisions.push(`DUP: already in autopilot DB (${existingJob.status}) | ${label}`);
+        }
         continue;
       }
       if (inTracker) {
@@ -695,7 +773,7 @@ function flagValue(argv, name) {
 
 function usage() {
   console.log(`Usage:
-  node autopilot.mjs [--no-scan] [--dry-run]
+  node autopilot.mjs [--no-scan] [--deep-scan] [--refresh-registry] [--dry-run]
   node autopilot.mjs status
   node autopilot.mjs logs [--limit 50]
   node autopilot.mjs analytics
@@ -788,14 +866,22 @@ async function main() {
     return;
   }
 
-  const known = new Set(['--no-scan', '--dry-run']);
+  const known = new Set(['--no-scan', '--deep-scan', '--refresh-registry', '--dry-run']);
   const invalid = argv.filter((a) => !known.has(a));
   if (invalid.length) {
     usage();
     throw new Error(`unknown argument(s): ${invalid.join(' ')}`);
   }
+  if (argv.includes('--refresh-registry') && !argv.includes('--deep-scan')) {
+    throw new Error('--refresh-registry requires --deep-scan');
+  }
+  if (argv.includes('--no-scan') && argv.includes('--deep-scan')) {
+    throw new Error('--no-scan cannot be combined with --deep-scan');
+  }
   await cmdRun({
     noScan: argv.includes('--no-scan'),
+    deepScan: argv.includes('--deep-scan'),
+    refreshRegistry: argv.includes('--refresh-registry'),
     dryRun: argv.includes('--dry-run'),
   });
 }

@@ -3020,6 +3020,14 @@ async function main() {
         continue;
       }
 
+      // The autonomous web worker intentionally has no Telegram transport.
+      // Keep the provider available to legacy/default review-first scans, but
+      // never invoke it from --wide autonomous discovery.
+      if (wide && resolved.provider?.id === 'telegram-channel') {
+        skippedCount++;
+        continue;
+      }
+
       targets.push({ ...entry, _provider: resolved.provider, _isBoard: isBoard });
       if (isBoard) boardCount++;
     }
@@ -3128,7 +3136,7 @@ async function main() {
       ...makeHttpCtx(),
       sinceMs: earlyStopSinceMs,
       includeUndated: true,
-      locationHints: config.location_filter,
+      locationHints: wide ? null : config.location_filter,
     };
     let sourceName = provider.id === 'local-parser' ? 'local-parser' : `${provider.id}-api`;
     try {

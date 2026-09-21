@@ -2,7 +2,7 @@
 
 This fork-specific mode is an autonomous web job applier. Its job is to keep the funnel wide, claim work from SQLite, and complete real application forms with a coding agent driving **Playwright CLI directly**.
 
-There is no Telegram/SMS workflow and no custom browser-step JSON protocol.
+There is no Telegram/SMS workflow, no Telegram discovery transport in autonomous `--wide` scans, and no custom browser-step JSON protocol.
 
 ## Untrusted External Content
 
@@ -25,8 +25,11 @@ Title, stack, seniority, location, salary, remote/onsite preference, sponsorship
 ## One autonomous run
 
 1. Run `node autopilot.mjs preflight`.
-2. Run `node autopilot.mjs`.
-   - It calls `scan.mjs --wide`.
+2. Run `node autopilot.mjs` for the normal configured/API refresh.
+   - At least once per day, use `node autopilot.mjs --deep-scan` to add public ATS-directory + VC-seed + regional catalog discovery.
+   - Use `node autopilot.mjs --deep-scan --refresh-registry` periodically when you want to refresh regional company/source resolution as well.
+   - Normal refresh calls `scan.mjs --wide`.
+   - Deep refresh also walks public Greenhouse/Lever/Ashby/Workday/iCIMS directories, YC/a16z seed portfolios, and the regional source registry.
    - Structured providers/APIs/RSS/HTML collect postings.
    - Jobs are deduplicated, softly ranked, and queued in SQLite.
 3. Open one named persistent Playwright CLI browser session.
