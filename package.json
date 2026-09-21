@@ -83,6 +83,7 @@
     "autopilot:resume": "node autopilot-resume.mjs",
     "autopilot:logs": "node autopilot.mjs logs",
     "autopilot:analytics": "node autopilot.mjs analytics",
+    "autopilot:notify": "node autopilot.mjs notify",
     "autopilot:next": "node autopilot.mjs next --json",
     "autopilot:verify": "node autopilot-verify.mjs",
     "autopilot:browser:doctor": "node autopilot-verify.mjs doctor",
