@@ -5,10 +5,11 @@
 // between runs: every job it has ever queued (jobs), every application attempt
 // it was told about (applications), LLM spend accounting for future agent steps
 // (llm_calls), contacts surfaced along the way (contacts), an append-only
-// event log (events), and the per-day send counter the daily cap enforces
-// (daily_state).
+// event log (events), and a per-day confirmed-application telemetry counter
+// (daily_state). There is no autonomous daily send cap.
 //
-// Job status lifecycle: queued -> test_filled | applied | failed | captcha | skipped
+// Job lifecycle: queued -> claimed -> applied | submitted_unconfirmed |
+// validation_failed | failed | captcha | skipped
 //
 // url_key reuses url-key.mjs's normalizeUrl — the repo's ONE canonical posting
 // URL key (lowercased host, tracking params stripped, fragment and trailing
@@ -385,9 +386,9 @@ export function renewClaim(urlKey, owner = 'worker-0', leaseMinutes = 60) {
  * atomically.
  *
  * @param {string} urlKey
- * @param {'applied'|'test_filled'|'failed'|'captcha'|'skipped'} outcome
+ * @param {'applied'|'submitted_unconfirmed'|'validation_failed'|'failed'|'captcha'|'skipped'} outcome
  * @param {string|null} [note]  - free-text note, stored on the job row
- * @param {string|null} [channel] - 'browser' | 'ats_api' | 'email'
+ * @param {string|null} [channel] - application transport label; autonomous CLI currently permits browser only
  * @returns {boolean} true when a jobs row was actually updated
  */
 export function reportOutcome(urlKey, outcome, note = null, channel = null, metadata = {}) {
@@ -480,9 +481,9 @@ export function applicationAnalytics() {
 /**
  * Bump (creating if needed) the per-day applications counter and return the row.
  *
- * The date key is computed in LOCAL time, not SQL date('now') (UTC): a daily
- * send cap is a local-day concept — "100 per day" for a user in Yerevan must
- * not reset at 04:00 local (midnight UTC) mid-window.
+ * The date key is computed in LOCAL time, not SQL date('now') (UTC), because
+ * this is user-facing daily telemetry and should roll over at the user's local
+ * calendar boundary. It is not an application cap.
  *
  * @param {string} date - 'YYYY-MM-DD'
  * @param {number} [delta=1]
@@ -499,7 +500,7 @@ export function incrementDaily(date, delta = 1) {
 /** Canonical lifecycle statuses, in lifecycle order (for zero-filled reports). */
 export const JOB_STATUSES = [
   'queued', 'claimed', 'applied', 'submitted_unconfirmed',
-  'validation_failed', 'failed', 'captcha', 'skipped', 'test_filled',
+  'validation_failed', 'failed', 'captcha', 'skipped',
 ];
 
 /** Per-status job counts, zero-filled over JOB_STATUSES plus any stray value. */

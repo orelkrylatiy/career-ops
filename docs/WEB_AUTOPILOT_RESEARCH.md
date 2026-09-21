@@ -1,6 +1,6 @@
 # Web Autopilot Research and Target Architecture
 
-Status: research / target architecture  
+Status: implemented baseline + continuing source expansion  
 Verified: 2026-09-21  
 Scope: autonomous web job discovery and applications. Telegram/SMS/calendar/notification workflows are intentionally out of scope.
 
@@ -667,19 +667,21 @@ Greenhouse, Lever, Ashby, SmartRecruiters, Personio and similar vendors expose s
 
 Those APIs are useful documentation for understanding form structure, but they are not generic applicant credentials.
 
-Therefore:
+For the implemented autonomous worker, these APIs remain **discovery and form-understanding inputs only**. Production submission is intentionally singular:
 
 ~~~text
-candidate-owned API available?
-    yes -> API submit
-    no  -> browser submit
+posting discovered by API/feed/page
+        -> coding agent
+        -> Playwright CLI
+        -> real candidate web form
+        -> deterministic submit evidence
 ~~~
 
-The reporting field ats_api should only be used when a real candidate-side adapter actually made the submission.
+There is no `ats_api` reporting bypass in v1. A future direct-submit adapter would need its own authenticated applicant-side contract and deterministic receipt before it could become another submission channel.
 
 ## 13. Pre-submit validation
 
-Replace the global "new form type must be fill-only" policy with a universal validator.
+The retired first-run/fill-only gate is replaced by universal pre-submit and post-submit verification on every browser application.
 
 Before pressing Submit, verify as much as the browser surface exposes:
 
@@ -697,7 +699,7 @@ After Submit:
 - detect validation bounce and continue fixing if possible;
 - record actual failure reason if blocked.
 
-A new ATS should not automatically force test_filled if the form can be validated in the same real run. The correctness gate is observed form state, not whether a hardcoded site whitelist already exists.
+A new ATS is handled in the same real run when its form can be completed and verified. Correctness is based on observed form/network state, not a hardcoded site whitelist.
 
 ## 14. Scheduling model
 
@@ -772,86 +774,42 @@ Useful analytics:
 
 Do not log form secrets/session cookies. Logs should contain field names/state, not sensitive typed values.
 
-## 16. What to remove or deprecate from the current fork
+## 16. Applied refactor
 
-### Remove from core scope
+The autonomous web core now has these boundaries:
 
-- Telegram digest/notifications;
-- SMS;
-- calendar/messaging workflow;
-- email application channel unless a real job source specifically requires email;
-- Telegram job-channel discovery by default if the goal is a web-only core.
+- no Telegram/SMS/calendar/notification workflow;
+- no Telegram channel transport in autonomous `--wide` discovery;
+- no email or ATS-API application-report bypass;
+- title/negative-title/location/remote/salary/visa/content preferences are ranking signals rather than queue admission gates;
+- SQLite priority queue is authoritative; pipeline markdown is an ingestion/view surface;
+- one active lease per worker owner;
+- old `test_filled` rows migrate back to `queued`;
+- the retired browser-step and notification scripts are inert upgrade tombstones so older installations cannot keep executing stale implementations;
+- Playwright CLI is the only v1 application browser engine;
+- per-application `data/steps` recipes are not part of normal operation;
+- deterministic evidence, not the LLM's self-report, controls `applied`.
 
-notify-tg.mjs can be deleted or moved to an optional integration later. autopilot.mjs should no longer import/send Telegram or expose --no-tg as a core behavior.
+Reusable ATS/browser knowledge should become deliberate tested code or agent guidance, never ad-hoc scripts created during each application.
 
-### Refactor
+## 17. Implementation status and next expansion
 
-- title gate -> ranking signal;
-- negative title keywords -> ranking penalty unless explicitly configured as blacklist;
-- remote_only / blocked location -> ranking signal by default;
-- queue oldest-first -> priority/freshness-aware claim order;
-- pipeline.md -> generated view, not primary state;
-- test_filled-first policy -> universal pre-submit validation.
+Implemented baseline:
 
-### Deprecate after replacement is proven
+- wide-funnel normalized SQLite queue with soft ranking and atomic leases;
+- configured + regional + public ATS-directory/VC-seed deep discovery;
+- Playwright CLI named persistent browser sessions;
+- LLM-first resume choice with tailored/prepared fallback;
+- deterministic pre/post-submit evidence and claim-safe finalization;
+- browser-only autonomous submission channel;
+- cross-platform CI and legacy DB/update migration coverage.
 
-- autopilot-browser.mjs step JSON DSL;
-- generated data/steps recipes as normal operational behavior.
+Next source work should expand **discovery coverage**, not introduce an unverified submit shortcut:
 
-A reusable browser/ATS insight can still become committed code, but only deliberately with tests, not as a side effect of every application attempt.
-
-## 17. Implementation order
-
-### P0 - research/documentation
-
-This document. No behavioral change.
-
-### P1 - wide-funnel queue
-
-- make normalized DB authoritative;
-- remove mandatory positive-title gate;
-- change title/location/remote rules to ranking;
-- priority queue + atomic claim;
-- keep duplicate/already-applied/dead/blacklist hard stops;
-- remove Telegram from autopilot core.
-
-### P2 - browser execution replacement
-
-- remove the custom `autopilot-browser.mjs` step DSL;
-- integrate Playwright CLI as the single browser path;
-- configure a named dedicated persistent profile/session;
-- use a generic agent prompt + structured result;
-- add deterministic pre/post-submit evidence verification;
-- require verified evidence before a browser attempt can be recorded as `applied`.
-
-### P3 - Russia high-value integrations
-
-- HH OAuth: search + suitable resume + direct application + browser handoff for tests/direct URLs;
-- SuperJob credentials/OAuth: vacancy search + send_cv_on_vacancy;
-- add RBC500 company seed;
-- improve CNews500/RBC500 career-page/ATS resolution;
-- make Работа России incremental.
-
-### P4 - source expansion/control plane
-
-- enable more of the already-existing 93 providers through curated source catalog entries;
-- ATS reverse-sweep refresh jobs;
-- source-specific cadence metadata;
-- health/backoff.
-
-### P5 - LLM resume strategy
-
-- expose prepared resume manifest to the application agent;
-- LLM-first selection;
-- tailored generation for chosen jobs;
-- deterministic autopilot-resume fallback.
-
-### P6 - scheduler/parallelism
-
-- cron/systemd/Task Scheduler;
-- scanner and application worker as separate jobs;
-- database leasing;
-- multiple workers only after one-worker reliability is measured.
+- deepen HeadHunter, SuperJob, Работа России and other regional/global feeds where their public/applicant APIs permit search;
+- add/curate more of the existing provider catalog into the registry;
+- improve career-page/ATS resolution and source-specific health/backoff;
+- measure production browser failure classes before considering a second browser engine.
 
 ## 18. Concrete target after refactor
 
