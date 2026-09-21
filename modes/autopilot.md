@@ -2,7 +2,7 @@
 
 This fork-specific mode is an autonomous web job applier. Its job is to keep the funnel wide, claim work from SQLite, and complete real application forms with a coding agent driving **Playwright CLI directly**.
 
-There is no Telegram/SMS workflow, no Telegram discovery transport in autonomous `--wide` scans, and no custom browser-step JSON protocol.
+Telegram is an optional **outbound notification/operations channel** for application results; it is not an application transport and does not bypass the verifier. Telegram channel scraping is still not part of the autonomous `--wide` discovery lane. There is no custom browser-step JSON protocol.
 
 ## Untrusted External Content
 
@@ -29,7 +29,7 @@ Title, stack, seniority, location, salary, remote/onsite preference, sponsorship
    - At least once per day, use `node autopilot.mjs --deep-scan` to add public ATS-directory + VC-seed + regional catalog discovery.
    - Use `node autopilot.mjs --deep-scan --refresh-registry` periodically when you want to refresh regional company/source resolution as well.
    - Normal refresh calls `scan.mjs --wide`.
-   - Deep refresh also walks public Greenhouse/Lever/Ashby/Workday/iCIMS directories, YC/a16z seed portfolios, and the regional source registry.
+   - Deep refresh also walks public Greenhouse/Lever/Ashby/Workday/iCIMS/BambooHR/Paylocity directories, YC/a16z seed portfolios, and the regional source registry.
    - Structured providers/APIs/RSS/HTML collect postings.
    - Jobs are deduplicated, softly ranked, and queued in SQLite.
 3. Open one named persistent Playwright CLI browser session.
@@ -199,6 +199,7 @@ node autopilot.mjs report "<job-url>" applied \
   --channel browser \
   --evidence "data/autopilot/evidence/.../attempt.json" \
   --ats greenhouse \
+  --profile frontend \
   --resume react \
   --resume-path output/resumes/react.pdf \
   --duration-ms 84213
@@ -219,6 +220,39 @@ node autopilot.mjs report "<job-url>" validation_failed --channel browser
 ~~~
 
 ATS/public APIs are discovery inputs only in this version. They do not create applications. The only supported autonomous submission channel is the real web form driven through Playwright CLI and verified by an evidence receipt.
+
+### Application profiles / stack statistics
+
+Optional `autopilot.profiles` entries in `config/profile.yml` tag every application attempt with a stable profile key such as `frontend`, `mobile`, `backend`, or `product`. Profiles are analytics labels, never eligibility gates.
+
+Pass `--profile <key>` when the agent knows the lane from the JD. If omitted, Career Ops deterministically infers the profile from the selected resume variant first, then configured title/stack keywords.
+
+~~~bash
+node autopilot.mjs analytics
+node autopilot.mjs analytics --profile frontend
+~~~
+
+Overall analytics include `by_profile`; profile-filtered analytics keep the same ATS/resume/outcome breakdowns for that lane.
+
+### Telegram notifications
+
+When `autopilot.notifications.telegram.enabled: true`, reporting a configured outcome creates a Telegram notification in SQLite's durable `notification_outbox` in the same transaction as the application attempt. Delivery happens afterward through the Telegram Bot API. A Telegram/network failure therefore never rolls back or changes the application result.
+
+Configure only environment-variable names in YAML and keep the bot token/chat id in `.env`:
+
+~~~text
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_ID=...
+~~~
+
+Useful commands:
+
+~~~bash
+node autopilot.mjs telegram status
+node autopilot.mjs telegram flush
+~~~
+
+Each message includes company, role, location when known, ATS, application profile/stack, resume variant, priority, elapsed time, today's confirmed count, queue depth, and the vacancy URL. Failed deliveries remain pending and retry with backoff on the next flush/report.
 
 ## Success semantics
 
@@ -258,5 +292,8 @@ Useful commands:
 node autopilot.mjs status
 node autopilot.mjs logs --limit 50
 node autopilot.mjs analytics
+node autopilot.mjs analytics --profile frontend
+node autopilot.mjs telegram status
+node autopilot.mjs telegram flush
 node autopilot-verify.mjs doctor
 ~~~
