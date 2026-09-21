@@ -54,7 +54,7 @@ const OUTCOMES = [
   'applied', 'submitted_unconfirmed', 'validation_failed',
   'failed', 'captcha', 'skipped',
 ];
-const CHANNELS = ['browser', 'ats_api'];
+export const APPLICATION_CHANNELS = ['browser'];
 let dryRunActive = false;
 
 function localDateStr(d = new Date()) {
@@ -649,9 +649,9 @@ export async function cmdReport(target, outcome, note, channel, metadata = {}) {
       `invalid outcome "${outcome}" — must be one of: ${OUTCOMES.join(' | ')}`,
     );
   }
-  if (channel != null && !CHANNELS.includes(channel)) {
+  if (channel != null && !APPLICATION_CHANNELS.includes(channel)) {
     throw new Error(
-      `invalid channel "${channel}" — must be browser | ats_api or omitted`,
+      `invalid channel "${channel}" — autonomous submissions currently support browser only`,
     );
   }
   if (!target) throw new Error('report needs a job URL or url_key');
@@ -686,7 +686,7 @@ export async function cmdReport(target, outcome, note, channel, metadata = {}) {
   // A browser click is never proof of submission. Confirmed and ambiguous
   // browser submissions must be bound to a deterministic evidence receipt.
   let evidence = null;
-  if (channel !== 'ats_api' && ['applied', 'submitted_unconfirmed'].includes(outcome)) {
+  if (['applied', 'submitted_unconfirmed'].includes(outcome)) {
     if (!metadata.evidencePath) {
       throw new Error(
         `browser outcome "${outcome}" requires --evidence from autopilot-verify.mjs finish`,
@@ -783,7 +783,7 @@ function usage() {
   node autopilot.mjs renew "<url|url_key>" [--owner worker-0] [--lease-minutes 120]
   node autopilot.mjs release "<url|url_key>" [--owner worker-0]
   node autopilot.mjs report "<url|url_key>" <applied|submitted_unconfirmed|validation_failed|failed|captcha|skipped>
-      [--owner worker-0] [--channel browser|ats_api] [--evidence path] [--ats name]
+      [--owner worker-0] [--channel browser] [--evidence path] [--ats name]
       [--resume variant] [--resume-path path] [--duration-ms N] [--note "..."]`);
 }
 

@@ -211,7 +211,7 @@ If validation cannot be repaired:
 node autopilot.mjs report "<job-url>" validation_failed --channel browser
 ~~~
 
-Real candidate-side API adapters may use `--channel ats_api`; merely discovering a posting through an ATS API does not make the application an API submission.
+ATS/public APIs are discovery inputs only in this version. They do not create applications. The only supported autonomous submission channel is the real web form driven through Playwright CLI and verified by an evidence receipt.
 
 ## Success semantics
 

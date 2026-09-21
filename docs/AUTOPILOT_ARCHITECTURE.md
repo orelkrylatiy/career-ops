@@ -47,7 +47,7 @@ APPLICATION JOURNAL / ANALYTICS
 
 **Providers/scanners** answer: where are the jobs?
 
-They should use structured network surfaces first because one request can enumerate many postings more cheaply and reliably than interactive browsing.
+They should use structured network surfaces first because one request can enumerate many postings more cheaply and reliably than interactive browsing. These APIs are discovery-only: the current worker does not treat an ATS listing API as an application-submit API.
 
 **Autopilot state/ranking** answers: what should the worker attempt next?
 
@@ -285,3 +285,13 @@ scheduler
 ~~~
 
 Discovery and application execution can later run as separate processes; atomic leases already prepare the state layer for that split.
+
+## Submission channel
+
+The production v1 submission channel is deliberately singular:
+
+~~~text
+coding agent -> Playwright CLI -> real web form -> deterministic evidence verifier
+~~~
+
+There is no `ats_api` application-report bypass. Greenhouse, Lever, Ashby, Workday, iCIMS and other structured APIs remain valuable for discovery, but an offer found through an API is still applied through its real web application surface.
