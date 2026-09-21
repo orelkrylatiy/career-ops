@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS applications (
   channel TEXT,
   ats TEXT,
   resume_variant TEXT,
+  profile_key TEXT,
   resume_path TEXT,
   duration_ms INTEGER,
   outcome TEXT,
@@ -99,9 +100,24 @@ CREATE TABLE IF NOT EXISTS daily_state (
   applications_sent INTEGER DEFAULT 0,
   notes TEXT
 );
+CREATE TABLE IF NOT EXISTS notification_outbox (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  job_url_key TEXT,
+  payload_json TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at TEXT,
+  created_at TEXT NOT NULL,
+  sent_at TEXT,
+  last_error TEXT
+);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 CREATE INDEX IF NOT EXISTS idx_applications_job ON applications(job_url_key);
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
+CREATE INDEX IF NOT EXISTS idx_notification_outbox_pending
+  ON notification_outbox(channel, status, next_attempt_at, id);
 `;
 
 let dbHandle = null;
@@ -133,6 +149,7 @@ export function openDb() {
   };
   addApplicationColumn('ats', 'TEXT');
   addApplicationColumn('resume_variant', 'TEXT');
+  addApplicationColumn('profile_key', 'TEXT');
   addApplicationColumn('resume_path', 'TEXT');
   addApplicationColumn('duration_ms', 'INTEGER');
   addApplicationColumn('details_json', 'TEXT');
@@ -424,6 +441,7 @@ export function reportOutcome(urlKey, outcome, note = null, channel = null, meta
   const now = new Date().toISOString();
   const ats = metadata?.ats ? String(metadata.ats).slice(0, 120) : null;
   const resumeVariant = metadata?.resumeVariant ? String(metadata.resumeVariant).slice(0, 120) : null;
+  const profileKey = metadata?.profileKey ? String(metadata.profileKey).slice(0, 120) : null;
   const resumePath = metadata?.resumePath ? String(metadata.resumePath).slice(0, 500) : null;
   const durationMs = Number.isFinite(Number(metadata?.durationMs)) && Number(metadata.durationMs) >= 0
     ? Math.round(Number(metadata.durationMs))
@@ -449,13 +467,14 @@ export function reportOutcome(urlKey, outcome, note = null, channel = null, meta
     if (res.changes === 0) return false;
     db.prepare(`
       INSERT INTO applications
-        (job_url_key, channel, ats, resume_variant, resume_path, duration_ms, outcome, error, details_json, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (job_url_key, channel, ats, resume_variant, profile_key, resume_path, duration_ms, outcome, error, details_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       urlKey,
       channel ?? null,
       ats,
       resumeVariant,
+      profileKey,
       resumePath,
       durationMs,
       outcome,
@@ -463,6 +482,21 @@ export function reportOutcome(urlKey, outcome, note = null, channel = null, meta
       details,
       now,
     );
+
+    const notification = metadata?.notification;
+    if (notification && notification.channel && notification.eventType && notification.payload) {
+      db.prepare(`
+        INSERT INTO notification_outbox
+          (channel, event_type, job_url_key, payload_json, status, attempts, next_attempt_at, created_at)
+        VALUES (?, ?, ?, ?, 'pending', 0, NULL, ?)
+      `).run(
+        String(notification.channel),
+        String(notification.eventType),
+        urlKey,
+        JSON.stringify(notification.payload),
+        now,
+      );
+    }
     return res.changes > 0;
   });
   return run();
@@ -477,22 +511,42 @@ export function recentEvents(limit = 50) {
 }
 
 /** Aggregate application-attempt telemetry without exposing form values. */
-export function applicationAnalytics() {
+export function applicationAnalytics(profileKey = null) {
   const db = openDb();
+  const where = profileKey ? ' WHERE profile_key = ?' : '';
+  const args = profileKey ? [String(profileKey)] : [];
   const grouped = (column) => db.prepare(
     `SELECT COALESCE(NULLIF(${column}, ''), '(unknown)') AS name, COUNT(*) AS n
-     FROM applications GROUP BY name ORDER BY n DESC, name ASC`,
-  ).all();
-  const total = db.prepare('SELECT COUNT(*) AS n FROM applications').get().n;
-  const success = db.prepare("SELECT COUNT(*) AS n FROM applications WHERE outcome = 'applied'").get().n;
-  const unconfirmed = db.prepare("SELECT COUNT(*) AS n FROM applications WHERE outcome = 'submitted_unconfirmed'").get().n;
+     FROM applications${where}
+     GROUP BY name ORDER BY n DESC, name ASC`,
+  ).all(...args);
+  const total = db.prepare(`SELECT COUNT(*) AS n FROM applications${where}`).get(...args).n;
+  const successWhere = profileKey ? ' WHERE profile_key = ? AND outcome = ?' : ' WHERE outcome = ?';
+  const successArgs = profileKey ? [String(profileKey), 'applied'] : ['applied'];
+  const unconfirmedArgs = profileKey ? [String(profileKey), 'submitted_unconfirmed'] : ['submitted_unconfirmed'];
+  const success = db.prepare(`SELECT COUNT(*) AS n FROM applications${successWhere}`).get(...successArgs).n;
+  const unconfirmed = db.prepare(`SELECT COUNT(*) AS n FROM applications${successWhere}`).get(...unconfirmedArgs).n;
+  const errorWhere = profileKey
+    ? "WHERE profile_key = ? AND error IS NOT NULL AND TRIM(error) != ''"
+    : "WHERE error IS NOT NULL AND TRIM(error) != ''";
   const topErrors = db.prepare(
     `SELECT error AS name, COUNT(*) AS n
      FROM applications
-     WHERE error IS NOT NULL AND TRIM(error) != ''
+     ${errorWhere}
      GROUP BY error ORDER BY n DESC, error ASC LIMIT 20`,
+  ).all(...args);
+  const byProfile = db.prepare(
+    `SELECT COALESCE(NULLIF(profile_key, ''), '(unprofiled)') AS name,
+            COUNT(*) AS total,
+            SUM(CASE WHEN outcome = 'applied' THEN 1 ELSE 0 END) AS applied,
+            SUM(CASE WHEN outcome = 'submitted_unconfirmed' THEN 1 ELSE 0 END) AS submitted_unconfirmed,
+            ROUND(AVG(CASE WHEN duration_ms IS NOT NULL THEN duration_ms END)) AS avg_duration_ms
+     FROM applications
+     GROUP BY name
+     ORDER BY applied DESC, total DESC, name ASC`,
   ).all();
   return {
+    profile: profileKey || null,
     total,
     applied: success,
     submitted_unconfirmed: unconfirmed,
@@ -501,8 +555,63 @@ export function applicationAnalytics() {
     by_channel: grouped('channel'),
     by_ats: grouped('ats'),
     by_resume: grouped('resume_variant'),
+    by_profile: byProfile,
     top_errors: topErrors,
   };
+}
+
+/** Confirmed application count for a local YYYY-MM-DD key. */
+export function dailyCount(date) {
+  return openDb()
+    .prepare('SELECT applications_sent FROM daily_state WHERE date = ?')
+    .get(String(date))?.applications_sent ?? 0;
+}
+
+/** Queue one durable notification event. Mostly used by tests/manual tools. */
+export function enqueueNotification({ channel, eventType, jobUrlKey = null, payload }) {
+  if (!channel || !eventType || !payload) throw new Error('enqueueNotification: channel, eventType and payload are required');
+  const now = new Date().toISOString();
+  const info = openDb().prepare(`
+    INSERT INTO notification_outbox
+      (channel, event_type, job_url_key, payload_json, status, attempts, next_attempt_at, created_at)
+    VALUES (?, ?, ?, ?, 'pending', 0, NULL, ?)
+  `).run(String(channel), String(eventType), jobUrlKey, JSON.stringify(payload), now);
+  return Number(info.lastInsertRowid);
+}
+
+export function listPendingNotifications(channel, limit = 20) {
+  const n = Math.max(1, Math.min(100, Number.parseInt(String(limit), 10) || 20));
+  const now = new Date().toISOString();
+  return openDb().prepare(`
+    SELECT * FROM notification_outbox
+    WHERE channel = ?
+      AND status = 'pending'
+      AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+    ORDER BY id ASC
+    LIMIT ?
+  `).all(String(channel), now, n);
+}
+
+export function pendingNotificationCount(channel) {
+  return openDb().prepare(
+    "SELECT COUNT(*) AS n FROM notification_outbox WHERE channel = ? AND status = 'pending'",
+  ).get(String(channel)).n;
+}
+
+export function markNotificationSent(id) {
+  return openDb().prepare(`
+    UPDATE notification_outbox
+    SET status='sent', sent_at=?, last_error=NULL, next_attempt_at=NULL
+    WHERE id=? AND status='pending'
+  `).run(new Date().toISOString(), Number(id)).changes > 0;
+}
+
+export function markNotificationFailed(id, error, nextAttemptAt) {
+  return openDb().prepare(`
+    UPDATE notification_outbox
+    SET attempts=attempts+1, last_error=?, next_attempt_at=?
+    WHERE id=? AND status='pending'
+  `).run(String(error || '').slice(0, 1000), nextAttemptAt || null, Number(id)).changes > 0;
 }
 
 
