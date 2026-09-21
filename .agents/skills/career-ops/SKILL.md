@@ -8,7 +8,7 @@ description: >-
 arguments: mode
 user_invocable: true
 user-invocable: true
-argument-hint: "[scan | discover | deep | pdf | text | latex | latex-tex | cover | email | add | expand | eu-swe | oferta | ofertas | apply | batch | tracker | agent-inbox | pipeline | contacto | training | project | interview-prep | interview | interview/plan | interview/practice | interview/debrief | interview-redflag | patterns | offer-prep | titles | upskill | followup | reply-watch | outcome | update]"
+argument-hint: "[scan | discover | deep | pdf | text | latex | latex-tex | cover | email | add | expand | eu-swe | oferta | ofertas | apply | autopilot | batch | tracker | agent-inbox | pipeline | contacto | training | project | interview-prep | interview | interview/plan | interview/practice | interview/debrief | interview-redflag | patterns | offer-prep | titles | upskill | followup | reply-watch | outcome | update]"
 license: MIT
 ---
 
@@ -36,6 +36,7 @@ Run the career-ops scan mode and summarize new matches.
 Run the career-ops pipeline mode for data/pipeline.md.
 Run the career-ops pdf mode for the latest evaluated role.
 Run the career-ops tracker mode and summarize the current statuses.
+Run the career-ops autopilot mode autonomously until the queue is empty.
 ```
 
 ## Mode Routing
@@ -71,6 +72,7 @@ Determine the mode from `$mode`:
 | `inbox` | `agent-inbox` |
 | `pipeline` | `pipeline` |
 | `apply` | `apply` |
+| `autopilot` | `autopilot` |
 | `scan` | `scan` |
 | `discover` | `discover` |
 | `batch` | `batch` |
@@ -119,6 +121,7 @@ Concrete equivalents for Codex prompt-driven sessions:
 /career-ops pdf            ↔ "Run the career-ops pdf mode for the latest evaluated role."
 /career-ops email          ↔ "Run the career-ops email mode for the latest evaluated role."
 /career-ops tracker        ↔ "Run the career-ops tracker mode and summarize the current statuses."
+/career-ops autopilot      ↔ "Run the career-ops autopilot mode autonomously until the queue is empty."
 ```
 
 Show this menu:
@@ -152,7 +155,8 @@ Available commands:
   /career-ops project   → Evaluate portfolio project idea
   /career-ops tracker   → Application status overview
   /career-ops agent-inbox → Queue/drain requests for the next session (data/agent-inbox.md)
-  /career-ops apply     → Live application assistant (reads form + generates answers)
+  /career-ops apply     → Live application assistant (reads form + generates answers; review-first)
+  /career-ops autopilot → Autonomous wide-funnel web applications (Playwright CLI + verified Submit)
   /career-ops scan      → Scan portals and discover new offers
   /career-ops discover  → Resolve a company list to scannable ATS boards + append to portals.yml (zero-token)
   /career-ops batch     → Batch processing with parallel workers
@@ -180,7 +184,7 @@ If `modes/_custom.md` exists, read it after `modes/_profile.md` and before the s
 
 Read `modes/_shared.md` + `modes/_profile.md` (if exists) + `modes/_custom.md` (if exists) + `modes/{mode}.md`
 
-Applies to: `auto-pipeline`, `oferta`, `ofertas`, `pdf`, `text`, `contacto`, `apply`, `pipeline`, `scan`, `batch`
+Applies to: `auto-pipeline`, `oferta`, `ofertas`, `pdf`, `text`, `contacto`, `apply`, `autopilot`, `pipeline`, `scan`, `batch`
 
 ### Standalone modes with profile and custom context
 
@@ -189,6 +193,8 @@ Read `modes/_profile.md` (if exists) + `modes/_custom.md` (if exists) + `modes/{
 Applies to: `tracker`, `agent-inbox`, `deep`, `interview-prep`, `interview`, `regional/eu-swe`, `interview/plan`, `interview/practice`, `interview/debrief`, `latex`, `latex-tex`, `training`, `project`, `patterns`, `titles`, `upskill`, `followup`, `reply-watch`, `outcome`, `cover`, `email`, `add`, `offer-prep`, `discover`
 
 ### Modes delegated to subagent
+
+**Do not nest `autopilot` in another subagent.** Autopilot owns a long-lived queue lease and a named persistent Playwright CLI session; it must run in the top-level coding-agent process that the user/scheduler launched. A scheduler should start that top-level agent with the autopilot prompt, not wrap another agent around it.
 
 For `scan`, `apply` (with Playwright), and `pipeline` (3+ URLs): launch as a worker/subagent with the content of `_shared.md` + `_profile.md` (if exists) + `_custom.md` (if exists) + `modes/{mode}.md` injected into the worker prompt. If your CLI exposes an `Agent(...)` primitive, the call looks like this:
 

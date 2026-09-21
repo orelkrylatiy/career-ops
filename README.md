@@ -175,7 +175,7 @@ This installs the upstream review-first Career-Ops release.
 ```bash
 git clone https://github.com/orelkrylatiy/career-ops.git
 cd career-ops && npm install
-npx playwright install chromium   # only needed for PDF generation
+npx playwright install chromium   # PDF + autonomous browser runtime (npm install normally does this)
 
 # 2. Check setup
 npm run doctor                     # Validates all prerequisites
