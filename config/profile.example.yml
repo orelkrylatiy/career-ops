@@ -295,6 +295,32 @@ cover_letter:
 #   blocked_locations: []
 #   blacklist_sources: []
 #
+#   # Optional analytics buckets. These NEVER filter the queue; they label each
+#   # application so `autopilot.mjs analytics --profile frontend` can compare
+#   # volume/submit success by stack/profile. Explicit --profile wins; otherwise
+#   # the worker classifies from the selected resume, then title/stack keywords.
+#   profiles:
+#     frontend:
+#       label: "Frontend / React"
+#       stack: ["react", "typescript", "next.js"]
+#       title_keywords: ["frontend", "react", "next.js"]
+#       resume_variants: ["react", "nextjs"]
+#     mobile:
+#       label: "React Native"
+#       stack: ["react native", "expo", "ios", "android"]
+#       title_keywords: ["react native", "mobile"]
+#       resume_variants: ["react-native"]
+#
+#   # Optional outbound observability. Telegram is NOT in the submit path:
+#   # application state is committed first, then a SQLite outbox retries delivery.
+#   # Secrets stay in .env as TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID.
+#   notifications:
+#     telegram:
+#       enabled: false
+#       outcomes: [applied, submitted_unconfirmed, validation_failed, captcha, failed]
+#       disable_web_preview: true
+#       timeout_ms: 15000
+#
 # ── Scan / JD extractor ─────────────────────────────────────────────────────
 #
 # How the scan and JD-extraction steps read SPA job pages.

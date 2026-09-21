@@ -40,7 +40,10 @@ DETERMINISTIC SUBMIT VERIFIER
 DOM + URL + validation + network + trace
           |
           v
-APPLICATION JOURNAL / ANALYTICS
+APPLICATION JOURNAL / PROFILE ANALYTICS
+          |
+          v
+NOTIFICATION OUTBOX -> TELEGRAM (optional, retryable)
 ~~~
 
 ## Responsibility boundaries
@@ -266,6 +269,24 @@ skipped
 Legacy `test_filled` can still exist in old databases but is not part of the new autonomous flow.
 
 Only confirmed `applied` increments the confirmed daily counter and writes the Applied tracker row.
+
+Each application row can also carry a user-defined analytics `profile` (for example `frontend`, `mobile`, or `backend`). Profiles are labels only: they never become queue admission gates. The reporter accepts an explicit profile or deterministically resolves one from configured resume variants/title/stack keywords; unmatched applications remain visible as `unclassified`.
+
+## Notification outbox
+
+Telegram notifications are downstream of application state. When enabled for an outcome, `reportOutcome()` writes both the application row and a generic `notification_outbox` row in one SQLite transaction. The bot token/chat ID are never stored in SQLite. A separate delivery step atomically leases a due outbox row, calls Telegram and marks it sent; failures return to pending with exponential retry metadata. The lease prevents parallel application workers from concurrently sending the same notification.
+
+This ordering is deliberate:
+
+~~~text
+verified application result
+  -> SQLite application + outbox commit
+  -> tracker/queue maintenance
+  -> Telegram send (best effort)
+  -> retry later if unavailable
+~~~
+
+Telegram can therefore fail without corrupting the application journal or causing a duplicate browser submission.
 
 ## Scheduling
 

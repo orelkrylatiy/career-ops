@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS applications (
   channel TEXT,
   ats TEXT,
   resume_variant TEXT,
+  profile TEXT,
   resume_path TEXT,
   duration_ms INTEGER,
   outcome TEXT,
@@ -99,9 +100,26 @@ CREATE TABLE IF NOT EXISTS daily_state (
   applications_sent INTEGER DEFAULT 0,
   notes TEXT
 );
+CREATE TABLE IF NOT EXISTS notification_outbox (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  dedupe_key TEXT UNIQUE,
+  payload_json TEXT NOT NULL,
+  status TEXT DEFAULT 'pending',
+  attempts INTEGER DEFAULT 0,
+  next_attempt_at TEXT,
+  claim_owner TEXT,
+  claim_until TEXT,
+  created_at TEXT,
+  sent_at TEXT,
+  last_error TEXT
+);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 CREATE INDEX IF NOT EXISTS idx_applications_job ON applications(job_url_key);
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
+CREATE INDEX IF NOT EXISTS idx_notification_outbox_pending
+  ON notification_outbox(channel, status, next_attempt_at, id);
 `;
 
 let dbHandle = null;
@@ -133,6 +151,7 @@ export function openDb() {
   };
   addApplicationColumn('ats', 'TEXT');
   addApplicationColumn('resume_variant', 'TEXT');
+  addApplicationColumn('profile', 'TEXT');
   addApplicationColumn('resume_path', 'TEXT');
   addApplicationColumn('duration_ms', 'INTEGER');
   addApplicationColumn('details_json', 'TEXT');
@@ -153,6 +172,18 @@ export function openDb() {
   addJobColumn('claim_owner', 'TEXT');
   addJobColumn('claim_until', 'TEXT');
   addJobColumn('next_attempt_at', 'TEXT');
+
+  const notificationColumns = new Set(
+    db.prepare('PRAGMA table_info(notification_outbox)').all().map((row) => row.name),
+  );
+  const addNotificationColumn = (name, type) => {
+    if (!notificationColumns.has(name)) {
+      db.exec(`ALTER TABLE notification_outbox ADD COLUMN ${name} ${type}`);
+      notificationColumns.add(name);
+    }
+  };
+  addNotificationColumn('claim_owner', 'TEXT');
+  addNotificationColumn('claim_until', 'TEXT');
 
   // The previous autonomous concept used test_filled as a terminal safety gate
   // for first-seen form types. The new worker has deterministic submit
@@ -424,6 +455,7 @@ export function reportOutcome(urlKey, outcome, note = null, channel = null, meta
   const now = new Date().toISOString();
   const ats = metadata?.ats ? String(metadata.ats).slice(0, 120) : null;
   const resumeVariant = metadata?.resumeVariant ? String(metadata.resumeVariant).slice(0, 120) : null;
+  const applicationProfile = metadata?.profileId ? String(metadata.profileId).slice(0, 120) : null;
   const resumePath = metadata?.resumePath ? String(metadata.resumePath).slice(0, 500) : null;
   const durationMs = Number.isFinite(Number(metadata?.durationMs)) && Number(metadata.durationMs) >= 0
     ? Math.round(Number(metadata.durationMs))
@@ -431,6 +463,24 @@ export function reportOutcome(urlKey, outcome, note = null, channel = null, meta
   const details = metadata?.details && typeof metadata.details === 'object'
     ? JSON.stringify(metadata.details)
     : null;
+  let notification = null;
+  if (metadata?.notification && typeof metadata.notification === 'object') {
+    const channelName = String(metadata.notification.channel || '').trim();
+    const eventType = String(metadata.notification.eventType || '').trim();
+    const payload = metadata.notification.payload;
+    if (channelName && eventType && payload && typeof payload === 'object') {
+      try {
+        notification = {
+          channel: channelName.slice(0, 80),
+          eventType: eventType.slice(0, 120),
+          payloadJson: JSON.stringify(payload),
+        };
+      } catch {
+        // Notification serialization must never make a real application fail.
+        notification = null;
+      }
+    }
+  }
   const run = db.transaction(() => {
     const claimOwner = metadata?.claimOwner ? String(metadata.claimOwner) : null;
     const res = claimOwner
@@ -447,15 +497,16 @@ export function reportOutcome(urlKey, outcome, note = null, channel = null, meta
          WHERE url_key=?`,
       ).run(outcome, note, now, urlKey);
     if (res.changes === 0) return false;
-    db.prepare(`
+    const applicationInsert = db.prepare(`
       INSERT INTO applications
-        (job_url_key, channel, ats, resume_variant, resume_path, duration_ms, outcome, error, details_json, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (job_url_key, channel, ats, resume_variant, profile, resume_path, duration_ms, outcome, error, details_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       urlKey,
       channel ?? null,
       ats,
       resumeVariant,
+      applicationProfile,
       resumePath,
       durationMs,
       outcome,
@@ -463,6 +514,19 @@ export function reportOutcome(urlKey, outcome, note = null, channel = null, meta
       details,
       now,
     );
+    if (notification) {
+      db.prepare(`
+        INSERT OR IGNORE INTO notification_outbox
+          (channel, event_type, dedupe_key, payload_json, status, attempts, next_attempt_at, created_at)
+        VALUES (?, ?, ?, ?, 'pending', 0, NULL, ?)
+      `).run(
+        notification.channel,
+        notification.eventType,
+        `application:${applicationInsert.lastInsertRowid}:${notification.channel}`,
+        notification.payloadJson,
+        now,
+      );
+    }
     return res.changes > 0;
   });
   return run();
@@ -477,32 +541,201 @@ export function recentEvents(limit = 50) {
 }
 
 /** Aggregate application-attempt telemetry without exposing form values. */
-export function applicationAnalytics() {
+export function applicationAnalytics({ profile = null } = {}) {
   const db = openDb();
+  const profileId = profile == null || String(profile).trim() === '' ? null : String(profile).trim();
+  const unclassifiedFilter = profileId === 'unclassified';
+  const where = profileId
+    ? (unclassifiedFilter
+      ? "WHERE COALESCE(NULLIF(profile, ''), 'unclassified') = ?"
+      : 'WHERE profile = ?')
+    : '';
+  const args = profileId ? [profileId] : [];
+
   const grouped = (column) => db.prepare(
     `SELECT COALESCE(NULLIF(${column}, ''), '(unknown)') AS name, COUNT(*) AS n
-     FROM applications GROUP BY name ORDER BY n DESC, name ASC`,
-  ).all();
-  const total = db.prepare('SELECT COUNT(*) AS n FROM applications').get().n;
-  const success = db.prepare("SELECT COUNT(*) AS n FROM applications WHERE outcome = 'applied'").get().n;
-  const unconfirmed = db.prepare("SELECT COUNT(*) AS n FROM applications WHERE outcome = 'submitted_unconfirmed'").get().n;
+     FROM applications ${where}
+     GROUP BY name ORDER BY n DESC, name ASC`,
+  ).all(...args);
+
+  const total = db.prepare(
+    `SELECT COUNT(*) AS n FROM applications ${where}`,
+  ).get(...args).n;
+  const success = db.prepare(
+    `SELECT COUNT(*) AS n FROM applications ${where}${where ? ' AND' : ' WHERE'} outcome = 'applied'`,
+  ).get(...args).n;
+  const unconfirmed = db.prepare(
+    `SELECT COUNT(*) AS n FROM applications ${where}${where ? ' AND' : ' WHERE'} outcome = 'submitted_unconfirmed'`,
+  ).get(...args).n;
   const topErrors = db.prepare(
     `SELECT error AS name, COUNT(*) AS n
      FROM applications
-     WHERE error IS NOT NULL AND TRIM(error) != ''
+     ${where}${where ? ' AND' : ' WHERE'} error IS NOT NULL AND TRIM(error) != ''
      GROUP BY error ORDER BY n DESC, error ASC LIMIT 20`,
-  ).all();
+  ).all(...args);
+  const byProfile = db.prepare(
+    `SELECT
+       COALESCE(NULLIF(profile, ''), 'unclassified') AS name,
+       COUNT(*) AS n,
+       SUM(CASE WHEN outcome = 'applied' THEN 1 ELSE 0 END) AS applied,
+       SUM(CASE WHEN outcome = 'submitted_unconfirmed' THEN 1 ELSE 0 END) AS submitted_unconfirmed,
+       ROUND(AVG(CASE WHEN duration_ms IS NOT NULL THEN duration_ms END)) AS avg_duration_ms
+     FROM applications
+     ${where}
+     GROUP BY name
+     ORDER BY n DESC, name ASC`,
+  ).all(...args).map((row) => ({
+    ...row,
+    success_rate: row.n ? row.applied / row.n : 0,
+  }));
+  const sourceWhere = profileId
+    ? (unclassifiedFilter
+      ? "WHERE COALESCE(NULLIF(a.profile, ''), 'unclassified') = ?"
+      : 'WHERE a.profile = ?')
+    : '';
+  const bySource = db.prepare(
+    `SELECT COALESCE(NULLIF(j.source, ''), '(unknown)') AS name, COUNT(*) AS n
+     FROM applications a
+     LEFT JOIN jobs j ON j.url_key = a.job_url_key
+     ${sourceWhere}
+     GROUP BY name ORDER BY n DESC, name ASC`,
+  ).all(...args);
+
   return {
+    profile_filter: profileId,
     total,
     applied: success,
     submitted_unconfirmed: unconfirmed,
     success_rate: total ? success / total : 0,
+    by_profile: byProfile,
     by_outcome: grouped('outcome'),
     by_channel: grouped('channel'),
     by_ats: grouped('ats'),
     by_resume: grouped('resume_variant'),
+    by_source: bySource,
     top_errors: topErrors,
   };
+}
+
+/** Pending notifications that are due now, oldest first (inspection only). */
+export function pendingNotifications(channel = 'telegram', limit = 25) {
+  const n = Math.max(1, Math.min(200, Number.parseInt(String(limit), 10) || 25));
+  const now = new Date().toISOString();
+  return openDb().prepare(
+    `SELECT *
+     FROM notification_outbox
+     WHERE channel = ?
+       AND status = 'pending'
+       AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+     ORDER BY id ASC
+     LIMIT ?`,
+  ).all(String(channel), now, n);
+}
+
+/**
+ * Atomically lease one due outbox row. Parallel application workers may all
+ * flush Telegram after reporting; the lease prevents them from sending the
+ * same row concurrently. A process that dies mid-send releases the row after
+ * the lease expires. As with any external API, a crash after remote success
+ * but before markNotificationSent can still produce an at-least-once retry.
+ */
+export function claimNextNotification(
+  channel = 'telegram',
+  owner = 'notification-worker',
+  leaseMinutes = 5,
+) {
+  const db = openDb();
+  const minutes = Number(leaseMinutes);
+  if (!Number.isFinite(minutes) || minutes <= 0) {
+    throw new Error('claimNextNotification: leaseMinutes must be > 0');
+  }
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const until = new Date(now.getTime() + minutes * 60_000).toISOString();
+  const claimOwner = String(owner || 'notification-worker');
+
+  return db.transaction(() => {
+    db.prepare(
+      `UPDATE notification_outbox
+       SET status='pending', claim_owner=NULL, claim_until=NULL
+       WHERE status='sending' AND claim_until IS NOT NULL AND claim_until < ?`,
+    ).run(nowIso);
+
+    const row = db.prepare(
+      `SELECT *
+       FROM notification_outbox
+       WHERE channel=?
+         AND status='pending'
+         AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+       ORDER BY id ASC
+       LIMIT 1`,
+    ).get(String(channel), nowIso);
+    if (!row) return null;
+
+    const changed = db.prepare(
+      `UPDATE notification_outbox
+       SET status='sending', claim_owner=?, claim_until=?
+       WHERE id=? AND status='pending'`,
+    ).run(claimOwner, until, row.id);
+    if (!changed.changes) return null;
+    return db.prepare('SELECT * FROM notification_outbox WHERE id=?').get(row.id);
+  })();
+}
+
+export function markNotificationSent(id, owner = null) {
+  const now = new Date().toISOString();
+  const db = openDb();
+  const res = owner
+    ? db.prepare(
+      `UPDATE notification_outbox
+       SET status='sent', sent_at=?, next_attempt_at=NULL, last_error=NULL,
+           claim_owner=NULL, claim_until=NULL
+       WHERE id=? AND status='sending' AND claim_owner=?`,
+    ).run(now, Number(id), String(owner))
+    : db.prepare(
+      `UPDATE notification_outbox
+       SET status='sent', sent_at=?, next_attempt_at=NULL, last_error=NULL,
+           claim_owner=NULL, claim_until=NULL
+       WHERE id=? AND status IN ('pending', 'sending')`,
+    ).run(now, Number(id));
+  return res.changes > 0;
+}
+
+export function markNotificationFailed(id, error, owner = null) {
+  const db = openDb();
+  const row = owner
+    ? db.prepare(
+      "SELECT attempts FROM notification_outbox WHERE id=? AND status='sending' AND claim_owner=?",
+    ).get(Number(id), String(owner))
+    : db.prepare('SELECT attempts FROM notification_outbox WHERE id=?').get(Number(id));
+  if (!row) return false;
+  const attempts = Math.max(0, Number(row.attempts) || 0) + 1;
+  const delayMinutes = Math.min(60, 2 ** Math.min(6, attempts - 1));
+  const next = new Date(Date.now() + delayMinutes * 60_000).toISOString();
+  const message = String(error || 'notification failed').slice(0, 500);
+  const res = owner
+    ? db.prepare(
+      `UPDATE notification_outbox
+       SET status='pending', attempts=?, next_attempt_at=?, last_error=?,
+           claim_owner=NULL, claim_until=NULL
+       WHERE id=? AND status='sending' AND claim_owner=?`,
+    ).run(attempts, next, message, Number(id), String(owner))
+    : db.prepare(
+      `UPDATE notification_outbox
+       SET status='pending', attempts=?, next_attempt_at=?, last_error=?,
+           claim_owner=NULL, claim_until=NULL
+       WHERE id=?`,
+    ).run(attempts, next, message, Number(id));
+  return res.changes > 0;
+}
+
+export function notificationCounts() {
+  const rows = openDb().prepare(
+    'SELECT status, COUNT(*) AS n FROM notification_outbox GROUP BY status',
+  ).all();
+  const out = { pending: 0, sending: 0, sent: 0 };
+  for (const row of rows) out[row.status] = row.n;
+  return out;
 }
 
 
