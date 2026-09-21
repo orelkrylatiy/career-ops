@@ -306,7 +306,7 @@ export const SOURCES = {
     toEntry: (row) => {
       if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
       const guid = typeof row.guid === 'string' ? row.guid.trim() : '';
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(guid)) return null;
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$.test(guid)) return null;
       const company = typeof row.name === 'string' && row.name.trim() ? row.name.trim() : guid;
       const entry = entryOnHost(
         company,
@@ -334,7 +334,7 @@ const VALUE_FLAGS = ['--since', '--limit', '--ats', '--seeds', '--md-out'];
 const USAGE = `Usage:
   node scan-ats-full.mjs                      # scan all ATS directories, last 3 days
   node scan-ats-full.mjs --since 7            # postings from the last 7 days
-  node scan-ats-full.mjs --ats greenhouse,workday  # subset of sources
+  node scan-ats-full.mjs --ats greenhouse,workday,bamboohr,paylocity  # subset of sources
   node scan-ats-full.mjs --limit 200          # max companies per ATS (default: all)
   node scan-ats-full.mjs --dry-run            # preview without writing files
   node scan-ats-full.mjs --liveness           # Playwright-verify matches before writing
