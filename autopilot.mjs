@@ -513,7 +513,7 @@ export function cmdStatus() {
     const day = db.prepare('SELECT * FROM daily_state WHERE date = ?').get(today);
     console.log(`  today (${today}): confirmed_applications=${day?.applications_sent ?? 0}`);
     const notifications = notificationCounts();
-    console.log(`  notifications: pending=${notifications.pending ?? 0} sent=${notifications.sent ?? 0}`);
+    console.log(`  notifications: pending=${notifications.pending ?? 0} sending=${notifications.sending ?? 0} sent=${notifications.sent ?? 0}`);
   }
 
   console.log(`audit log: ${auditLogPath()}`);
@@ -578,7 +578,7 @@ export async function cmdNotify() {
     console.log(`telegram notifications: waiting for ${(result.missing || []).join(', ')}; pending=${result.pending ?? 0}`);
     return result;
   }
-  console.log(`telegram notifications: sent=${result.sent} failed=${result.failed} due=${result.pending}`);
+  console.log(`telegram notifications: claimed=${result.claimed ?? 0} sent=${result.sent} failed=${result.failed}`);
   return result;
 }
 
