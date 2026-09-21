@@ -143,22 +143,28 @@ career-ops is the first reference implementation of [the CareerOps Manifesto](ht
 
 ## Quick Start
 
-**Fastest way — one command:**
+### Autonomous fork
+
+The autonomous worker described in this README lives in **this fork**, not in the published upstream npm installer. Clone the fork directly:
+
+```bash
+git clone https://github.com/orelkrylatiy/career-ops.git
+cd career-ops
+npm install
+node autopilot.mjs preflight
+```
+
+Then open your coding agent in this checkout (`codex`, `claude`, etc.) and use the opt-in `autopilot` mode. For a broad discovery refresh, run `node autopilot.mjs --deep-scan`.
+
+> The published `npx @santifer/career-ops init` package is the upstream review-first distribution. It does **not** install this fork's autonomous worker. The fork keeps upstream attribution and compatibility, but its updater and autonomous runtime track `orelkrylatiy/career-ops`.
+
+### Upstream review-first installer
 
 ```bash
 npx @santifer/career-ops init
 ```
 
-> 💡 `npx` ships with [Node.js](https://nodejs.org) — it runs the installer once,
-> without installing anything globally. No Node yet? Install it first.
-> (Already using a Claude Code / Gemini / Codex CLI? Then you already have it.)
-
-This clones the latest release into `./career-ops` and installs dependencies. Then:
-
-```bash
-cd career-ops
-claude   # or codex / qwen / opencode / agy / grok — open your AI CLI here
-```
+This installs the upstream review-first Career-Ops release.
 
 **On first launch, career-ops walks you through setup — your CV, profile and target roles — just by chatting. Nothing to edit by hand.**
 
@@ -166,7 +172,7 @@ claude   # or codex / qwen / opencode / agy / grok — open your AI CLI here
 <summary><b>Prefer to set it up manually? (git clone)</b></summary>
 
 ```bash
-git clone https://github.com/career-ops-hq/career-ops.git
+git clone https://github.com/orelkrylatiy/career-ops.git
 cd career-ops && npm install
 npx playwright install chromium   # only needed for PDF generation
 
