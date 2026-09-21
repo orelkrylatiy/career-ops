@@ -6,7 +6,7 @@
 // therefore never roll back or misclassify a real application.
 
 import {
-  listPendingNotifications,
+  claimPendingNotifications,
   markNotificationSent,
   markNotificationFailed,
   pendingNotificationCount,
@@ -171,7 +171,8 @@ export async function flushTelegramOutbox({
     };
   }
 
-  const rows = listPendingNotifications('telegram', limit);
+  const owner = `telegram-${process.pid}`;
+  const rows = claimPendingNotifications('telegram', owner, limit, 5);
   let sent = 0;
   let failed = 0;
 
@@ -180,7 +181,7 @@ export async function flushTelegramOutbox({
     try {
       payload = JSON.parse(row.payload_json || '{}');
     } catch {
-      markNotificationFailed(row.id, 'invalid payload JSON', nextRetryIso(row.attempts || 0));
+      markNotificationFailed(row.id, 'invalid payload JSON', nextRetryIso(row.attempts || 0), owner);
       failed++;
       continue;
     }
@@ -202,13 +203,14 @@ export async function flushTelegramOutbox({
         silent: cfg.silent,
         fetchImpl,
       });
-      markNotificationSent(row.id);
+      markNotificationSent(row.id, owner);
       sent++;
     } catch (err) {
       markNotificationFailed(
         row.id,
         err instanceof Error ? err.message : String(err),
         nextRetryIso((row.attempts || 0) + 1),
+        owner,
       );
       failed++;
     }
