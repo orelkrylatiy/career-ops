@@ -27,6 +27,7 @@ import {
 } from './autopilot-db.mjs';
 import { resolveResume } from './autopilot-resume.mjs';
 import { scoreJob } from './autopilot-ranking.mjs';
+import { inspectApplicationUrl } from './autopilot-url-policy.mjs';
 import { auditLog, auditLogPath } from './autopilot-log.mjs';
 import {
   checkPlaywrightCli,
@@ -348,6 +349,15 @@ export async function cmdRun(flags = {}) {
 
       if (!urlKey) {
         decisions.push(`SKIPPED hard: invalid URL | ${label}`);
+        counts.hardSkipped++;
+        continue;
+      }
+
+      const destination = inspectApplicationUrl(entry.url);
+      if (!destination.ok) {
+        decisions.push(
+          `SKIPPED hard: non-public destination (${destination.reason}) | ${label}`,
+        );
         counts.hardSkipped++;
         continue;
       }

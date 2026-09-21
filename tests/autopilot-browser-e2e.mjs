@@ -14,6 +14,7 @@ const root = mkdtempSync(path.join(tmpdir(), 'career-ops-browser-e2e-'));
 mkdirSync(path.join(root, 'data'), { recursive: true });
 process.env.CAREER_OPS_ROOT = root;
 process.env.AUTOPILOT_BROWSER_SESSION = 'career-ops-e2e';
+process.env.AUTOPILOT_ALLOW_PRIVATE_URLS = '1';
 
 function runCli(args, { allowFailure = false } = {}) {
   const result = spawnSync(

@@ -21,6 +21,7 @@ import path from 'node:path';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { normalizeUrlKey } from './autopilot-db.mjs';
 import { auditLog } from './autopilot-log.mjs';
+import { assertPublicApplicationUrl } from './autopilot-url-policy.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 
 const DATA_ROOT = getCareerOpsRoot();
@@ -527,6 +528,7 @@ function screenshot(session, filename) {
 }
 
 export function beginVerification(target, { session = DEFAULT_SESSION } = {}) {
+  assertPublicApplicationUrl(target);
   const jobUrlKey = normalizeUrlKey(target);
   if (!jobUrlKey) throw new Error('begin requires a valid http(s) job URL');
   const s = safeSession(session);
@@ -633,7 +635,7 @@ function doctor() {
     session: DEFAULT_SESSION,
     profile: DEFAULT_PROFILE,
     recommended_open:
-      `npx playwright cli -s=${DEFAULT_SESSION} open <url> --browser=chrome --profile="${DEFAULT_PROFILE}" --headed`,
+      `npx playwright cli -s=${DEFAULT_SESSION} open <url> --profile="${DEFAULT_PROFILE}" --headed`,
   };
   console.log(JSON.stringify(out, null, 2));
   return cli.ok;
