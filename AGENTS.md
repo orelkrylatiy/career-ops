@@ -128,7 +128,7 @@ When the user explicitly asks for unattended/autonomous web applications, load `
 | `data/scan-history.tsv` | Scanner dedup history |
 | `data/scan-runs.tsv` | Per-run scan counters (appended by `scan.mjs`, read by `stats.mjs`) |
 | `data/follow-ups.md` | Follow-up history tracker |
-| `data/blacklist.md` | Do-not-apply companies (user layer, opt-in, never auto-populated; respected by `scan.mjs` and the `auto-pipeline`/`oferta`/`apply` gates) |
+| `data/blacklist.md` | Explicit user do-not-apply companies (user layer, opt-in, never auto-populated); respected by normal review-first gates and as a hard stop in autonomous wide-funnel ingestion |
 | `data/salary-observations.tsv` | Append-only salary observation log (user layer) |
 | `data/assessments.tsv` | Append-only skills-assessment log (user layer, created on first `add`) |
 | `portals.yml` | Query and company config |
@@ -139,7 +139,7 @@ When the user explicitly asks for unattended/autonomous web applications, load `
 | `interview-prep/{company}-{role}.md` | Company-specific interview intel |
 | `generate-pdf.mjs` | Playwright: HTML to PDF |
 | `generate-latex.mjs` | LaTeX CV validator + pdflatex compiler |
-| `scan.mjs` | Zero-token provider scanner over configured ATS/API/RSS/XML/HTML sources. Normal mode honors review-first filters; autonomous `--wide` bypasses fit/location/salary/content/visa preferences while retaining source safety, explicit blacklist and canonical URL dedup |
+| `scan.mjs` | Zero-token provider scanner over configured ATS/API/RSS/XML/HTML sources. Normal mode honors review-first filters; autonomous `--wide` bypasses title/tier/location/configured posting-age/salary/content/country-eligibility/visa preferences while retaining source safety, explicit blacklist and canonical URL dedup |
 | `scan-ats-full.mjs` | Reverse ATS-directory scanner over Greenhouse/Lever/Ashby/Workday/iCIMS. Normal mode is keyword/location filtered; autonomous `--wide` disables title/location/content fit filtering and provider-side location hints. Checkpoints every 500 companies; `--resume` continues an interrupted sweep |
 | `source-registry.mjs` | Persistent company/source resolution control plane used by regional/deep discovery; exports verified provider/ATS endpoints into generated portals |
 | `autopilot.mjs` | Autonomous wide-funnel orchestrator: scan/enqueue, soft priority queue, atomic lease/defer/renew, verified outcome reporting and generated queue view |
