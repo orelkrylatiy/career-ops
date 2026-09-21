@@ -294,6 +294,7 @@ const SYSTEM_PATHS = [
   'autopilot.mjs',
   'autopilot-db.mjs',
   'autopilot-ranking.mjs',
+  'autopilot-url-policy.mjs',
   'autopilot-verify.mjs',
   'autopilot-resume.mjs',
   'autopilot-log.mjs',
