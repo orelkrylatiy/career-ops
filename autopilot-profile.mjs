@@ -61,15 +61,23 @@ export function resolveApplicationProfile({
   if (requested != null && String(requested).trim()) {
     const needle = String(requested).trim().toLowerCase();
     const exact = defs.find((d) => d.id.toLowerCase() === needle);
-    if (!exact) {
-      const ids = defs.map((d) => d.id);
-      throw new Error(
-        ids.length
-          ? `unknown application profile "${requested}" — configured: ${ids.join(', ')}`
-          : `unknown application profile "${requested}" — configure autopilot.profiles first`,
-      );
-    }
-    return { ...exact, matchedBy: 'explicit' };
+    if (exact) return { ...exact, matchedBy: 'explicit' };
+
+    // Reporting happens after a potentially real Submit. Analytics metadata
+    // must never make that durable result fail just because an agent/user typed
+    // a profile id that is not in profile.yml. Keep it as an ad-hoc bucket;
+    // configuring it later adds the label/stack metadata without rewriting
+    // historical application rows.
+    const id = String(requested).trim().slice(0, 120);
+    return {
+      id,
+      label: id,
+      stack: [],
+      titleKeywords: [],
+      resumeVariants: [],
+      priority: 0,
+      matchedBy: 'explicit-ad-hoc',
+    };
   }
 
   if (defs.length === 0) {
