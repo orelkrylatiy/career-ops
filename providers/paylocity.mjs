@@ -13,7 +13,7 @@ import { htmlToText } from './_html-to-text.mjs';
 import { BROWSER_LIKE_USER_AGENT } from './_http.mjs';
 
 const PAYLOCITY_HOST = 'recruiting.paylocity.com';
-const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$;
+const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function assertPaylocityUrl(url) {
   let parsed;
