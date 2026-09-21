@@ -136,9 +136,10 @@ Do not invent a different identity or credentials whose falsity would make the s
 
 A click on Submit is **not** proof that an application was sent.
 
-Immediately before the real Submit click:
+Immediately before the real Submit click, renew the queue lease and then arm evidence:
 
 ~~~bash
+node autopilot.mjs renew "<job-url>" --owner worker-0 --lease-minutes 120
 node autopilot-verify.mjs begin "<job-url>" --session career-ops-worker-0
 ~~~
 
@@ -170,7 +171,7 @@ The verifier combines:
 - in-memory inspection of request/response bodies;
 - screenshot + Playwright trace.
 
-Raw form/request bodies are not persisted in the receipt.
+Raw form/request bodies and page body text are not persisted in the JSON receipt. The receipt keeps only structural counts/classification flags plus sanitized request metadata. Screenshots and traces remain local runtime evidence and may contain what was visible in the browser.
 
 Possible verifier outcomes:
 

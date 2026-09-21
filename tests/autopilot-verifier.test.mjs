@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPageProbeCode, classifyApplicationEvidence, evidenceMatchesOutcome } from '../autopilot-verify.mjs';
+import {
+  buildPageProbeCode,
+  classifyApplicationEvidence,
+  compactPageEvidence,
+  evidenceMatchesOutcome,
+} from '../autopilot-verify.mjs';
 
 test('explicit confirmation is a confirmed application', () => {
   const out = classifyApplicationEvidence({
@@ -150,4 +155,47 @@ test('generated cross-frame Playwright probe is valid JavaScript', () => {
   const factory = new Function('return (' + source + ')');
   const probe = factory();
   assert.equal(typeof probe, 'function');
+});
+
+test('persisted page evidence strips body text and keeps only classification flags', () => {
+  const compact = compactPageEvidence({
+    url: 'https://jobs.example/apply',
+    bodyText: 'candidate@example.net Thank you for applying',
+    formCount: 1,
+    submitCount: 1,
+    validationErrors: [],
+    nativeInvalidCount: 0,
+  });
+  assert.equal(Object.hasOwn(compact, 'bodyText'), false);
+  assert.equal(compact.successTextSeen, true);
+  assert.equal(JSON.stringify(compact).includes('candidate@example.net'), false);
+});
+
+test('compact success flags still classify a confirmed application', () => {
+  const out = classifyApplicationEvidence({
+    before: {
+      url: 'https://jobs.example/apply',
+      urls: ['https://jobs.example/apply'],
+      successTextSeen: false,
+      formCount: 1,
+    },
+    after: {
+      url: 'https://jobs.example/apply',
+      urls: ['https://jobs.example/apply'],
+      successTextSeen: true,
+      validationErrorCount: 0,
+      nativeInvalidCount: 0,
+      formCount: 0,
+    },
+    network: { requests: [] },
+  });
+  assert.equal(out.outcome, 'applied');
+});
+
+test('generated probe checks custom ARIA-required widgets and role buttons', () => {
+  const source = buildPageProbeCode();
+  assert.match(source, /aria-required/);
+  assert.match(source, /radiogroup/);
+  assert.match(source, /role="button"/);
+  assert.match(source, /complete\|finish/);
 });

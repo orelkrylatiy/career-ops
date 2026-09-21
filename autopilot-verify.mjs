@@ -15,6 +15,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { getCareerOpsRoot } from './path-resolver.mjs';
@@ -27,6 +28,14 @@ export const EVIDENCE_ROOT = path.join(DATA_ROOT, 'data', 'autopilot', 'evidence
 const DEFAULT_SESSION = process.env.AUTOPILOT_BROWSER_SESSION || 'career-ops-worker-0';
 const DEFAULT_PROFILE = process.env.AUTOPILOT_BROWSER_PROFILE
   || path.join(DATA_ROOT, 'data', 'browser-profile');
+const require = createRequire(import.meta.url);
+let playwrightCliPath = null;
+
+function localPlaywrightCliPath() {
+  if (playwrightCliPath) return playwrightCliPath;
+  playwrightCliPath = require.resolve('playwright/cli');
+  return playwrightCliPath;
+}
 
 const SUCCESS_TEXT_RE = [
   /thank you (?:for|.*)applying/i,
@@ -66,8 +75,35 @@ function safeSession(raw) {
   return value;
 }
 
-function npxCommand() {
-  return process.platform === 'win32' ? 'npx.cmd' : 'npx';
+function runLocalPlaywright(args, { timeout = 30_000, allowFailure = false } = {}) {
+  let cli;
+  try {
+    cli = localPlaywrightCliPath();
+  } catch (err) {
+    if (allowFailure) {
+      return { status: 1, stdout: '', stderr: String(err?.message || err), error: err };
+    }
+    throw new Error(`project-local Playwright CLI is unavailable: ${err?.message || err}`);
+  }
+  const res = spawnSync(process.execPath, [cli, ...args], {
+    encoding: 'utf8',
+    shell: false,
+    timeout,
+    maxBuffer: 8 * 1024 * 1024,
+  });
+  if (res.error && !allowFailure) throw res.error;
+  if (res.status !== 0 && !allowFailure) {
+    throw new Error(
+      `playwright-cli ${args[0] || 'command'} failed: `
+      + String(res.stderr || res.stdout || res.error?.message || res.status).trim().slice(0, 1200),
+    );
+  }
+  return {
+    status: res.status ?? (res.error ? 1 : 0),
+    stdout: String(res.stdout || ''),
+    stderr: String(res.stderr || ''),
+    error: res.error || null,
+  };
 }
 
 export function checkPlaywrightCli() {
@@ -75,33 +111,26 @@ export function checkPlaywrightCli() {
   if (!Number.isInteger(major) || major < 20) {
     return { ok: false, reason: `Playwright CLI requires Node 20+ (current ${process.version})` };
   }
-  const res = spawnSync(npxCommand(), ['--no-install', 'playwright', 'cli', '--help'], {
-    encoding: 'utf8',
-    shell: false,
+  const res = runLocalPlaywright(['cli', '--help'], {
     timeout: 20_000,
+    allowFailure: true,
   });
-  if (res.error) return { ok: false, reason: res.error.message };
-  if (res.status !== 0) {
-    return { ok: false, reason: String(res.stderr || res.stdout || `exit ${res.status}`).trim().slice(0, 500) };
+  if (res.error || res.status !== 0) {
+    return {
+      ok: false,
+      reason: String(res.stderr || res.stdout || res.error?.message || `exit ${res.status}`)
+        .trim()
+        .slice(0, 500),
+    };
   }
   return { ok: true, version: 'project-local Playwright CLI available' };
 }
 
 function runCli(session, args, { raw = false, timeout = 30_000, allowFailure = false } = {}) {
-  const argv = ['--no-install', 'playwright', 'cli', `-s=${safeSession(session)}`];
+  const argv = ['cli', `-s=${safeSession(session)}`];
   if (raw) argv.push('--raw');
   argv.push(...args);
-  const res = spawnSync(npxCommand(), argv, {
-    encoding: 'utf8',
-    shell: false,
-    timeout,
-    maxBuffer: 8 * 1024 * 1024,
-  });
-  if (res.error) throw res.error;
-  if (res.status !== 0 && !allowFailure) {
-    throw new Error(`playwright-cli ${args[0]} failed: ${String(res.stderr || res.stdout || res.status).trim().slice(0, 1200)}`);
-  }
-  return { status: res.status, stdout: String(res.stdout || ''), stderr: String(res.stderr || '') };
+  return runLocalPlaywright(argv, { timeout, allowFailure });
 }
 
 function parseJsonish(text) {
@@ -156,7 +185,41 @@ export function buildPageProbeCode(settleMs = 0) {
             type: el.type || '',
             name: el.getAttribute('name') || el.id || el.getAttribute('aria-label') || el.getAttribute('placeholder') || ''
           }));
-          const dedupRequired = [...new Map(requiredMissing.map((item) => [
+
+          const customRequired = [...document.querySelectorAll('[aria-required="true"]')]
+            .filter(visible)
+            .filter((el) => !['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))
+            .filter((el) => {
+              const role = String(el.getAttribute('role') || '').toLowerCase();
+              if (role === 'radiogroup') {
+                return ![...el.querySelectorAll('[role="radio"]')].some((r) =>
+                  r.getAttribute('aria-checked') === 'true'
+                  || r.getAttribute('aria-selected') === 'true'
+                  || r.getAttribute('aria-pressed') === 'true'
+                );
+              }
+              if (role === 'radio' || role === 'checkbox' || role === 'option') {
+                return !['aria-checked', 'aria-selected', 'aria-pressed']
+                  .some((a) => el.getAttribute(a) === 'true');
+              }
+              if (role === 'combobox' || role === 'textbox' || role === 'listbox') {
+                const value = el.getAttribute('value')
+                  || el.getAttribute('aria-valuetext')
+                  || el.getAttribute('data-value')
+                  || '';
+                const selected = el.querySelector('[aria-selected="true"], [role="option"][aria-checked="true"]');
+                return !String(value).trim() && !selected && !textOf(el);
+              }
+              return false;
+            })
+            .map((el) => ({
+              tag: el.tagName.toLowerCase(),
+              type: 'aria-' + String(el.getAttribute('role') || 'widget').toLowerCase(),
+              name: el.getAttribute('aria-label') || el.getAttribute('name') || el.id || ''
+            }));
+
+          const allRequiredMissing = [...requiredMissing, ...customRequired];
+          const dedupRequired = [...new Map(allRequiredMissing.map((item) => [
             item.type === 'radio'
               ? 'radio:' + item.name
               : item.tag + ':' + item.type + ':' + item.name,
@@ -176,9 +239,15 @@ export function buildPageProbeCode(settleMs = 0) {
           ))].slice(0, 30);
           const bodyText = String(document.body?.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 12000);
           const forms = [...document.querySelectorAll('form')].filter(visible);
-          const submits = [...document.querySelectorAll('button[type="submit"], input[type="submit"], button')]
+          const nativeSubmits = [...document.querySelectorAll('button[type="submit"], input[type="submit"]')]
+            .filter(visible);
+          const labeledActions = [...document.querySelectorAll('button, [role="button"]')]
             .filter(visible)
-            .filter((el) => /submit|apply|send|continue|отправ|отклик/i.test(textOf(el) || el.value || el.getAttribute('aria-label') || ''));
+            .filter((el) =>
+              /submit|apply|send|continue|complete|finish|отправ|отклик|заверш/i
+                .test(textOf(el) || el.getAttribute('aria-label') || '')
+            );
+          const submits = [...new Set([...nativeSubmits, ...labeledActions])];
           return {
             url: location.href,
             bodyText,
@@ -214,6 +283,27 @@ function inspectPage(session, settleMs = 0) {
   const parsed = parseJsonish(out);
   if (!parsed || typeof parsed !== 'object') throw new Error('Playwright page probe returned non-object');
   return parsed;
+}
+
+export function compactPageEvidence(state = {}) {
+  const body = String(state.bodyText || '');
+  return {
+    url: state.url || '',
+    urls: Array.isArray(state.urls) ? state.urls.slice(0, 20) : [],
+    title: String(state.title || '').slice(0, 300),
+    formCount: Number(state.formCount || 0),
+    submitCount: Number(state.submitCount || 0),
+    requiredMissing: Array.isArray(state.requiredMissing)
+      ? state.requiredMissing.slice(0, 40)
+      : [],
+    validationErrorCount: Array.isArray(state.validationErrors)
+      ? state.validationErrors.filter(Boolean).length
+      : Number(state.validationErrorCount || 0),
+    nativeInvalidCount: Number(state.nativeInvalidCount || 0),
+    successTextSeen: hasSuccessText(body) || Boolean(state.successTextSeen),
+    blockedTextSeen: BLOCKED_RE.test(body) || Boolean(state.blockedTextSeen),
+    failureTextSeen: FAILURE_TEXT_RE.test(body) || Boolean(state.failureTextSeen),
+  };
 }
 
 function parseRequestList(text) {
@@ -294,9 +384,10 @@ function hasSuccessText(text) {
 
 export function classifyApplicationEvidence({ before = {}, after = {}, network = {} } = {}) {
   const body = String(after.bodyText || '');
-  const blocked = BLOCKED_RE.test(body);
-  const explicitFailure = FAILURE_TEXT_RE.test(body);
+  const blocked = Boolean(after.blockedTextSeen) || BLOCKED_RE.test(body);
+  const explicitFailure = Boolean(after.failureTextSeen) || FAILURE_TEXT_RE.test(body);
   const errors = Array.isArray(after.validationErrors) ? after.validationErrors.filter(Boolean) : [];
+  const errorCount = Math.max(errors.length, Number(after.validationErrorCount || 0));
   const invalid = Number(after.nativeInvalidCount || 0);
   // A generic application page can already contain "thank you for applying"
   // copy before Submit. Text only counts when it appears after the attempt;
@@ -310,8 +401,11 @@ export function classifyApplicationEvidence({ before = {}, after = {}, network =
     ...(Array.isArray(after.urls) ? after.urls.map(String) : []),
   ].filter(Boolean);
   const newSuccessUrl = afterUrls.some((url) => SUCCESS_URL_RE.test(url) && !beforeUrls.has(url));
+  const afterSuccessText = Boolean(after.successTextSeen) || hasSuccessText(body);
+  const beforeSuccessText = Boolean(before.successTextSeen)
+    || hasSuccessText(String(before.bodyText || ''));
   const strongUiSuccess = newSuccessUrl
-    || (hasSuccessText(body) && !hasSuccessText(String(before.bodyText || '')));
+    || (afterSuccessText && !beforeSuccessText);
   const rows = Array.isArray(network.requests) ? network.requests : [];
   const candidateRequests = rows.filter((r) => r
     && !['GET', 'HEAD', 'OPTIONS'].includes(String(r.method || '').toUpperCase())
@@ -331,11 +425,11 @@ export function classifyApplicationEvidence({ before = {}, after = {}, network =
   if (blocked) {
     return { outcome: 'blocked', confidence: 'high', signals: { blocked: true, networkSuccess } };
   }
-  if (errors.length || invalid > 0) {
+  if (errorCount || invalid > 0) {
     return {
       outcome: 'validation_failed',
       confidence: 'high',
-      signals: { errors: errors.length, invalid, networkSuccess },
+      signals: { errors: errorCount, invalid, networkSuccess },
     };
   }
   if (explicitFailure || networkFailure) {
@@ -402,17 +496,22 @@ export function beginVerification(target, { session = DEFAULT_SESSION } = {}) {
   const jobUrlKey = normalizeUrlKey(target);
   if (!jobUrlKey) throw new Error('begin requires a valid http(s) job URL');
   const s = safeSession(session);
-  const before = inspectPage(s);
-  if ((before.requiredMissing?.length || 0) > 0 || Number(before.nativeInvalidCount || 0) > 0) {
-    const names = (before.requiredMissing || [])
+  const beforeRaw = inspectPage(s);
+  if ((beforeRaw.requiredMissing?.length || 0) > 0 || Number(beforeRaw.nativeInvalidCount || 0) > 0) {
+    const names = (beforeRaw.requiredMissing || [])
       .map((x) => x.name || x.type || x.tag)
       .filter(Boolean)
       .slice(0, 8);
     throw new Error(
-      `pre-submit validation failed: ${before.requiredMissing?.length || 0} required field(s) missing, nativeInvalid=${before.nativeInvalidCount || 0}`
+      `pre-submit validation failed: ${beforeRaw.requiredMissing?.length || 0} required field(s) missing, nativeInvalid=${beforeRaw.nativeInvalidCount || 0}`
       + (names.length ? ` [${names.join(', ')}]` : ''),
     );
   }
+
+  if (Number(beforeRaw.submitCount || 0) < 1) {
+    throw new Error('pre-submit validation failed: no visible submit/apply action on the current page');
+  }
+  const before = compactPageEvidence(beforeRaw);
 
   runCli(s, ['requests', '--clear'], { raw: true, timeout: 20_000 });
   const traceStart = runCli(s, ['tracing-start'], { timeout: 20_000, allowFailure: true });
@@ -454,7 +553,7 @@ export function finishVerification(receiptPath) {
   const s = safeSession(receipt.session);
   // Give SPA mutations, validation banners and redirects a short deterministic
   // settle window before classifying the post-submit state.
-  const after = inspectPage(s, 2_000);
+  const afterRaw = inspectPage(s, 2_000);
   const network = inspectNetwork(s);
   const afterShot = abs.replace(/\.json$/i, '-after.png');
   screenshot(s, afterShot);
@@ -462,7 +561,12 @@ export function finishVerification(receiptPath) {
     timeout: 30_000,
     allowFailure: true,
   });
-  const verification = classifyApplicationEvidence({ before: receipt.before, after, network });
+  const verification = classifyApplicationEvidence({
+    before: receipt.before,
+    after: afterRaw,
+    network,
+  });
+  const after = compactPageEvidence(afterRaw);
 
   const finished = {
     ...receipt,
