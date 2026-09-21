@@ -1814,7 +1814,7 @@ async function check() {
   // deliberately conservative: version checks still work offline/behind a
   // restricted git transport.
   try { localCommit = gitQuiet('rev-parse', 'HEAD'); } catch { /* no git checkout */ }
-  const remoteRef = await curlGet('https://api.github.com/repos/career-ops-hq/career-ops/git/ref/heads/main', [
+  const remoteRef = await curlGet('https://api.github.com/repos/orelkrylatiy/career-ops/git/ref/heads/main', [
     '--header', 'Accept: application/vnd.github+json',
     '--header', 'User-Agent: career-ops-update-checker',
   ]);

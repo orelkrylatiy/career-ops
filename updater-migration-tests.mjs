@@ -39,6 +39,12 @@ try {
   process.exit(1);
 }
 
+if (source.includes('https://api.github.com/repos/orelkrylatiy/career-ops/git/ref/heads/main')) {
+  pass('update checker compares HEAD against fork main');
+} else {
+  fail('update checker compares HEAD against fork main');
+}
+
 // test-all runs this suite from a throwaway copy nested inside the real
 // checkout. Give that copy its own tiny repository so update-system's
 // production guard can distinguish a valid fixture from an install whose git
