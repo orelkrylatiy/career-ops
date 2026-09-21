@@ -63,7 +63,7 @@ npx playwright cli -s=career-ops-worker-0 open "about:blank" \
 
 On PowerShell, set the environment variable with the normal PowerShell syntax.
 
-The same named session/profile is reused across applications so cookies, login state, localStorage, tabs, and browser state survive between commands and browser restarts. Use Playwright's managed Chromium by default; an explicit `--browser=chrome` is optional only when a machine has a Chrome channel you intentionally want to use.
+The same named session/profile is reused across applications so cookies, login state, localStorage, tabs, and browser state survive between commands and browser restarts. The default is Playwright-managed Chromium, matching `npx playwright install chromium`; using an installed Chrome channel is optional rather than required. Use Playwright's managed Chromium by default; an explicit `--browser=chrome` is optional only when a machine has a Chrome channel you intentionally want to use.
 
 Normal browser loop:
 

@@ -92,7 +92,7 @@
 </p>
 
 
-> **Fork note — autonomous web worker:** default Career-Ops modes remain review-first. This fork also ships an explicit opt-in `autopilot` mode that uses wide-funnel discovery, a priority SQLite queue, prepared/tailored resume fallback, and direct Playwright CLI control of a persistent Chrome profile. Browser submissions are counted as applied only after deterministic post-submit evidence confirms them. See [Autonomous Worker Architecture](docs/AUTOPILOT_ARCHITECTURE.md). <!-- fork-autopilot: wide-funnel autonomous submit -->
+> **Fork note — autonomous web worker:** default Career-Ops modes remain review-first. This fork also ships an explicit opt-in `autopilot` mode that uses wide-funnel discovery, a priority SQLite queue, prepared/tailored resume fallback, and direct Playwright CLI control of a persistent Chromium profile. Browser submissions are counted as applied only after deterministic post-submit evidence confirms them. See [Autonomous Worker Architecture](docs/AUTOPILOT_ARCHITECTURE.md). <!-- fork-autopilot: wide-funnel autonomous submit -->
 
 ## What Is This
 

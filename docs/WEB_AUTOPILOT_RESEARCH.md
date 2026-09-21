@@ -33,7 +33,7 @@ LLM APPLICATION AGENT
 read full JD -> choose/generate CV -> build application context
         |
         v
-PLAYWRIGHT CLI + DEDICATED PERSISTENT CHROME PROFILE
+PLAYWRIGHT CLI + DEDICATED PERSISTENT CHROMIUM PROFILE
 open -> snapshot/ref -> fill -> upload -> validate -> submit -> confirm
         |
         v

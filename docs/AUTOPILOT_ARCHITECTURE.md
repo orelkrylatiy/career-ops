@@ -30,7 +30,7 @@ read full JD -> choose/generate CV -> decide form answers
           |
           v
 PLAYWRIGHT CLI
-named persistent Chrome session/profile
+named persistent Chromium session/profile
           |
           v
 REAL APPLICATION FORM
