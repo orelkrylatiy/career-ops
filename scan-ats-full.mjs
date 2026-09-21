@@ -5,7 +5,7 @@
  *
  * Where scan.mjs scans the companies you track in portals.yml, this script
  * inverts the direction: it walks public directories of companies per ATS
- * (Greenhouse, Lever, Ashby, Workday, iCIMS) and surfaces fresh postings that match
+ * (Greenhouse, Lever, Ashby, Workday, iCIMS, BambooHR) and surfaces fresh postings that match
  * your portals.yml `title_filter` / `location_filter` — no manual company
  * curation needed.
  *
@@ -30,7 +30,7 @@
  * Usage:
  *   node scan-ats-full.mjs                      # scan all ATS directories, last 3 days
  *   node scan-ats-full.mjs --since 7            # postings from the last 7 days
- *   node scan-ats-full.mjs --ats greenhouse,workday  # subset of sources
+ *   node scan-ats-full.mjs --ats greenhouse,workday,bamboohr  # subset of sources
  *   node scan-ats-full.mjs --limit 200          # max companies per ATS (default: all)
  *   node scan-ats-full.mjs --dry-run            # preview without writing files
  *   node scan-ats-full.mjs --liveness           # Playwright-verify matches before writing
@@ -54,6 +54,7 @@ import lever from './providers/lever.mjs';
 import ashby from './providers/ashby.mjs';
 import workday from './providers/workday.mjs';
 import icims from './providers/icims.mjs';
+import bamboohr from './providers/bamboohr.mjs';
 import { buildTitleFilter, buildTitleFilterOverrides, buildTitleFilterWithOverrides, buildLocationFilter, buildContentFilter, matchedTitleKeywords, loadSeenUrls, normalizeUrlForDedup, appendToPipeline, appendToScanHistory, loadBlacklist, parseSinceDays, PORTALS_PATH, PIPELINE_PATH } from './scan.mjs';
 import { localToday } from './lib/local-today.mjs';
 import { printScanSummaryHeader } from './lib/scan-summary-marker.mjs';
@@ -280,6 +281,24 @@ export const SOURCES = {
       return entry;
     },
   },
+  bamboohr: {
+    provider: bamboohr,
+    // Each tenant is its own <slug>.bamboohr.com host. Keep fan-out below the
+    // general 20-worker default anyway: the public tenant dataset is large and
+    // BambooHR list responses are undated, so this lane is intentionally
+    // conservative. Autopilot's deep scan uses --include-undated.
+    concurrency: 10,
+    dataset: `${DATASET_BASE}/bamboohr_companies.json`,
+    toEntry: (slug) => {
+      const tenant = String(slug || '').trim().toLowerCase();
+      if (!SLUG_RE.test(tenant)) return null;
+      return entryOnHost(
+        tenant,
+        `https://${tenant}.bamboohr.com/careers`,
+        (h) => h === `${tenant}.bamboohr.com`,
+      );
+    },
+  },
 };
 
 // ── CLI args ────────────────────────────────────────────────────────
@@ -297,7 +316,7 @@ const VALUE_FLAGS = ['--since', '--limit', '--ats', '--seeds', '--md-out'];
 const USAGE = `Usage:
   node scan-ats-full.mjs                      # scan all ATS directories, last 3 days
   node scan-ats-full.mjs --since 7            # postings from the last 7 days
-  node scan-ats-full.mjs --ats greenhouse,workday  # subset of sources
+  node scan-ats-full.mjs --ats greenhouse,workday,bamboohr  # subset of sources
   node scan-ats-full.mjs --limit 200          # max companies per ATS (default: all)
   node scan-ats-full.mjs --dry-run            # preview without writing files
   node scan-ats-full.mjs --liveness           # Playwright-verify matches before writing
