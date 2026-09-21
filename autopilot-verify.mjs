@@ -33,7 +33,15 @@ let playwrightCliPath = null;
 
 function localPlaywrightCliPath() {
   if (playwrightCliPath) return playwrightCliPath;
-  playwrightCliPath = require.resolve('playwright/cli');
+  // playwright exposes its npm binary as <package-root>/cli.js but does not
+  // export a "playwright/cli" package subpath. Resolve the public package
+  // entrypoint first, then address its sibling binary exactly as npm does.
+  const packageEntry = require.resolve('playwright');
+  const candidate = path.join(path.dirname(packageEntry), 'cli.js');
+  if (!existsSync(candidate)) {
+    throw new Error(`Playwright CLI entrypoint not found beside ${packageEntry}`);
+  }
+  playwrightCliPath = candidate;
   return playwrightCliPath;
 }
 
