@@ -209,7 +209,7 @@ export async function flushTelegramOutbox({
       markNotificationFailed(
         row.id,
         err instanceof Error ? err.message : String(err),
-        nextRetryIso((row.attempts || 0) + 1),
+        nextRetryIso(row.attempts || 0),
         owner,
       );
       failed++;
