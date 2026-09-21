@@ -122,6 +122,9 @@ When the user explicitly asks for unattended/autonomous web applications, load `
 |------|----------|
 | `data/applications.md` | Application tracker |
 | `data/pipeline.md` | Inbox of pending URLs |
+| `data/autopilot.db` | Authoritative autonomous queue/application SQLite state (jobs, leases, outcomes, events, counters) |
+| `data/autopilot-queue.md` | Generated human-readable view of currently queued autonomous jobs; never the source of truth |
+| `data/autopilot/evidence/` | Local per-attempt verifier receipts/screenshots; runtime evidence, gitignored and potentially sensitive |
 | `data/scan-history.tsv` | Scanner dedup history |
 | `data/scan-runs.tsv` | Per-run scan counters (appended by `scan.mjs`, read by `stats.mjs`) |
 | `data/follow-ups.md` | Follow-up history tracker |

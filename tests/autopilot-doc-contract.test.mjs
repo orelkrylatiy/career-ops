@@ -31,6 +31,9 @@ test('root agent contract routes explicit autonomous work to autopilot', () => {
   assert.match(agents, /no Browser Use\/MCP\/Computer Use fallback in v1/);
   assert.match(agents, /`scan\.mjs` \| Zero-token provider scanner[\s\S]*autonomous `--wide` bypasses/);
   assert.match(agents, /`autopilot-verify\.mjs` \| Deterministic Playwright CLI pre\/post-submit verifier/);
+  assert.match(agents, /`data\/autopilot\.db` \| Authoritative autonomous queue\/application SQLite state/);
+  assert.match(agents, /`data\/autopilot-queue\.md` \| Generated human-readable view/);
+  assert.doesNotMatch(agents, /scan-ats-full\.mjs` \|[^\n]*filtered by portals\.yml `title_filter`\/`location_filter`/);
   assert.match(modesReadme, /`autopilot\.md` \| `autopilot`/);
 });
 
