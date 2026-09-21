@@ -5,6 +5,7 @@ import {
   classifyApplicationEvidence,
   compactPageEvidence,
   evidenceMatchesOutcome,
+  parseRequestList,
 } from '../autopilot-verify.mjs';
 
 test('explicit confirmation is a confirmed application', () => {
@@ -270,4 +271,27 @@ test('generic successful GraphQL traffic is not treated as application submissio
   });
   assert.equal(out.outcome, 'submitted_unconfirmed');
   assert.equal(out.signals.networkSuccess, false);
+});
+
+test('Playwright request parser accepts documented and raw-style list lines', () => {
+  const rows = parseRequestList([
+    '# 1. [GET] https://example.test/api/ping => [200] OK',
+    '2. [POST] https://example.test/api/application => [201] Created',
+  ].join('\n'));
+  assert.deepEqual(rows, [
+    {
+      index: 1,
+      method: 'GET',
+      url: 'https://example.test/api/ping',
+      status: 200,
+      statusText: '200',
+    },
+    {
+      index: 2,
+      method: 'POST',
+      url: 'https://example.test/api/application',
+      status: 201,
+      statusText: '201',
+    },
+  ]);
 });

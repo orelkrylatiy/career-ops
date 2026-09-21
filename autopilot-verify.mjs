@@ -314,12 +314,17 @@ export function compactPageEvidence(state = {}) {
   };
 }
 
-function parseRequestList(text) {
+export function parseRequestList(text) {
   const rows = [];
-  for (const line of String(text || '').split(/\r?\n/)) {
-    const m = line.match(/^#\s*(\d+)\.\s*\[([A-Z]+)\]\s+(\S+)\s+=>\s+\[([^\]]+)\]/);
+  const ansi = /\x1B\[[0-?]*[ -\/]*[@-~]/g;
+  for (const rawLine of String(text || '').split(/\r?\n/)) {
+    const line = rawLine.replace(ansi, '').trim();
+    // Current Playwright CLI prints "# 1. [POST] URL => [201] Created".
+    // Be deliberately tolerant of raw/markdown presentation changes while
+    // preserving the numbered request index needed by request-body commands.
+    const m = line.match(/^(?:#\s*)?(\d+)\.?\s+\[([A-Z]+)\]\s+(\S+)\s+=>\s+\[([^\]]+)\]/);
     if (!m) continue;
-    const statusText = m[4];
+    const statusText = m[4].trim();
     rows.push({
       index: Number(m[1]),
       method: m[2],

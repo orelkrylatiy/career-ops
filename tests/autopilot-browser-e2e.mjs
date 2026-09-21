@@ -90,6 +90,13 @@ try {
     "async page => { await page.locator('button[type=submit]').click(); await page.waitForTimeout(250); }",
   ]);
 
+  const requestDump = runCli(['requests']).stdout;
+  assert.match(
+    requestDump,
+    /POST[^\n]*\/api\/application/i,
+    'Playwright CLI request log should retain the application POST across commands',
+  );
+
   const finished = verifier.finishVerification(armed.receiptPath);
   assert.equal(finished.receipt.phase, 'verified');
   assert.equal(finished.receipt.verification.outcome, 'applied');
