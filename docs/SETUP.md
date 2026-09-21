@@ -48,16 +48,18 @@ and move any output you need to secure storage before its environment expires.
 Never force-add these paths. For a durable workspace shared across many
 sessions, use the local quick start below.
 
-### Recommended — one command
+### Recommended — clone this autonomous fork
 
 ```bash
-npx @santifer/career-ops init
+git clone https://github.com/orelkrylatiy/career-ops.git
+cd career-ops
+npm install
+npx playwright install chromium
 ```
 
-`npx` ships with Node.js — it runs the installer once without installing anything globally. This clones the latest release into `./career-ops` and installs dependencies. Then move into the workspace and open your AI CLI:
+The public `@santifer/career-ops` npm package installs the upstream project, not this autonomous fork. For this fork, clone the repository directly, then open your AI CLI:
 
 ```bash
-cd career-ops
 claude   # or codex / qwen / opencode / agy / grok
 ```
 
@@ -91,7 +93,7 @@ codex exec "Run career-ops tracker mode and summarize the current statuses."
 <summary>Prefer to clone the repo yourself?</summary>
 
 ```bash
-git clone https://github.com/career-ops-hq/career-ops.git
+git clone https://github.com/orelkrylatiy/career-ops.git
 cd career-ops
 npm install
 ```
