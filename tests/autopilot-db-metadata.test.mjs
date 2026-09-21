@@ -61,6 +61,14 @@ test('priority queue claims highest-priority job and can release the lease', () 
   assert.equal(claimed.url_key, normalizeUrlKey(highUrl));
   assert.equal(claimed.status, 'claimed');
   assert.equal(claimed.claim_owner, 'test-worker');
+
+  const repeated = claimNextJob('test-worker', 5);
+  assert.equal(repeated.url_key, claimed.url_key);
+  const lowStillQueued = openDb()
+    .prepare('SELECT status FROM jobs WHERE url_key=?')
+    .get(normalizeUrlKey(lowUrl));
+  assert.equal(lowStillQueued.status, 'queued');
+
   assert.equal(releaseClaim(claimed.url_key, 'test-worker'), true);
 
   const released = openDb().prepare('SELECT * FROM jobs WHERE url_key=?').get(claimed.url_key);

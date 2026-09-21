@@ -314,6 +314,17 @@ export function claimNextJob(owner = 'worker-0', leaseMinutes = 60) {
        WHERE status='claimed' AND claim_until IS NOT NULL AND claim_until < ?`,
     ).run(nowIso, nowIso);
 
+    // A worker is serial by default. If it asks for work again while its lease
+    // is still live, return the same job rather than silently holding multiple
+    // applications open. Parallel agents must use distinct owner ids.
+    const current = db.prepare(
+      `SELECT * FROM jobs
+       WHERE status='claimed' AND claim_owner=? AND claim_until>=?
+       ORDER BY claimed_at ASC, rowid ASC
+       LIMIT 1`,
+    ).get(String(owner || 'worker-0'), nowIso);
+    if (current) return current;
+
     const row = db.prepare(
       `SELECT * FROM jobs WHERE status='queued'
        ORDER BY COALESCE(priority, 50) DESC,
