@@ -63,6 +63,17 @@ legacy.prepare(`
   '2026-09-01T00:00:00.000Z',
   '2026-09-01T00:00:00.000Z',
 );
+legacy.prepare(`
+  INSERT INTO jobs(url_key, url, company, title, status, first_seen, updated_at)
+  VALUES (?, ?, ?, ?, 'test_filled', ?, ?)
+`).run(
+  'https://example.com/job/filled-only',
+  'https://example.com/job/filled-only',
+  'Filled Only Co',
+  'Engineer',
+  '2026-09-02T00:00:00.000Z',
+  '2026-09-02T00:00:00.000Z',
+);
 legacy.close();
 
 process.env.CAREER_OPS_ROOT = ROOT;
@@ -91,6 +102,10 @@ test('old autopilot DB migrates additively without losing queued jobs', () => {
   assert.equal(row.title, 'Engineer');
   assert.equal(row.status, 'queued');
   assert.equal(row.priority, 50);
+
+  const filled = db.prepare('SELECT * FROM jobs WHERE company=?').get('Filled Only Co');
+  assert.equal(filled.status, 'queued');
+  assert.equal(filled.claim_owner, null);
 });
 
 test.after(() => {

@@ -150,6 +150,16 @@ export function openDb() {
   addJobColumn('claimed_at', 'TEXT');
   addJobColumn('claim_owner', 'TEXT');
   addJobColumn('claim_until', 'TEXT');
+
+  // The previous autonomous concept used test_filled as a terminal safety gate
+  // for first-seen form types. The new worker has deterministic submit
+  // verification instead, so those never-submitted jobs become eligible again.
+  db.prepare(
+    `UPDATE jobs
+     SET status='queued', claimed_at=NULL, claim_owner=NULL, claim_until=NULL, updated_at=?
+     WHERE status='test_filled'`,
+  ).run(new Date().toISOString());
+
   dbHandle = db;
   return db;
 }
@@ -340,6 +350,25 @@ export function releaseClaim(urlKey, owner = null) {
   return res.changes > 0;
 }
 
+/** Extend a live lease owned by the same worker. */
+export function renewClaim(urlKey, owner = 'worker-0', leaseMinutes = 60) {
+  const db = openDb();
+  const minutes = Number(leaseMinutes);
+  if (!Number.isFinite(minutes) || minutes <= 0) {
+    throw new Error('renewClaim: leaseMinutes must be > 0');
+  }
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const until = new Date(now.getTime() + minutes * 60_000).toISOString();
+  const res = db.prepare(
+    `UPDATE jobs
+     SET claim_until=?, updated_at=?
+     WHERE url_key=? AND status='claimed' AND claim_owner=?`,
+  ).run(until, nowIso, urlKey, String(owner || 'worker-0'));
+  if (!res.changes) return null;
+  return db.prepare('SELECT * FROM jobs WHERE url_key=?').get(urlKey);
+}
+
 /**
  * Record an outcome for a job: flip its status and append an applications row,
  * atomically.
@@ -363,9 +392,20 @@ export function reportOutcome(urlKey, outcome, note = null, channel = null, meta
     ? JSON.stringify(metadata.details)
     : null;
   const run = db.transaction(() => {
-    const res = db.prepare(
-      'UPDATE jobs SET status = ?, note = COALESCE(?, note), claimed_at = NULL, claim_owner = NULL, claim_until = NULL, updated_at = ? WHERE url_key = ?',
-    ).run(outcome, note, now, urlKey);
+    const claimOwner = metadata?.claimOwner ? String(metadata.claimOwner) : null;
+    const res = claimOwner
+      ? db.prepare(
+        `UPDATE jobs
+         SET status=?, note=COALESCE(?, note), claimed_at=NULL, claim_owner=NULL,
+             claim_until=NULL, updated_at=?
+         WHERE url_key=? AND status='claimed' AND claim_owner=?`,
+      ).run(outcome, note, now, urlKey, claimOwner)
+      : db.prepare(
+        `UPDATE jobs
+         SET status=?, note=COALESCE(?, note), claimed_at=NULL, claim_owner=NULL,
+             claim_until=NULL, updated_at=?
+         WHERE url_key=?`,
+      ).run(outcome, note, now, urlKey);
     if (res.changes === 0) return false;
     db.prepare(`
       INSERT INTO applications

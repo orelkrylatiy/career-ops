@@ -23,7 +23,7 @@ import { normalizeTextKey } from './tracker-parse.mjs';
 import {
   openDb, addEvent, upsertJob, getJob, listJobs, reportOutcome,
   incrementDaily, normalizeUrlKey, statusCounts, recentEvents, applicationAnalytics,
-  claimNextJob, releaseClaim, JOB_STATUSES, DB_PATH,
+  claimNextJob, releaseClaim, renewClaim, JOB_STATUSES, DB_PATH,
 } from './autopilot-db.mjs';
 import { resolveResume } from './autopilot-resume.mjs';
 import { scoreJob } from './autopilot-ranking.mjs';
@@ -463,7 +463,7 @@ export function cmdCap() {
 
 export function cmdNext({
   owner = process.env.AUTOPILOT_WORKER_ID || 'worker-0',
-  leaseMinutes = 60,
+  leaseMinutes = 120,
   json = false,
 } = {}) {
   const job = claimNextJob(owner, leaseMinutes);
@@ -501,6 +501,19 @@ export function cmdRelease(
   regenerateQueue();
   if (!changed) throw new Error('no matching claimed job for this owner');
   console.log(`released to queue: ${key}`);
+}
+
+export function cmdRenew(
+  target,
+  owner = process.env.AUTOPILOT_WORKER_ID || 'worker-0',
+  leaseMinutes = 120,
+) {
+  if (!target) throw new Error('renew requires a job URL or url_key');
+  const key = normalizeUrlKey(target) || target;
+  const row = renewClaim(key, owner, leaseMinutes);
+  if (!row) throw new Error('no matching claimed job for this owner');
+  console.log(`renewed lease until ${row.claim_until}: ${key}`);
+  return row;
 }
 
 function writeTrackerAdditionTsv(job, note) {
@@ -571,6 +584,20 @@ export async function cmdReport(target, outcome, note, channel, metadata = {}) {
     || db.prepare('SELECT * FROM jobs WHERE url = ?').get(target);
   if (!job) throw new Error(`no autopilot job matches "${target}"`);
 
+  const owner = metadata.owner
+    || process.env.AUTOPILOT_WORKER_ID
+    || 'worker-0';
+  if (job.status !== 'claimed') {
+    throw new Error(
+      `job is not actively claimed (status=${job.status || 'unknown'}); use "autopilot.mjs next" first`,
+    );
+  }
+  if (job.claim_owner !== owner) {
+    throw new Error(
+      `job is claimed by "${job.claim_owner || 'unknown'}", not "${owner}"`,
+    );
+  }
+
   if (outcome === 'applied') {
     const blockers = contactPreflight().filter((p) => !p.startsWith('candidate.phone'));
     if (blockers.length) {
@@ -606,7 +633,7 @@ export async function cmdReport(target, outcome, note, channel, metadata = {}) {
     outcome,
     note ?? null,
     channel ?? null,
-    { ...metadata, details },
+    { ...metadata, details, claimOwner: owner },
   );
   if (!updated) throw new Error(`job row vanished before update (url_key=${job.url_key})`);
 
@@ -674,10 +701,11 @@ function usage() {
   node autopilot.mjs analytics
   node autopilot.mjs preflight
   node autopilot.mjs cap
-  node autopilot.mjs next [--owner worker-0] [--lease-minutes 60] [--json]
+  node autopilot.mjs next [--owner worker-0] [--lease-minutes 120] [--json]
+  node autopilot.mjs renew "<url|url_key>" [--owner worker-0] [--lease-minutes 120]
   node autopilot.mjs release "<url|url_key>" [--owner worker-0]
   node autopilot.mjs report "<url|url_key>" <applied|submitted_unconfirmed|validation_failed|failed|captcha|skipped>
-      [--channel browser|ats_api] [--evidence path] [--ats name]
+      [--owner worker-0] [--channel browser|ats_api] [--evidence path] [--ats name]
       [--resume variant] [--resume-path path] [--duration-ms N] [--note "..."]`);
 }
 
@@ -695,7 +723,7 @@ async function main() {
 
   if (argv[0] === 'next') {
     const leaseRaw = flagValue(argv, '--lease-minutes');
-    const leaseMinutes = leaseRaw == null ? 60 : Number(leaseRaw);
+    const leaseMinutes = leaseRaw == null ? 120 : Number(leaseRaw);
     if (!Number.isFinite(leaseMinutes) || leaseMinutes <= 0) {
       throw new Error('--lease-minutes must be > 0');
     }
@@ -719,6 +747,22 @@ async function main() {
     return;
   }
 
+  if (argv[0] === 'renew') {
+    const leaseRaw = flagValue(argv, '--lease-minutes');
+    const leaseMinutes = leaseRaw == null ? 120 : Number(leaseRaw);
+    if (!Number.isFinite(leaseMinutes) || leaseMinutes <= 0) {
+      throw new Error('--lease-minutes must be > 0');
+    }
+    cmdRenew(
+      argv[1],
+      flagValue(argv, '--owner')
+        || process.env.AUTOPILOT_WORKER_ID
+        || 'worker-0',
+      leaseMinutes,
+    );
+    return;
+  }
+
   if (argv[0] === 'report') {
     const durationRaw = flagValue(argv, '--duration-ms');
     const durationMs = durationRaw == null ? null : Number(durationRaw);
@@ -736,6 +780,9 @@ async function main() {
         resumePath: flagValue(argv, '--resume-path') || null,
         durationMs,
         evidencePath: flagValue(argv, '--evidence') || null,
+        owner: flagValue(argv, '--owner')
+          || process.env.AUTOPILOT_WORKER_ID
+          || 'worker-0',
       },
     );
     return;

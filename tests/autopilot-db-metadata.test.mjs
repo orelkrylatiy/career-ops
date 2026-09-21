@@ -17,6 +17,7 @@ const {
   normalizeUrlKey,
   claimNextJob,
   releaseClaim,
+  renewClaim,
 } = await import(modUrl);
 
 test('application journal records ATS, resume and duration metadata', () => {
@@ -96,4 +97,39 @@ test('analytics groups outcomes and resume variants', () => {
 test.after(() => {
   try { openDb().close(); } catch {}
   rmSync(ROOT, { recursive: true, force: true });
+});
+
+test('claim-aware reporting is single-owner and single-finalization', () => {
+  const url = 'https://jobs.example.com/role/claimed-report';
+  const key = normalizeUrlKey(url);
+  upsertJob({
+    urlKey: key, url, company: 'Claimed', title: 'Engineer',
+    priority: 100, status: 'queued',
+  });
+  const claimed = claimNextJob('owner-a', 5);
+  assert.equal(claimed.url_key, key);
+  assert.equal(renewClaim(key, 'owner-b', 5), null);
+  assert.ok(renewClaim(key, 'owner-a', 5));
+
+  assert.equal(reportOutcome(key, 'failed', 'network', 'browser', {
+    claimOwner: 'owner-b',
+  }), false);
+  assert.equal(reportOutcome(key, 'failed', 'network', 'browser', {
+    claimOwner: 'owner-a',
+  }), true);
+
+  const attempts = openDb()
+    .prepare('SELECT COUNT(*) AS n FROM applications WHERE job_url_key=?')
+    .get(key).n;
+  assert.equal(attempts, 1);
+
+  // The claim was cleared by the first finalization, so replaying the report
+  // cannot append another application row.
+  assert.equal(reportOutcome(key, 'failed', 'duplicate', 'browser', {
+    claimOwner: 'owner-a',
+  }), false);
+  const after = openDb()
+    .prepare('SELECT COUNT(*) AS n FROM applications WHERE job_url_key=?')
+    .get(key).n;
+  assert.equal(after, 1);
 });
