@@ -310,7 +310,7 @@ function runScanStep({ deep = false, refreshRegistry = false } = {}) {
       '--wide',
       '--since', '7',
       '--include-undated',
-      '--ats', 'greenhouse,lever,ashby,workday,icims',
+      '--ats', 'greenhouse,lever,ashby,workday,icims,bamboohr,paylocity',
       '--seeds', 'yc,a16z',
     ],
   ));
