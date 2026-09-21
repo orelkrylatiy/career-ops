@@ -61,7 +61,8 @@ export function escapeTelegramHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 function durationLabel(ms) {
@@ -174,7 +175,11 @@ export async function flushTelegramNotifications({
       markNotificationSent(row.id);
       sent++;
     } catch (err) {
-      markNotificationFailed(row.id, err instanceof Error ? err.message : String(err));
+      const rawMessage = err instanceof Error ? err.message : String(err);
+      const safeMessage = settings.token
+        ? rawMessage.split(settings.token).join('[redacted]')
+        : rawMessage;
+      markNotificationFailed(row.id, safeMessage);
       failed++;
     }
   }
