@@ -148,6 +148,7 @@ career-ops is the first reference implementation of [the CareerOps Manifesto](ht
 The autonomous worker described in this README lives in **this fork**, not in the published upstream npm installer. Clone the fork directly:
 
 ```bash
+# Autonomous mode requires Node.js 20+
 git clone https://github.com/orelkrylatiy/career-ops.git
 cd career-ops
 npm install

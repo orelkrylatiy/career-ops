@@ -479,7 +479,7 @@ weak match / uncertain geography / high friction
 
 But everything remains drainable.
 
-The current autopilot.mjs still has a real positive/negative title gate and optional remote/location gates. That conflicts with this target and should be refactored into ranking in the next implementation phase.
+This refactor is now implemented in the autonomous lane: `scan.mjs --wide` bypasses preference filters, provider-side location hints are disabled in wide mode, and `autopilot.mjs` uses those signals for priority instead of queue admission. Explicit blacklist/dedup/invalid-target rules remain hard stops.
 
 ## 8. Application packet handed to the agent
 
@@ -523,7 +523,7 @@ The agent prompt should be site-agnostic:
 7. confirm success/failure;
 8. return a structured result.
 
-The browser implementation should not appear in the job prompt. The same prompt should survive replacing Playwright MCP with Browser Use later.
+The job packet should stay site-agnostic. Browser-engine details belong in the autonomous agent mode/skill, so the discovery packet remains stable even if the browser implementation is reevaluated later.
 
 ## 9. Resume strategy
 
@@ -646,28 +646,21 @@ Playwright documents that one persistent profile cannot be owned by multiple bro
 
 For login-required sources such as HH, the browser profile is a fallback/session store, while OAuth tokens for official candidate APIs belong in a separate secrets/credential layer.
 
-## 12. Submission path: API where candidate credentials exist, browser everywhere else
+## 12. Submission path: one browser channel in v1
 
-There are two fundamentally different classes of application API.
+There are two useful classes of API, but they have different roles in the implemented worker.
 
-### Candidate-owned API
+### Candidate-owned APIs
 
-These are valuable because the user can legitimately authorize the application.
+HeadHunter and SuperJob expose applicant-authorized APIs and are worth keeping in the source research because they can materially improve discovery and applicant context.
 
-Current high-value examples:
+They are **not** a production submission channel in v1. The current worker deliberately keeps a single application execution path so success semantics, retries, evidence and debugging are not split between two engines.
 
-- HeadHunter applicant OAuth/application API.
-- SuperJob applicant OAuth/application API.
+### Employer-owned ATS APIs
 
-For these, direct API submission should usually beat browser automation because it is faster, structured and easier to verify.
+Greenhouse, Lever, Ashby, SmartRecruiters, Personio and similar vendors expose submission APIs primarily for an employer's own career site or integration partner. They require employer/customer keys or permissions and are not generic applicant credentials.
 
-### Employer-owned ATS API
-
-Greenhouse, Lever, Ashby, SmartRecruiters, Personio and similar vendors expose submission APIs primarily for the employer's own/custom career site or integration partner. They require employer/customer API keys or permissions.
-
-Those APIs are useful documentation for understanding form structure, but they are not generic applicant credentials.
-
-For the implemented autonomous worker, these APIs remain **discovery and form-understanding inputs only**. Production submission is intentionally singular:
+For the implemented autonomous worker, both candidate/public APIs and employer ATS APIs are discovery/form-understanding inputs. Production submission is singular:
 
 ~~~text
 posting discovered by API/feed/page
@@ -677,7 +670,7 @@ posting discovered by API/feed/page
         -> deterministic submit evidence
 ~~~
 
-There is no `ats_api` reporting bypass in v1. A future direct-submit adapter would need its own authenticated applicant-side contract and deterministic receipt before it could become another submission channel.
+There is no `ats_api` reporting bypass in v1. A direct applicant-API channel can be reconsidered later only if it gets its own authentication, idempotency and deterministic receipt contract.
 
 ## 13. Pre-submit validation
 
@@ -798,7 +791,7 @@ Implemented baseline:
 
 - wide-funnel normalized SQLite queue with soft ranking and atomic leases;
 - configured + regional + public ATS-directory/VC-seed deep discovery;
-- Playwright CLI named persistent browser sessions;
+- Playwright CLI named persistent browser sessions (autonomous mode requires Node.js 20+);
 - LLM-first resume choice with tailored/prepared fallback;
 - deterministic pre/post-submit evidence and claim-safe finalization;
 - browser-only autonomous submission channel;
@@ -823,36 +816,35 @@ CNews/RBC company seeds + Russia boards + ATS sweeps + global feeds
 HTTP/API/RSS/XML/parser collection
         |
         v
-normalized jobs in DB
+normalized jobs / pipeline ingestion
         |
         v
-dedup + priority
+dedup + soft priority
         |
-        +-----------------------------+
-                                      |
-[worker]                              v
-                            claim one queued job
-                                      |
-                                      v
-                            load full JD/context
-                                      |
-                                      v
-                         LLM chooses/generates CV
-                                      |
-                    +-----------------+------------------+
-                    |                                    |
-          candidate API exists                  no applicant API
-           (HH/SuperJob)                                |
-                    |                                    v
-                 submit                           Playwright MCP
-                    |                             persistent Chrome
-                    |                                    |
-                    |                         fill -> validate -> submit
-                    |                                    |
-                    +-----------------+------------------+
-                                      |
-                                      v
-                           application result DB
+[worker]
+claim one queued job (SQLite lease)
+        |
+        v
+load full JD + candidate context
+        |
+        v
+LLM chooses prepared/tailored CV
+        |
+        v
+named Playwright CLI session
+persistent dedicated Chrome profile
+        |
+        v
+fill -> validate -> renew lease -> arm verifier
+        |
+        v
+real Submit click
+        |
+        v
+post-submit DOM/URL/network verification
+        |
+        v
+application DB + tracker + analytics
 ~~~
 
 No manual browsing is required in the normal cycle. Human intervention is for initial account/OAuth login, genuinely human-only requirements, or repairing a provider when a source changes.
@@ -862,7 +854,7 @@ No manual browsing is required in the normal cycle. Human intervention is for in
 1. The repository already has the hard part of discovery: a large provider ecosystem, ATS scanners and a persistent source registry. Reuse it.
 2. Russia should be seeded by both IT-company and broad-employer directories, then resolved to direct career endpoints.
 3. Работа России is an excellent open incremental API source.
-4. HH and SuperJob are unusually valuable because they expose candidate-authorized application APIs; prioritize them.
+4. HH and SuperJob are unusually valuable candidate-authorized APIs; prioritize them for discovery/context research, while keeping v1 submission browser-only.
 5. Most global ATS APIs are excellent for public discovery but their submission endpoints use employer/customer credentials. Browser submission remains the generic solution.
 6. Global collection should be API/feed heavy and browser light.
 7. Do not filter the funnel aggressively. Dedup and known-impossible technical states are hard stops; fit signals are ranking.
