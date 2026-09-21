@@ -109,6 +109,8 @@ CREATE TABLE IF NOT EXISTS notification_outbox (
   status TEXT NOT NULL DEFAULT 'pending',
   attempts INTEGER NOT NULL DEFAULT 0,
   next_attempt_at TEXT,
+  claim_owner TEXT,
+  claim_until TEXT,
   created_at TEXT NOT NULL,
   sent_at TEXT,
   last_error TEXT
@@ -170,6 +172,18 @@ export function openDb() {
   addJobColumn('claim_owner', 'TEXT');
   addJobColumn('claim_until', 'TEXT');
   addJobColumn('next_attempt_at', 'TEXT');
+
+  const notificationColumns = new Set(
+    db.prepare('PRAGMA table_info(notification_outbox)').all().map((row) => row.name),
+  );
+  const addNotificationColumn = (name, type) => {
+    if (!notificationColumns.has(name)) {
+      db.exec(`ALTER TABLE notification_outbox ADD COLUMN ${name} ${type}`);
+      notificationColumns.add(name);
+    }
+  };
+  addNotificationColumn('claim_owner', 'TEXT');
+  addNotificationColumn('claim_until', 'TEXT');
 
   // The previous autonomous concept used test_filled as a terminal safety gate
   // for first-seen form types. The new worker has deterministic submit
@@ -592,26 +606,110 @@ export function listPendingNotifications(channel, limit = 20) {
   `).all(String(channel), now, n);
 }
 
+/**
+ * Atomically lease due notifications for one sender. Expired sending leases
+ * return to pending first, so a crashed process cannot strand a notification.
+ */
+export function claimPendingNotifications(
+  channel,
+  owner = 'notification-worker',
+  limit = 20,
+  leaseMinutes = 5,
+) {
+  const db = openDb();
+  const n = Math.max(1, Math.min(100, Number.parseInt(String(limit), 10) || 20));
+  const minutes = Number(leaseMinutes);
+  if (!Number.isFinite(minutes) || minutes <= 0) {
+    throw new Error('claimPendingNotifications: leaseMinutes must be > 0');
+  }
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const until = new Date(now.getTime() + minutes * 60_000).toISOString();
+  const worker = String(owner || 'notification-worker');
+
+  return db.transaction(() => {
+    db.prepare(`
+      UPDATE notification_outbox
+      SET status='pending', claim_owner=NULL, claim_until=NULL
+      WHERE status='sending' AND claim_until IS NOT NULL AND claim_until < ?
+    `).run(nowIso);
+
+    const rows = db.prepare(`
+      SELECT id FROM notification_outbox
+      WHERE channel = ?
+        AND status = 'pending'
+        AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+      ORDER BY id ASC
+      LIMIT ?
+    `).all(String(channel), nowIso, n);
+    if (rows.length === 0) return [];
+
+    const claim = db.prepare(`
+      UPDATE notification_outbox
+      SET status='sending', claim_owner=?, claim_until=?
+      WHERE id=? AND status='pending'
+    `);
+    const claimedIds = [];
+    for (const row of rows) {
+      if (claim.run(worker, until, row.id).changes) claimedIds.push(row.id);
+    }
+    if (claimedIds.length === 0) return [];
+
+    const placeholders = claimedIds.map(() => '?').join(',');
+    return db.prepare(`
+      SELECT * FROM notification_outbox
+      WHERE id IN (${placeholders}) AND status='sending' AND claim_owner=?
+      ORDER BY id ASC
+    `).all(...claimedIds, worker);
+  })();
+}
+
 export function pendingNotificationCount(channel) {
   return openDb().prepare(
-    "SELECT COUNT(*) AS n FROM notification_outbox WHERE channel = ? AND status = 'pending'",
+    "SELECT COUNT(*) AS n FROM notification_outbox WHERE channel = ? AND status IN ('pending','sending')",
   ).get(String(channel)).n;
 }
 
-export function markNotificationSent(id) {
-  return openDb().prepare(`
-    UPDATE notification_outbox
-    SET status='sent', sent_at=?, last_error=NULL, next_attempt_at=NULL
-    WHERE id=? AND status='pending'
-  `).run(new Date().toISOString(), Number(id)).changes > 0;
+export function markNotificationSent(id, owner = null) {
+  const db = openDb();
+  const now = new Date().toISOString();
+  const res = owner
+    ? db.prepare(`
+      UPDATE notification_outbox
+      SET status='sent', sent_at=?, last_error=NULL, next_attempt_at=NULL,
+          claim_owner=NULL, claim_until=NULL
+      WHERE id=? AND status='sending' AND claim_owner=?
+    `).run(now, Number(id), String(owner))
+    : db.prepare(`
+      UPDATE notification_outbox
+      SET status='sent', sent_at=?, last_error=NULL, next_attempt_at=NULL,
+          claim_owner=NULL, claim_until=NULL
+      WHERE id=? AND status IN ('pending','sending')
+    `).run(now, Number(id));
+  return res.changes > 0;
 }
 
-export function markNotificationFailed(id, error, nextAttemptAt) {
-  return openDb().prepare(`
-    UPDATE notification_outbox
-    SET attempts=attempts+1, last_error=?, next_attempt_at=?
-    WHERE id=? AND status='pending'
-  `).run(String(error || '').slice(0, 1000), nextAttemptAt || null, Number(id)).changes > 0;
+export function markNotificationFailed(id, error, nextAttemptAt, owner = null) {
+  const db = openDb();
+  const args = [
+    String(error || '').slice(0, 1000),
+    nextAttemptAt || null,
+    Number(id),
+  ];
+  const res = owner
+    ? db.prepare(`
+      UPDATE notification_outbox
+      SET status='pending', attempts=attempts+1, last_error=?, next_attempt_at=?,
+          claim_owner=NULL, claim_until=NULL
+      WHERE id=? AND status='sending' AND claim_owner=?
+    `).run(...args, String(owner))
+    : db.prepare(`
+      UPDATE notification_outbox
+      SET status='pending', attempts=attempts+1, last_error=?, next_attempt_at=?,
+          claim_owner=NULL, claim_until=NULL
+      WHERE id=? AND status IN ('pending','sending')
+    `).run(...args);
+  return res.changes > 0;
 }
 
 
