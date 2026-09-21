@@ -33,14 +33,14 @@ test('normalizes configured application profiles', () => {
   assert.deepEqual(configuredProfileSummary(profile)[0].stack, ['react', 'typescript', 'next.js']);
 });
 
-test('explicit profile wins and is validated', () => {
+test('explicit profile wins and unknown explicit ids stay non-blocking', () => {
   const row = resolveApplicationProfile({ profile, requested: 'mobile', title: 'Frontend Engineer' });
   assert.equal(row.id, 'mobile');
   assert.equal(row.matchedBy, 'explicit');
-  assert.throws(
-    () => resolveApplicationProfile({ profile, requested: 'backend' }),
-    /unknown application profile/,
-  );
+
+  const adHoc = resolveApplicationProfile({ profile, requested: 'backend' });
+  assert.equal(adHoc.id, 'backend');
+  assert.equal(adHoc.matchedBy, 'explicit-ad-hoc');
 });
 
 test('resume variant is stronger than title overlap', () => {
