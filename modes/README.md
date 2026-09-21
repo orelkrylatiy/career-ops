@@ -21,6 +21,7 @@ table in `AGENTS.md` (mirrored in `CLAUDE.md`).
 | `scan.md` | `scan` | Portal scanner (job discovery) |
 | `batch.md` | `batch` | Mass processing with headless workers |
 | `apply.md` | `apply` | Live application assistant (form filling; never submits) |
+| `autopilot.md` | `autopilot` | Explicit opt-in autonomous web applier: wide queue, Playwright CLI, verified Submit |
 | `pdf.md` | `pdf` | ATS-optimized PDF generation |
 | `latex.md` | `latex` | LaTeX/Overleaf CV export |
 | `text.md` | `text` | Tailored markdown CV (no PDF) |

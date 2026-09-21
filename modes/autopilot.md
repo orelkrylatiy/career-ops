@@ -14,7 +14,7 @@ Prefer an extra application over silently deleting a potentially useful job.
 
 Hard queue stops are intentionally narrow:
 
-- invalid/unusable posting URL;
+- invalid/unusable or explicitly private/local posting URL;
 - exact/canonical posting already known;
 - already recorded application;
 - explicit user company blacklist;
@@ -57,14 +57,13 @@ Recommended first worker:
 ~~~bash
 export PLAYWRIGHT_CLI_SESSION=career-ops-worker-0
 npx playwright cli -s=career-ops-worker-0 open "about:blank" \
-  --browser=chrome \
   --profile="./data/browser-profile" \
   --headed
 ~~~
 
 On PowerShell, set the environment variable with the normal PowerShell syntax.
 
-The same named session/profile is reused across applications so cookies, login state, localStorage, tabs, and browser state survive between commands and browser restarts.
+The same named session/profile is reused across applications so cookies, login state, localStorage, tabs, and browser state survive between commands and browser restarts. Use Playwright's managed Chromium by default; an explicit `--browser=chrome` is optional only when a machine has a Chrome channel you intentionally want to use.
 
 Normal browser loop:
 
