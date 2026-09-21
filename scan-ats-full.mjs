@@ -774,9 +774,13 @@ async function main() {
   // (#3439). `portal` here is scan-history.tsv's recorded `offer.source`, so
   // providerForSource resolves it the same way the checkpoint reseed above
   // does.
-  const { seen: seenUrls } = loadSeenUrls({}, {
-    extraTokensFor: (url, portal) => providerForSource(portal)?.dedupKey?.({ url }),
-  });
+  const { seen: seenUrls } = loadSeenUrls(
+    opts.wide ? { recheckAfterDays: 0 } : {},
+    {
+      applicationsMode: opts.wide ? 'submitted' : 'all',
+      extraTokensFor: (url, portal) => providerForSource(portal)?.dedupKey?.({ url }),
+    },
+  );
   const blacklist = loadBlacklist();
   // sinceMs and includeUndated let providers (currently only workday.mjs)
   // stop paginating a tenant early instead of always walking to max_pages:

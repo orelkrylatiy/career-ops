@@ -1536,7 +1536,49 @@ function extractPipelineCompanyRole(line) {
  * URL), so the hook only fires there. Return a string, an array of strings,
  * or a falsy value for "nothing extra".
  */
-export function collectSeenUrls(sources = {}, policy = {}, { extraTokensFor } = {}) {
+const SUBMITTED_TRACKER_STATUSES = new Set([
+  'applied', 'responded', 'interview', 'offer', 'rejected', 'hired',
+]);
+
+function normalizedTrackerStatus(raw) {
+  return String(raw || '')
+    .replace(/\*\*/g, '')
+    .replace(/\(?\d{4}-\d{2}-\d{2}\)?/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Return only URLs whose tracker row proves an application was actually sent.
+ * Evaluated/SKIP/Discarded rows are intentionally excluded: autonomous
+ * wide-funnel discovery must not confuse "seen before" with "applied before".
+ */
+export function collectSubmittedTrackerUrls(applicationsText = '') {
+  const lines = String(applicationsText || '').replace(/\r/g, '').split('\n');
+  const colmap = resolveColumns(lines);
+  const out = new Set();
+
+  for (const line of lines) {
+    const row = parseTrackerRow(line, colmap);
+    if (!row) continue;
+    if (!SUBMITTED_TRACKER_STATUSES.has(normalizedTrackerStatus(row.status))) continue;
+
+    const cells = line.split('|').map((s) => s.trim());
+    const haystack = colmap.url != null
+      ? String(cells[colmap.url] || '')
+      : line;
+    for (const match of haystack.matchAll(/https?:\/\/[^\s|)\]'"]+/g)) {
+      out.add(normalizeUrlForDedup(match[0]));
+    }
+  }
+  return out;
+}
+
+export function collectSeenUrls(
+  sources = {},
+  policy = {},
+  { extraTokensFor, applicationsMode = 'all' } = {},
+) {
   const { scanHistoryText = '', pipelineText = '', applicationsText = '' } = sources;
   const seen = new Set();
   // Rows the age policy has released. Held rather than counted here: the two
@@ -1607,9 +1649,15 @@ export function collectSeenUrls(sources = {}, policy = {}, { extraTokensFor } = 
     seen.add(key);
   }
 
-  // applications.md — extract URLs from report links and any inline URLs
-  for (const match of applicationsText.matchAll(/https?:\/\/[^\s|)]+/g)) {
-    seen.add(normalizeUrlForDedup(match[0]));
+  // applications.md — default behavior remains backward-compatible for
+  // review-first scans. Autonomous --wide uses submitted-only mode so an old
+  // Evaluated/SKIP row cannot permanently hide a job that was never applied to.
+  if (applicationsMode === 'submitted') {
+    for (const key of collectSubmittedTrackerUrls(applicationsText)) seen.add(key);
+  } else if (applicationsMode !== 'none') {
+    for (const match of applicationsText.matchAll(/https?:\/\/[^\s|)]+/g)) {
+      seen.add(normalizeUrlForDedup(match[0]));
+    }
   }
 
   // Counted against the finished set: a released row that applications.md or an
@@ -1631,12 +1679,13 @@ export function loadSeenUrls(policy = {}, {
   pipelinePath = PIPELINE_PATH,
   applicationsPath = APPLICATIONS_PATH,
   extraTokensFor,
+  applicationsMode = 'all',
 } = {}) {
   return collectSeenUrls({
     scanHistoryText: readIfExists(scanHistoryPath),
     pipelineText: readIfExists(pipelinePath),
-    applicationsText: readIfExists(applicationsPath),
-  }, policy, { extraTokensFor });
+    applicationsText: applicationsPath ? readIfExists(applicationsPath) : '',
+  }, policy, { extraTokensFor, applicationsMode });
 }
 
 /**
@@ -2357,11 +2406,16 @@ export function loadDedupSnapshot(policy = {}, canonicalize = defaultCompanyNorm
   pipelinePath = PIPELINE_PATH,
   applicationsPath = APPLICATIONS_PATH,
   includeLocation = false,
+  applicationsMode = 'all',
 } = {}) {
   const scanHistoryText = readIfExists(scanHistoryPath);
   const pipelineText = readIfExists(pipelinePath);
-  const applicationsText = readIfExists(applicationsPath);
-  const { seen, recheckEligible } = collectSeenUrls({ scanHistoryText, pipelineText, applicationsText }, policy);
+  const applicationsText = applicationsPath ? readIfExists(applicationsPath) : '';
+  const { seen, recheckEligible } = collectSeenUrls(
+    { scanHistoryText, pipelineText, applicationsText },
+    policy,
+    { applicationsMode },
+  );
   // Companion index: the bare key of every seeded row that carried a location.
   // It makes the wildcard rule symmetric in O(1) — see the dedupe check in
   // main() for the direction it closes. Empty whenever the flag is off.
@@ -3050,10 +3104,15 @@ async function main() {
   const blacklist = loadBlacklist();
 
   // 4. Load dedup sets — one read per source file for the whole run (#2382).
-  const historyPolicy = scanHistoryPolicy(config);
+  const historyPolicy = wide
+    ? { recheckAfterDays: 0 }
+    : scanHistoryPolicy(config);
   const canonicalizeCompany = buildCompanyCanonicalizer(config.company_aliases);
   const dedupIncludeLocation = resolveDedupIncludeLocation(config);
-  const dedupSnapshot = loadDedupSnapshot(historyPolicy, canonicalizeCompany, { includeLocation: dedupIncludeLocation });
+  const dedupSnapshot = loadDedupSnapshot(historyPolicy, canonicalizeCompany, {
+    includeLocation: dedupIncludeLocation,
+    applicationsMode: wide ? 'submitted' : 'all',
+  });
   const seenUrls = dedupSnapshot.seen;
   const seenCompanyRoles = dedupSnapshot.seenCompanyRoles;
   const seenCompanyRoleBases = dedupSnapshot.seenCompanyRoleBases ?? new Set();

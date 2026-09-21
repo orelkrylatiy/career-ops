@@ -36,7 +36,7 @@ jobs:
       - name: Playwright CLI exposure
         run: node autopilot-verify.mjs doctor
       - name: Fork-focused tests
-        run: node --test tests/source-registry.test.mjs tests/providers/regional-cis.test.mjs tests/autopilot-resume.test.mjs tests/autopilot-log.test.mjs tests/autopilot-db-metadata.test.mjs tests/autopilot-db-migration.test.mjs tests/autopilot-wide-queue.test.mjs tests/autopilot-ranking.test.mjs tests/autopilot-url-policy.test.mjs tests/autopilot-verifier.test.mjs tests/autopilot-discovery-contract.test.mjs tests/autopilot-report-contract.test.mjs tests/autopilot-tracker-dedup.test.mjs tests/autopilot-doc-contract.test.mjs tests/autopilot-legacy-tombstones.test.mjs tests/fork-install-contract.test.mjs tests/readme-english-only.test.mjs
+        run: node --test tests/source-registry.test.mjs tests/providers/regional-cis.test.mjs tests/autopilot-resume.test.mjs tests/autopilot-log.test.mjs tests/autopilot-db-metadata.test.mjs tests/autopilot-db-migration.test.mjs tests/autopilot-wide-queue.test.mjs tests/autopilot-wide-history-dedup.test.mjs tests/autopilot-ranking.test.mjs tests/autopilot-url-policy.test.mjs tests/autopilot-verifier.test.mjs tests/autopilot-discovery-contract.test.mjs tests/autopilot-report-contract.test.mjs tests/autopilot-tracker-dedup.test.mjs tests/autopilot-doc-contract.test.mjs tests/autopilot-legacy-tombstones.test.mjs tests/fork-install-contract.test.mjs tests/readme-english-only.test.mjs
       - name: Go dashboard tests
         run: go test ./...
         working-directory: dashboard
