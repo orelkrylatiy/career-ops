@@ -16,6 +16,8 @@ for (const url of [
   'http://100.100.100.200/latest/meta-data',
   'http://[::1]/job',
   'http://[fd00::1]/job',
+  'http://[::ffff:127.0.0.1]/job',
+  'http://[::ffff:7f00:1]/job',
   'http://metadata.google.internal/',
 ]) {
   test(`private destination is refused: ${url}`, () => {
@@ -28,4 +30,8 @@ test('test-only private URL override is explicit', () => {
     inspectApplicationUrl('http://127.0.0.1:3210/job', { allowPrivate: true }).ok,
     true,
   );
+});
+
+test('public IPv4-mapped IPv6 literal is not rejected merely for being mapped', () => {
+  assert.equal(inspectApplicationUrl('https://[::ffff:808:808]/job').ok, true);
 });

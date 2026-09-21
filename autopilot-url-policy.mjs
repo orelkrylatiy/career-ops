@@ -48,7 +48,23 @@ function privateIpv6(host) {
   if (/^f[cd][0-9a-f]{2}:/i.test(h)) return true;
   if (/^fe[89ab][0-9a-f]:/i.test(h)) return true;
   const mapped = h.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
-  return mapped ? privateIpv4(mapped[1]) : false;
+  if (mapped) return privateIpv4(mapped[1]);
+
+  // WHATWG URL canonicalizes IPv4-mapped IPv6 literals into hexadecimal
+  // groups, e.g. ::ffff:127.0.0.1 -> ::ffff:7f00:1.
+  const mappedHex = h.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+  if (mappedHex) {
+    const hi = Number.parseInt(mappedHex[1], 16);
+    const lo = Number.parseInt(mappedHex[2], 16);
+    const ipv4 = [
+      (hi >>> 8) & 0xff,
+      hi & 0xff,
+      (lo >>> 8) & 0xff,
+      lo & 0xff,
+    ].join('.');
+    return privateIpv4(ipv4);
+  }
+  return false;
 }
 
 export function inspectApplicationUrl(raw, {
