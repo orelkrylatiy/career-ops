@@ -109,6 +109,8 @@ CREATE TABLE IF NOT EXISTS notification_outbox (
   status TEXT DEFAULT 'pending',
   attempts INTEGER DEFAULT 0,
   next_attempt_at TEXT,
+  claim_owner TEXT,
+  claim_until TEXT,
   created_at TEXT,
   sent_at TEXT,
   last_error TEXT
@@ -170,6 +172,18 @@ export function openDb() {
   addJobColumn('claim_owner', 'TEXT');
   addJobColumn('claim_until', 'TEXT');
   addJobColumn('next_attempt_at', 'TEXT');
+
+  const notificationColumns = new Set(
+    db.prepare('PRAGMA table_info(notification_outbox)').all().map((row) => row.name),
+  );
+  const addNotificationColumn = (name, type) => {
+    if (!notificationColumns.has(name)) {
+      db.exec(`ALTER TABLE notification_outbox ADD COLUMN ${name} ${type}`);
+      notificationColumns.add(name);
+    }
+  };
+  addNotificationColumn('claim_owner', 'TEXT');
+  addNotificationColumn('claim_until', 'TEXT');
 
   // The previous autonomous concept used test_filled as a terminal safety gate
   // for first-seen form types. The new worker has deterministic submit
@@ -603,7 +617,7 @@ export function applicationAnalytics({ profile = null } = {}) {
   };
 }
 
-/** Pending notifications that are due now, oldest first. */
+/** Pending notifications that are due now, oldest first (inspection only). */
 export function pendingNotifications(channel = 'telegram', limit = 25) {
   const n = Math.max(1, Math.min(200, Number.parseInt(String(limit), 10) || 25));
   const now = new Date().toISOString();
@@ -618,35 +632,108 @@ export function pendingNotifications(channel = 'telegram', limit = 25) {
   ).all(String(channel), now, n);
 }
 
-export function markNotificationSent(id) {
-  const now = new Date().toISOString();
-  return openDb().prepare(
-    `UPDATE notification_outbox
-     SET status='sent', sent_at=?, next_attempt_at=NULL, last_error=NULL
-     WHERE id=? AND status='pending'`,
-  ).run(now, Number(id)).changes > 0;
+/**
+ * Atomically lease one due outbox row. Parallel application workers may all
+ * flush Telegram after reporting; the lease prevents them from sending the
+ * same row concurrently. A process that dies mid-send releases the row after
+ * the lease expires. As with any external API, a crash after remote success
+ * but before markNotificationSent can still produce an at-least-once retry.
+ */
+export function claimNextNotification(
+  channel = 'telegram',
+  owner = 'notification-worker',
+  leaseMinutes = 5,
+) {
+  const db = openDb();
+  const minutes = Number(leaseMinutes);
+  if (!Number.isFinite(minutes) || minutes <= 0) {
+    throw new Error('claimNextNotification: leaseMinutes must be > 0');
+  }
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const until = new Date(now.getTime() + minutes * 60_000).toISOString();
+  const claimOwner = String(owner || 'notification-worker');
+
+  return db.transaction(() => {
+    db.prepare(
+      `UPDATE notification_outbox
+       SET status='pending', claim_owner=NULL, claim_until=NULL
+       WHERE status='sending' AND claim_until IS NOT NULL AND claim_until < ?`,
+    ).run(nowIso);
+
+    const row = db.prepare(
+      `SELECT *
+       FROM notification_outbox
+       WHERE channel=?
+         AND status='pending'
+         AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+       ORDER BY id ASC
+       LIMIT 1`,
+    ).get(String(channel), nowIso);
+    if (!row) return null;
+
+    const changed = db.prepare(
+      `UPDATE notification_outbox
+       SET status='sending', claim_owner=?, claim_until=?
+       WHERE id=? AND status='pending'`,
+    ).run(claimOwner, until, row.id);
+    if (!changed.changes) return null;
+    return db.prepare('SELECT * FROM notification_outbox WHERE id=?').get(row.id);
+  })();
 }
 
-export function markNotificationFailed(id, error) {
+export function markNotificationSent(id, owner = null) {
+  const now = new Date().toISOString();
   const db = openDb();
-  const row = db.prepare('SELECT attempts FROM notification_outbox WHERE id=?').get(Number(id));
+  const res = owner
+    ? db.prepare(
+      `UPDATE notification_outbox
+       SET status='sent', sent_at=?, next_attempt_at=NULL, last_error=NULL,
+           claim_owner=NULL, claim_until=NULL
+       WHERE id=? AND status='sending' AND claim_owner=?`,
+    ).run(now, Number(id), String(owner))
+    : db.prepare(
+      `UPDATE notification_outbox
+       SET status='sent', sent_at=?, next_attempt_at=NULL, last_error=NULL,
+           claim_owner=NULL, claim_until=NULL
+       WHERE id=? AND status IN ('pending', 'sending')`,
+    ).run(now, Number(id));
+  return res.changes > 0;
+}
+
+export function markNotificationFailed(id, error, owner = null) {
+  const db = openDb();
+  const row = owner
+    ? db.prepare(
+      "SELECT attempts FROM notification_outbox WHERE id=? AND status='sending' AND claim_owner=?",
+    ).get(Number(id), String(owner))
+    : db.prepare('SELECT attempts FROM notification_outbox WHERE id=?').get(Number(id));
   if (!row) return false;
   const attempts = Math.max(0, Number(row.attempts) || 0) + 1;
   const delayMinutes = Math.min(60, 2 ** Math.min(6, attempts - 1));
   const next = new Date(Date.now() + delayMinutes * 60_000).toISOString();
   const message = String(error || 'notification failed').slice(0, 500);
-  return db.prepare(
-    `UPDATE notification_outbox
-     SET status='pending', attempts=?, next_attempt_at=?, last_error=?
-     WHERE id=? AND status='pending'`,
-  ).run(attempts, next, message, Number(id)).changes > 0;
+  const res = owner
+    ? db.prepare(
+      `UPDATE notification_outbox
+       SET status='pending', attempts=?, next_attempt_at=?, last_error=?,
+           claim_owner=NULL, claim_until=NULL
+       WHERE id=? AND status='sending' AND claim_owner=?`,
+    ).run(attempts, next, message, Number(id), String(owner))
+    : db.prepare(
+      `UPDATE notification_outbox
+       SET status='pending', attempts=?, next_attempt_at=?, last_error=?,
+           claim_owner=NULL, claim_until=NULL
+       WHERE id=?`,
+    ).run(attempts, next, message, Number(id));
+  return res.changes > 0;
 }
 
 export function notificationCounts() {
   const rows = openDb().prepare(
     'SELECT status, COUNT(*) AS n FROM notification_outbox GROUP BY status',
   ).all();
-  const out = { pending: 0, sent: 0 };
+  const out = { pending: 0, sending: 0, sent: 0 };
   for (const row of rows) out[row.status] = row.n;
   return out;
 }
