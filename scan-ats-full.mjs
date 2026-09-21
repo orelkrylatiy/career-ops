@@ -306,7 +306,7 @@ export const SOURCES = {
     toEntry: (row) => {
       if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
       const guid = typeof row.guid === 'string' ? row.guid.trim() : '';
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$.test(guid)) return null;
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) return null;
       const company = typeof row.name === 'string' && row.name.trim() ? row.name.trim() : guid;
       const entry = entryOnHost(
         company,
