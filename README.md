@@ -177,6 +177,8 @@ npm run autopilot                    # normal wide refresh + queue
 npm run autopilot:deep-scan          # broad ATS + regional/global discovery
 npm run autopilot:refresh-registry   # deep scan + refresh company/source resolution
 npm run autopilot:status
+npm run autopilot:analytics          # includes profile/ATS/resume/source breakdowns
+npm run autopilot:notify             # retry pending Telegram notifications
 ```
 
 > The public `@santifer/career-ops` npm package belongs to the upstream project and is **not** the installer for this fork. Do not use it when you want the autonomous fork.
