@@ -40,7 +40,9 @@ DETERMINISTIC SUBMIT VERIFIER
 DOM + URL + validation + network + trace
           |
           v
-APPLICATION JOURNAL / ANALYTICS
+APPLICATION JOURNAL / PROFILE ANALYTICS
+          |
+          +--> TELEGRAM OUTBOX -> Telegram Bot API (optional)
 ~~~
 
 ## Responsibility boundaries
@@ -67,7 +69,7 @@ It is deterministic and does not trust the agent's self-report.
 
 ## Discovery
 
-The existing provider ecosystem remains the core collection layer.
+The existing provider ecosystem remains the core collection layer. The reverse ATS directory sweep currently covers Greenhouse, Lever, Ashby, Workday, iCIMS, BambooHR, and Paylocity. BambooHR reuses its existing public tenant provider; Paylocity uses the public recruiting page's server-rendered `window.pageData` inventory.
 
 ~~~text
 portals.yml + source-registry.db + catalog/source-catalog.yml
@@ -266,6 +268,31 @@ skipped
 Legacy `test_filled` can still exist in old databases but is not part of the new autonomous flow.
 
 Only confirmed `applied` increments the confirmed daily counter and writes the Applied tracker row.
+
+## Application profiles and analytics
+
+User-defined application profiles live under `autopilot.profiles` in `config/profile.yml`. A profile is an analytics segment such as a stack, role family, or search lane; it never decides whether a job may be queued or submitted.
+
+Each application attempt stores `profile_key`. The reporting agent can pass it explicitly with `--profile`; otherwise deterministic routing uses the selected resume variant as the strongest signal, followed by configured title and stack keywords.
+
+`autopilot.mjs analytics` returns overall outcome/ATS/resume statistics plus `by_profile`. `autopilot.mjs analytics --profile <key>` filters the same metrics to one profile.
+
+## Notification outbox
+
+Telegram is an optional outbound observability channel, not an application channel.
+
+When a report outcome is configured for Telegram notification, the application row and a `notification_outbox` row are committed in the same SQLite transaction. Delivery occurs only after the application state is durable.
+
+~~~text
+verified application result
+  -> SQLite transaction
+       applications row
+       notification_outbox row
+  -> tracker/daily counters
+  -> Telegram flush
+~~~
+
+A bot/network failure leaves the outbox row pending with exponential backoff. It cannot turn a successful application into a failed one or cause an automatic duplicate submission. Tokens and chat ids come from environment variables and are never stored in SQLite payloads.
 
 ## Scheduling
 
