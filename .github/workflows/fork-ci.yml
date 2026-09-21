@@ -1,9 +1,13 @@
-name: Migration CI
+name: Fork CI
 
 on:
   push:
     branches:
+      - main
       - migration/upstream-1.33-autopilot
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
