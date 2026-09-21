@@ -47,7 +47,7 @@ The browser should not be used to discover every job one page at a time. Discove
 Production v1 browser stack:
 
 1. Playwright CLI is the only application-browser engine.
-2. One named session uses one dedicated persistent Chrome profile.
+2. One named session uses one dedicated persistent browser profile; Playwright-managed Chromium is the default, with a system Chrome channel optional.
 3. The coding agent drives the form directly with snapshots/refs and Playwright CLI commands.
 4. A separate deterministic verifier decides whether Submit succeeded from DOM/URL/validation/network evidence.
 5. Browser Use, Playwright MCP and Computer Use are deliberately deferred until measured failures justify another execution engine.

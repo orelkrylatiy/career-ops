@@ -160,7 +160,7 @@ One initial worker should use:
 ~~~text
 session: career-ops-worker-0
 profile: data/browser-profile
-browser: Chrome
+browser: Playwright-managed Chromium (default; Chrome channel optional)
 headed: yes while stabilizing
 ~~~
 
