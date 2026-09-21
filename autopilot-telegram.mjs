@@ -13,6 +13,7 @@
 
 import {
   pendingNotifications,
+  claimNextNotification,
   markNotificationSent,
   markNotificationFailed,
 } from './autopilot-db.mjs';
@@ -162,31 +163,37 @@ export async function flushTelegramNotifications({
     };
   }
 
-  const rows = pendingNotifications('telegram', limit);
+  const owner = `${process.env.AUTOPILOT_WORKER_ID || 'worker-0'}:telegram:${process.pid}`;
+  const max = Math.max(1, Math.min(200, Number.parseInt(String(limit), 10) || 25));
+  let claimed = 0;
   let sent = 0;
   let failed = 0;
-  for (const row of rows) {
+
+  for (let i = 0; i < max; i++) {
+    const row = claimNextNotification('telegram', owner, 5);
+    if (!row) break;
+    claimed++;
     try {
       const payload = JSON.parse(row.payload_json || '{}');
       const text = row.event_type === 'application_result'
         ? renderTelegramApplicationMessage(payload)
         : escapeTelegramHtml(payload.message || row.event_type);
       await sendTelegramMessage(settings, text, { fetchImpl });
-      markNotificationSent(row.id);
+      markNotificationSent(row.id, owner);
       sent++;
     } catch (err) {
       const rawMessage = err instanceof Error ? err.message : String(err);
       const safeMessage = settings.token
         ? rawMessage.split(settings.token).join('[redacted]')
         : rawMessage;
-      markNotificationFailed(row.id, safeMessage);
+      markNotificationFailed(row.id, safeMessage, owner);
       failed++;
     }
   }
   return {
     enabled: true,
     configured: true,
-    pending: rows.length,
+    claimed,
     sent,
     failed,
   };
