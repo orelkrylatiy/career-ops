@@ -223,7 +223,7 @@ ATS/public APIs are discovery inputs only in this version. They do not create ap
 
 ## Application profiles and Telegram notifications
 
-Application profiles are analytics labels configured under `autopilot.profiles`. They do not filter or reject jobs. Pass `--profile <id>` when the agent knows the lane; otherwise reporting resolves the profile deterministically from the selected resume variant, then title/stack keywords. Unmatched applications are stored as `unclassified` rather than disappearing from statistics.
+Application profiles are analytics labels configured under `autopilot.profiles`. They do not filter or reject jobs. Pass `--profile <id>` when the agent knows the lane; otherwise reporting resolves the profile deterministically from the selected resume variant, then title/stack keywords. An explicit id that is not configured is still recorded as an ad-hoc analytics bucket rather than blocking a post-submit result. Unmatched automatic classifications are stored as `unclassified` rather than disappearing from statistics.
 
 When `autopilot.notifications.telegram.enabled: true`, every configured outcome creates a Telegram outbox row in the same SQLite transaction as the application result. Delivery happens only after the result is durable. A Telegram outage, missing token, or HTTP 429 therefore cannot roll back or change the application. Retry pending rows with:
 
@@ -231,7 +231,7 @@ When `autopilot.notifications.telegram.enabled: true`, every configured outcome 
 npm run autopilot:notify
 ~~~
 
-Secrets are read only from `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`; do not put them in profile.yml. Notification payloads contain operational metadata (company, role, URL, ATS, resume, profile/stack, priority and duration), never form values or free-form application answers.
+Secrets are read only from `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`; do not put them in profile.yml. Notification payloads contain operational metadata (company, role, URL, ATS, resume, profile/stack, priority and duration), never form values or free-form application answers. Telegram calls are bounded by `timeout_ms` (15s default, capped at 60s), safely below the outbox delivery lease.
 
 ## Success semantics
 
