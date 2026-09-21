@@ -23,9 +23,16 @@ import { normalizeTextKey, resolveColumns } from './tracker-parse.mjs';
 import {
   openDb, addEvent, upsertJob, getJob, listJobs, reportOutcome,
   incrementDaily, normalizeUrlKey, statusCounts, recentEvents, applicationAnalytics,
-  claimNextJob, releaseClaim, deferClaim, renewClaim, JOB_STATUSES, DB_PATH,
+  claimNextJob, releaseClaim, deferClaim, renewClaim, notificationCounts, JOB_STATUSES, DB_PATH,
 } from './autopilot-db.mjs';
 import { resolveResume } from './autopilot-resume.mjs';
+import { resolveApplicationProfile, configuredProfileSummary } from './autopilot-profile.mjs';
+import {
+  telegramSettings,
+  telegramReadiness,
+  shouldNotifyOutcome,
+  flushTelegramNotifications,
+} from './autopilot-telegram.mjs';
 import { scoreJob } from './autopilot-ranking.mjs';
 import { inspectApplicationUrl } from './autopilot-url-policy.mjs';
 import { auditLog, auditLogPath } from './autopilot-log.mjs';
@@ -35,6 +42,13 @@ import {
   evidenceMatchesOutcome,
 } from './autopilot-verify.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
+
+try {
+  const { config } = await import('dotenv');
+  config({ quiet: true });
+} catch {
+  // dotenv is optional at runtime; inherited process.env still works.
+}
 
 const CODE_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DATA_ROOT = getCareerOpsRoot();
@@ -303,7 +317,7 @@ function runScanStep({ deep = false, refreshRegistry = false } = {}) {
       '--wide',
       '--since', '7',
       '--include-undated',
-      '--ats', 'greenhouse,lever,ashby,workday,icims',
+      '--ats', 'greenhouse,lever,ashby,workday,icims,bamboohr',
       '--seeds', 'yc,a16z',
     ],
   ));
@@ -498,6 +512,8 @@ export function cmdStatus() {
     const today = localDateStr();
     const day = db.prepare('SELECT * FROM daily_state WHERE date = ?').get(today);
     console.log(`  today (${today}): confirmed_applications=${day?.applications_sent ?? 0}`);
+    const notifications = notificationCounts();
+    console.log(`  notifications: pending=${notifications.pending ?? 0} sent=${notifications.sent ?? 0}`);
   }
 
   console.log(`audit log: ${auditLogPath()}`);
@@ -523,22 +539,47 @@ export function cmdLogs(limit = 50) {
   }
 }
 
-export function cmdAnalytics() {
+export function cmdAnalytics(profileId = null) {
+  const profileConfig = loadYamlIfExists(PROFILE_PATH);
+  const configuredProfiles = configuredProfileSummary(profileConfig);
   if (!existsSync(DB_PATH)) {
     console.log(JSON.stringify({
+      profile_filter: profileId || null,
+      configured_profiles: configuredProfiles,
       total: 0,
       applied: 0,
       submitted_unconfirmed: 0,
       success_rate: 0,
+      by_profile: [],
       by_outcome: [],
       by_channel: [],
       by_ats: [],
       by_resume: [],
+      by_source: [],
       top_errors: [],
     }, null, 2));
     return;
   }
-  console.log(JSON.stringify(applicationAnalytics(), null, 2));
+  const analytics = applicationAnalytics({ profile: profileId || null });
+  console.log(JSON.stringify({
+    ...analytics,
+    configured_profiles: configuredProfiles,
+  }, null, 2));
+}
+
+export async function cmdNotify() {
+  const profileConfig = loadYamlIfExists(PROFILE_PATH);
+  const result = await flushTelegramNotifications({ profile: profileConfig });
+  if (!result.enabled) {
+    console.log('telegram notifications: disabled');
+    return result;
+  }
+  if (!result.configured) {
+    console.log(`telegram notifications: waiting for ${(result.missing || []).join(', ')}; pending=${result.pending ?? 0}`);
+    return result;
+  }
+  console.log(`telegram notifications: sent=${result.sent} failed=${result.failed} due=${result.pending}`);
+  return result;
 }
 
 const PLACEHOLDER_RE = /TODO|example\.(com|org)|@example/i;
@@ -566,12 +607,19 @@ export function cmdPreflight() {
   const problems = contactPreflight();
   // Phone stays a warning because many forms do not require one.
   const blockers = problems.filter((p) => !p.startsWith('candidate.phone'));
+  const warnings = [...problems.filter((p) => p.startsWith('candidate.phone'))];
   const browser = checkPlaywrightCli();
   if (!browser.ok) blockers.push(`playwright-cli: ${browser.reason}`);
 
+  const profileConfig = loadYamlIfExists(PROFILE_PATH);
+  const telegram = telegramReadiness(profileConfig);
+  if (telegram.enabled && !telegram.ok) {
+    warnings.push(`telegram notifications waiting for: ${telegram.missing.join(', ')}`);
+  }
+
   if (blockers.length === 0) {
-    if (problems.length) {
-      console.log(`preflight OK (warnings):\n  - ${problems.join('\n  - ')}`);
+    if (warnings.length) {
+      console.log(`preflight OK (warnings):\n  - ${warnings.join('\n  - ')}`);
     } else {
       console.log('preflight OK: candidate email + resume + Playwright CLI present');
     }
@@ -788,6 +836,36 @@ export async function cmdReport(target, outcome, note, channel, metadata = {}) {
     };
   }
 
+  const profileConfig = loadYamlIfExists(PROFILE_PATH);
+  const applicationProfile = resolveApplicationProfile({
+    profile: profileConfig,
+    requested: metadata.profileId || null,
+    resumeVariant: metadata.resumeVariant || null,
+    title: job.title || '',
+  });
+  const telegram = telegramSettings(profileConfig);
+  const notification = shouldNotifyOutcome(telegram, outcome)
+    ? {
+      channel: 'telegram',
+      eventType: 'application_result',
+      payload: {
+        outcome,
+        company: job.company || null,
+        title: job.title || null,
+        location: job.location || null,
+        url: job.url || null,
+        source: job.source || null,
+        priority: job.priority ?? null,
+        ats: metadata.ats ?? null,
+        resume_variant: metadata.resumeVariant ?? null,
+        profile: applicationProfile.id,
+        profile_label: applicationProfile.label,
+        stack: applicationProfile.stack,
+        duration_ms: metadata.durationMs ?? null,
+      },
+    }
+    : null;
+
   const details = {
     ...(metadata.details || {}),
     ...(evidence ? { evidence } : {}),
@@ -797,7 +875,13 @@ export async function cmdReport(target, outcome, note, channel, metadata = {}) {
     outcome,
     note ?? null,
     channel ?? null,
-    { ...metadata, details, claimOwner: owner },
+    {
+      ...metadata,
+      profileId: applicationProfile.id,
+      notification,
+      details,
+      claimOwner: owner,
+    },
   );
   if (!updated) throw new Error(`job row vanished before update (url_key=${job.url_key})`);
 
@@ -806,6 +890,7 @@ export async function cmdReport(target, outcome, note, channel, metadata = {}) {
     channel: channel ?? null,
     ats: metadata.ats ?? null,
     resumeVariant: metadata.resumeVariant ?? null,
+    profile: applicationProfile.id,
     durationMs: metadata.durationMs ?? null,
     evidenceAttempt: evidence?.attempt_id ?? null,
   });
@@ -817,6 +902,7 @@ export async function cmdReport(target, outcome, note, channel, metadata = {}) {
     channel: channel ?? null,
     ats: metadata.ats ?? null,
     resume_variant: metadata.resumeVariant ?? null,
+    application_profile: applicationProfile.id,
     resume_path: metadata.resumePath ?? null,
     duration_ms: metadata.durationMs ?? null,
     evidence_attempt: evidence?.attempt_id ?? null,
@@ -842,9 +928,21 @@ export async function cmdReport(target, outcome, note, channel, metadata = {}) {
   if (channel) console.log(`  channel: ${channel}`);
   if (metadata.ats) console.log(`  ats: ${metadata.ats}`);
   if (metadata.resumeVariant) console.log(`  resume: ${metadata.resumeVariant}`);
+  console.log(`  profile: ${applicationProfile.id} (${applicationProfile.matchedBy})`);
   if (metadata.evidencePath) console.log(`  evidence: ${metadata.evidencePath}`);
   if (dailyRow) {
     console.log(`  today: ${dailyRow.applications_sent} confirmed applications`);
+  }
+
+  if (notification) {
+    const delivery = await flushTelegramNotifications({ profile: profileConfig });
+    if (!delivery.configured) {
+      console.error(`  telegram: queued (missing ${(delivery.missing || []).join(', ')})`);
+    } else if (delivery.failed) {
+      console.error(`  telegram: ${delivery.sent} sent, ${delivery.failed} deferred for retry`);
+    } else {
+      console.log(`  telegram: ${delivery.sent} notification(s) sent`);
+    }
   }
 }
 
@@ -862,7 +960,8 @@ function usage() {
   node autopilot.mjs [--no-scan] [--deep-scan] [--refresh-registry] [--dry-run]
   node autopilot.mjs status
   node autopilot.mjs logs [--limit 50]
-  node autopilot.mjs analytics
+  node autopilot.mjs analytics [--profile frontend]
+  node autopilot.mjs notify
   node autopilot.mjs preflight
   node autopilot.mjs cap
   node autopilot.mjs next [--owner worker-0] [--lease-minutes 120] [--json]
@@ -871,7 +970,7 @@ function usage() {
   node autopilot.mjs defer "<url|url_key>" [--owner worker-0] [--minutes 60] [--note "..."]
   node autopilot.mjs report "<url|url_key>" <applied|submitted_unconfirmed|validation_failed|failed|captcha|skipped>
       [--owner worker-0] [--channel browser] [--evidence path] [--ats name]
-      [--resume variant] [--resume-path path] [--duration-ms N] [--note "..."]`);
+      [--resume variant] [--profile name] [--resume-path path] [--duration-ms N] [--note "..."]`);
 }
 
 async function main() {
@@ -879,7 +978,8 @@ async function main() {
 
   if (argv[0] === 'status') return cmdStatus();
   if (argv[0] === 'logs') return cmdLogs(flagValue(argv, '--limit') || 50);
-  if (argv[0] === 'analytics') return cmdAnalytics();
+  if (argv[0] === 'analytics') return cmdAnalytics(flagValue(argv, '--profile') || null);
+  if (argv[0] === 'notify') return cmdNotify();
   if (argv[0] === 'preflight') {
     process.exitCode = cmdPreflight() ? 0 : 1;
     return;
@@ -959,6 +1059,7 @@ async function main() {
       {
         ats: flagValue(argv, '--ats') || null,
         resumeVariant: flagValue(argv, '--resume') || null,
+        profileId: flagValue(argv, '--profile') || null,
         resumePath: flagValue(argv, '--resume-path') || null,
         durationMs,
         evidencePath: flagValue(argv, '--evidence') || null,
