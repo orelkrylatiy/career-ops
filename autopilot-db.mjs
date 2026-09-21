@@ -299,7 +299,7 @@ export function listJobs(status) {
  * Atomically lease the highest-priority queued job. Expired leases are
  * returned first, so a crashed worker cannot strand jobs forever.
  */
-export function claimNextJob(owner = 'worker-0', leaseMinutes = 60) {
+export function claimNextJob(owner = 'worker-0', leaseMinutes = 120) {
   const db = openDb();
   const minutes = Number(leaseMinutes);
   if (!Number.isFinite(minutes) || minutes <= 0) {
@@ -363,7 +363,7 @@ export function releaseClaim(urlKey, owner = null) {
 }
 
 /** Extend a live lease owned by the same worker. */
-export function renewClaim(urlKey, owner = 'worker-0', leaseMinutes = 60) {
+export function renewClaim(urlKey, owner = 'worker-0', leaseMinutes = 120) {
   const db = openDb();
   const minutes = Number(leaseMinutes);
   if (!Number.isFinite(minutes) || minutes <= 0) {

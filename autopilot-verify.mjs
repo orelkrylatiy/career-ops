@@ -483,9 +483,30 @@ export function loadEvidenceReceipt(rawPath) {
   return { path: abs, receipt: parsed };
 }
 
-export function evidenceMatchesOutcome(receipt, jobUrlKey, expectedOutcome) {
+export function evidenceMatchesOutcome(
+  receipt,
+  jobUrlKey,
+  expectedOutcome,
+  { claimedAt = null } = {},
+) {
   if (!receipt || receipt.phase !== 'verified') return { ok: false, reason: 'receipt_not_verified' };
   if (receipt.job_url_key !== jobUrlKey) return { ok: false, reason: 'receipt_job_mismatch' };
+
+  // A verified receipt from an older attempt must never be reusable for a new
+  // queue lease. The claim and verifier timestamps are produced on the same
+  // machine, so this is a deterministic attempt-binding check rather than a
+  // heuristic freshness window.
+  if (claimedAt) {
+    const claimedMs = Date.parse(claimedAt);
+    const startedMs = Date.parse(receipt.started_at);
+    const finishedMs = Date.parse(receipt.finished_at);
+    if (!Number.isFinite(claimedMs) || !Number.isFinite(startedMs) || !Number.isFinite(finishedMs)) {
+      return { ok: false, reason: 'receipt_timestamp_invalid' };
+    }
+    if (startedMs < claimedMs) return { ok: false, reason: 'receipt_predates_claim' };
+    if (finishedMs < startedMs) return { ok: false, reason: 'receipt_time_reversed' };
+  }
+
   const actual = receipt.verification?.outcome;
   if (expectedOutcome === 'captcha') {
     return actual === 'blocked' ? { ok: true } : { ok: false, reason: `receipt_outcome_${actual}` };

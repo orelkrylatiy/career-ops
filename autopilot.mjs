@@ -693,7 +693,12 @@ export async function cmdReport(target, outcome, note, channel, metadata = {}) {
       );
     }
     const loaded = loadEvidenceReceipt(metadata.evidencePath);
-    const match = evidenceMatchesOutcome(loaded.receipt, job.url_key, outcome);
+    const match = evidenceMatchesOutcome(
+      loaded.receipt,
+      job.url_key,
+      outcome,
+      { claimedAt: job.claimed_at },
+    );
     if (!match.ok) throw new Error(`evidence rejected: ${match.reason}`);
     evidence = {
       attempt_id: loaded.receipt.attempt_id,

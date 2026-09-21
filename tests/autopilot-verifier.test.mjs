@@ -84,6 +84,8 @@ test('report evidence must be verified, job-bound and outcome-bound', () => {
   const receipt = {
     phase: 'verified',
     job_url_key: 'https://example.com/job/1',
+    started_at: '2026-09-21T10:00:00.000Z',
+    finished_at: '2026-09-21T10:01:00.000Z',
     verification: { outcome: 'applied' },
   };
   assert.deepEqual(
@@ -94,6 +96,28 @@ test('report evidence must be verified, job-bound and outcome-bound', () => {
   assert.equal(
     evidenceMatchesOutcome(receipt, 'https://example.com/job/1', 'submitted_unconfirmed').ok,
     false,
+  );
+  assert.deepEqual(
+    evidenceMatchesOutcome(receipt, 'https://example.com/job/1', 'applied', {
+      claimedAt: '2026-09-21T09:59:00.000Z',
+    }),
+    { ok: true },
+  );
+});
+
+test('evidence from before the current claim cannot be replayed', () => {
+  const receipt = {
+    phase: 'verified',
+    job_url_key: 'https://example.com/job/1',
+    started_at: '2026-09-21T09:58:00.000Z',
+    finished_at: '2026-09-21T09:59:00.000Z',
+    verification: { outcome: 'applied' },
+  };
+  assert.deepEqual(
+    evidenceMatchesOutcome(receipt, 'https://example.com/job/1', 'applied', {
+      claimedAt: '2026-09-21T10:00:00.000Z',
+    }),
+    { ok: false, reason: 'receipt_predates_claim' },
   );
 });
 

@@ -86,12 +86,12 @@ Use refs from Playwright snapshots whenever possible. CSS/Playwright locators an
 node autopilot.mjs next --json
 ~~~
 
-This atomically leases the highest-priority queued job. Default worker owner is `worker-0`; default lease is 60 minutes.
+This atomically leases the highest-priority queued job. Default worker owner is `worker-0`; default lease is 120 minutes.
 
 Explicit form:
 
 ~~~bash
-node autopilot.mjs next --owner worker-0 --lease-minutes 60 --json
+node autopilot.mjs next --owner worker-0 --lease-minutes 120 --json
 ~~~
 
 If the agent decides not to attempt the job yet and has not submitted anything:

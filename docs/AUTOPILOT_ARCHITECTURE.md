@@ -135,7 +135,7 @@ Jobs now support:
 - `claim_owner`;
 - `claim_until`.
 
-`node autopilot.mjs next --json` atomically leases the highest-priority queued job. Expired leases are returned automatically.
+`node autopilot.mjs next --json` atomically leases the highest-priority queued job for 120 minutes by default. Expired leases are returned automatically, and the worker renews the lease immediately before arming Submit evidence.
 
 This allows a single autonomous worker now and safe multi-worker expansion later.
 
@@ -231,7 +231,7 @@ Resume generation failure never cancels an application.
 `failed`
 : Explicit failure state or failed submit-like request.
 
-The LLM cannot promote an attempt to `applied` by assertion. `autopilot.mjs report ... applied --channel browser` requires a verified receipt for the same canonical job URL with outcome `applied`.
+The LLM cannot promote an attempt to `applied` by assertion. `autopilot.mjs report ... applied --channel browser` requires a verified receipt for the same canonical job URL with outcome `applied`, and that receipt must have started after the current queue claim.
 
 ## Evidence/privacy
 
