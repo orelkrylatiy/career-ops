@@ -133,7 +133,8 @@ Jobs now support:
 - `posted_at`;
 - `claimed_at`;
 - `claim_owner`;
-- `claim_until`.
+- `claim_until`;
+- `next_attempt_at` for transient pre-submit backoff.
 
 `node autopilot.mjs next --json` atomically leases the highest-priority queued job for 120 minutes by default. Expired leases are returned automatically, and the worker renews the lease immediately before arming Submit evidence.
 

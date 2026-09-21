@@ -169,6 +169,16 @@ claude   # or codex / opencode / qwen / another AGENTS.md-compatible coding agen
 
 For the autonomous web-applier flow, ask it to run **autopilot mode**. The normal loop is documented in [modes/autopilot.md](modes/autopilot.md) and [Autonomous Worker Architecture](docs/AUTOPILOT_ARCHITECTURE.md).
 
+Useful fork commands:
+
+```bash
+npm run autopilot:preflight          # profile/resume/Playwright CLI checks
+npm run autopilot                    # normal wide refresh + queue
+npm run autopilot:deep-scan          # broad ATS + regional/global discovery
+npm run autopilot:refresh-registry   # deep scan + refresh company/source resolution
+npm run autopilot:status
+```
+
 > The public `@santifer/career-ops` npm package belongs to the upstream project and is **not** the installer for this fork. Do not use it when you want the autonomous fork.
 
 

@@ -85,7 +85,10 @@
     "autopilot:analytics": "node autopilot.mjs analytics",
     "autopilot:next": "node autopilot.mjs next --json",
     "autopilot:verify": "node autopilot-verify.mjs",
-    "autopilot:browser:doctor": "node autopilot-verify.mjs doctor"
+    "autopilot:browser:doctor": "node autopilot-verify.mjs doctor",
+    "autopilot:preflight": "node autopilot.mjs preflight",
+    "autopilot:deep-scan": "node autopilot.mjs --deep-scan",
+    "autopilot:refresh-registry": "node autopilot.mjs --deep-scan --refresh-registry"
   },
   "keywords": [
     "ai",
