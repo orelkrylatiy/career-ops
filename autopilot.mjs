@@ -23,7 +23,7 @@ import { normalizeTextKey, resolveColumns } from './tracker-parse.mjs';
 import {
   openDb, addEvent, upsertJob, getJob, listJobs, reportOutcome,
   incrementDaily, normalizeUrlKey, statusCounts, recentEvents, applicationAnalytics,
-  claimNextJob, releaseClaim, renewClaim, JOB_STATUSES, DB_PATH,
+  claimNextJob, releaseClaim, deferClaim, renewClaim, JOB_STATUSES, DB_PATH,
 } from './autopilot-db.mjs';
 import { resolveResume } from './autopilot-resume.mjs';
 import { scoreJob } from './autopilot-ranking.mjs';
@@ -220,6 +220,7 @@ export function regenerateQueue() {
     lines.push(`Location: ${job.location || '—'}`);
     lines.push(`Source: ${job.source || '—'}`);
     lines.push(`Posted: ${job.posted_at || '—'}`);
+    if (job.next_attempt_at) lines.push(`Deferred until: ${job.next_attempt_at}`);
     if (reasons.length) lines.push(`Rank: ${reasons.join('; ')}`);
     lines.push('');
   }
@@ -624,6 +625,26 @@ export function cmdRelease(
   console.log(`released to queue: ${key}`);
 }
 
+export function cmdDefer(
+  target,
+  owner = process.env.AUTOPILOT_WORKER_ID || 'worker-0',
+  minutes = 60,
+  note = null,
+) {
+  if (!target) throw new Error('defer requires a job URL or url_key');
+  const key = normalizeUrlKey(target) || target;
+  const row = deferClaim(key, owner, minutes, note);
+  regenerateQueue();
+  if (!row) throw new Error('no matching claimed job for this owner');
+  addEvent('queue', 'deferred', {
+    job_url_key: key,
+    owner,
+    next_attempt_at: row.next_attempt_at,
+  });
+  console.log(`deferred until ${row.next_attempt_at}: ${key}`);
+  return row;
+}
+
 export function cmdRenew(
   target,
   owner = process.env.AUTOPILOT_WORKER_ID || 'worker-0',
@@ -830,6 +851,7 @@ function usage() {
   node autopilot.mjs next [--owner worker-0] [--lease-minutes 120] [--json]
   node autopilot.mjs renew "<url|url_key>" [--owner worker-0] [--lease-minutes 120]
   node autopilot.mjs release "<url|url_key>" [--owner worker-0]
+  node autopilot.mjs defer "<url|url_key>" [--owner worker-0] [--minutes 60] [--note "..."]
   node autopilot.mjs report "<url|url_key>" <applied|submitted_unconfirmed|validation_failed|failed|captcha|skipped>
       [--owner worker-0] [--channel browser] [--evidence path] [--ats name]
       [--resume variant] [--resume-path path] [--duration-ms N] [--note "..."]`);
@@ -869,6 +891,23 @@ async function main() {
       flagValue(argv, '--owner')
         || process.env.AUTOPILOT_WORKER_ID
         || 'worker-0',
+    );
+    return;
+  }
+
+  if (argv[0] === 'defer') {
+    const minutesRaw = flagValue(argv, '--minutes');
+    const minutes = minutesRaw == null ? 60 : Number(minutesRaw);
+    if (!Number.isFinite(minutes) || minutes <= 0) {
+      throw new Error('--minutes must be > 0');
+    }
+    cmdDefer(
+      argv[1],
+      flagValue(argv, '--owner')
+        || process.env.AUTOPILOT_WORKER_ID
+        || 'worker-0',
+      minutes,
+      flagValue(argv, '--note') || null,
     );
     return;
   }

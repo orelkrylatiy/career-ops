@@ -93,11 +93,19 @@ Explicit form:
 node autopilot.mjs next --owner worker-0 --lease-minutes 120 --json
 ~~~
 
-If the agent decides not to attempt the job yet and has not submitted anything:
+If the agent decides not to attempt the job yet and has not submitted anything, it may release it immediately:
 
 ~~~bash
 node autopilot.mjs release "<job-url>" --owner worker-0
 ~~~
+
+For a transient **pre-submit** problem (temporary 5xx/navigation failure, site unavailable, browser crash before Submit), defer it instead of making the failure terminal or immediately reclaiming the same job:
+
+~~~bash
+node autopilot.mjs defer "<job-url>" --owner worker-0 --minutes 60 --note "temporary site failure"
+~~~
+
+Deferred jobs remain queued but are not claimable until their `next_attempt_at` time. Never use defer after an ambiguous submit; `submitted_unconfirmed` remains terminal until reviewed to prevent duplicate applications.
 
 Expired leases automatically return to the queue.
 

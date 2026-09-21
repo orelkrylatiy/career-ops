@@ -50,7 +50,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   posted_at TEXT,
   claimed_at TEXT,
   claim_owner TEXT,
-  claim_until TEXT
+  claim_until TEXT,
+  next_attempt_at TEXT
 );
 CREATE TABLE IF NOT EXISTS applications (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -151,13 +152,14 @@ export function openDb() {
   addJobColumn('claimed_at', 'TEXT');
   addJobColumn('claim_owner', 'TEXT');
   addJobColumn('claim_until', 'TEXT');
+  addJobColumn('next_attempt_at', 'TEXT');
 
   // The previous autonomous concept used test_filled as a terminal safety gate
   // for first-seen form types. The new worker has deterministic submit
   // verification instead, so those never-submitted jobs become eligible again.
   db.prepare(
     `UPDATE jobs
-     SET status='queued', claimed_at=NULL, claim_owner=NULL, claim_until=NULL, updated_at=?
+     SET status='queued', claimed_at=NULL, claim_owner=NULL, claim_until=NULL, next_attempt_at=NULL, updated_at=?
      WHERE status='test_filled'`,
   ).run(new Date().toISOString());
 
@@ -237,10 +239,10 @@ export function upsertJob(job) {
   db.prepare(`
     INSERT INTO jobs
       (url_key, url, source, company, title, location, status, first_seen, updated_at, note,
-       priority, rank_reasons_json, posted_at, claimed_at, claim_owner, claim_until)
+       priority, rank_reasons_json, posted_at, claimed_at, claim_owner, claim_until, next_attempt_at)
     VALUES
       (@urlKey, @url, @source, @company, @title, @location, COALESCE(@status, 'queued'), @now, @now, @note,
-       @priority, @rankReasons, @postedAt, NULL, NULL, NULL)
+       @priority, @rankReasons, @postedAt, NULL, NULL, NULL, NULL)
     ON CONFLICT(url_key) DO UPDATE SET
       url        = COALESCE(NULLIF(excluded.url, ''), jobs.url),
       source     = COALESCE(NULLIF(excluded.source, ''), jobs.source),
@@ -311,7 +313,7 @@ export function claimNextJob(owner = 'worker-0', leaseMinutes = 120) {
   return db.transaction(() => {
     db.prepare(
       `UPDATE jobs
-       SET status='queued', claimed_at=NULL, claim_owner=NULL, claim_until=NULL, updated_at=?
+       SET status='queued', claimed_at=NULL, claim_owner=NULL, claim_until=NULL, next_attempt_at=NULL, updated_at=?
        WHERE status='claimed' AND claim_until IS NOT NULL AND claim_until < ?`,
     ).run(nowIso, nowIso);
 
@@ -327,17 +329,19 @@ export function claimNextJob(owner = 'worker-0', leaseMinutes = 120) {
     if (current) return current;
 
     const row = db.prepare(
-      `SELECT * FROM jobs WHERE status='queued'
+      `SELECT * FROM jobs
+       WHERE status='queued'
+         AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
        ORDER BY COALESCE(priority, 50) DESC,
                 COALESCE(posted_at, first_seen) DESC,
                 rowid ASC
        LIMIT 1`,
-    ).get();
+    ).get(nowIso);
     if (!row) return null;
 
     const changed = db.prepare(
       `UPDATE jobs
-       SET status='claimed', claimed_at=?, claim_owner=?, claim_until=?, updated_at=?
+       SET status='claimed', claimed_at=?, claim_owner=?, claim_until=?, next_attempt_at=NULL, updated_at=?
        WHERE url_key=? AND status='queued'`,
     ).run(nowIso, String(owner || 'worker-0'), until, nowIso, row.url_key);
     if (!changed.changes) return null;
@@ -351,15 +355,39 @@ export function releaseClaim(urlKey, owner = null) {
   const res = owner
     ? db.prepare(
       `UPDATE jobs
-       SET status='queued', claimed_at=NULL, claim_owner=NULL, claim_until=NULL, updated_at=?
+       SET status='queued', claimed_at=NULL, claim_owner=NULL, claim_until=NULL, next_attempt_at=NULL, updated_at=?
        WHERE url_key=? AND status='claimed' AND claim_owner=?`,
     ).run(now, urlKey, String(owner))
     : db.prepare(
       `UPDATE jobs
-       SET status='queued', claimed_at=NULL, claim_owner=NULL, claim_until=NULL, updated_at=?
+       SET status='queued', claimed_at=NULL, claim_owner=NULL, claim_until=NULL, next_attempt_at=NULL, updated_at=?
        WHERE url_key=? AND status='claimed'`,
     ).run(now, urlKey);
   return res.changes > 0;
+}
+
+/**
+ * Return a claimed job to the queue after a backoff. This is for transient
+ * PRE-SUBMIT failures only; ambiguous/possibly-submitted attempts must remain
+ * terminal to avoid duplicate applications.
+ */
+export function deferClaim(urlKey, owner = 'worker-0', minutes = 60, note = null) {
+  const db = openDb();
+  const delay = Number(minutes);
+  if (!Number.isFinite(delay) || delay <= 0) {
+    throw new Error('deferClaim: minutes must be > 0');
+  }
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const next = new Date(now.getTime() + delay * 60_000).toISOString();
+  const res = db.prepare(
+    `UPDATE jobs
+     SET status='queued', claimed_at=NULL, claim_owner=NULL, claim_until=NULL,
+         next_attempt_at=?, note=COALESCE(?, note), updated_at=?
+     WHERE url_key=? AND status='claimed' AND claim_owner=?`,
+  ).run(next, note, nowIso, urlKey, String(owner || 'worker-0'));
+  if (!res.changes) return null;
+  return db.prepare('SELECT * FROM jobs WHERE url_key=?').get(urlKey);
 }
 
 /** Extend a live lease owned by the same worker. */
@@ -409,13 +437,13 @@ export function reportOutcome(urlKey, outcome, note = null, channel = null, meta
       ? db.prepare(
         `UPDATE jobs
          SET status=?, note=COALESCE(?, note), claimed_at=NULL, claim_owner=NULL,
-             claim_until=NULL, updated_at=?
+             claim_until=NULL, next_attempt_at=NULL, updated_at=?
          WHERE url_key=? AND status='claimed' AND claim_owner=?`,
       ).run(outcome, note, now, urlKey, claimOwner)
       : db.prepare(
         `UPDATE jobs
          SET status=?, note=COALESCE(?, note), claimed_at=NULL, claim_owner=NULL,
-             claim_until=NULL, updated_at=?
+             claim_until=NULL, next_attempt_at=NULL, updated_at=?
          WHERE url_key=?`,
       ).run(outcome, note, now, urlKey);
     if (res.changes === 0) return false;

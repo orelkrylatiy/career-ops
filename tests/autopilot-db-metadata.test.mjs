@@ -17,6 +17,7 @@ const {
   normalizeUrlKey,
   claimNextJob,
   releaseClaim,
+  deferClaim,
   renewClaim,
 } = await import(modUrl);
 
@@ -77,7 +78,7 @@ test('priority queue claims highest-priority job and can release the lease', () 
 
 test('job observability columns exist after additive migration', () => {
   const cols = new Set(openDb().prepare('PRAGMA table_info(jobs)').all().map((row) => row.name));
-  for (const name of ['priority', 'rank_reasons_json', 'posted_at', 'claimed_at', 'claim_owner', 'claim_until']) {
+  for (const name of ['priority', 'rank_reasons_json', 'posted_at', 'claimed_at', 'claim_owner', 'claim_until', 'next_attempt_at']) {
     assert.equal(cols.has(name), true, name);
   }
 });
@@ -140,4 +141,26 @@ test('claim-aware reporting is single-owner and single-finalization', () => {
     .prepare('SELECT COUNT(*) AS n FROM applications WHERE job_url_key=?')
     .get(key).n;
   assert.equal(after, 1);
+});
+
+test('deferred jobs are skipped until their backoff expires', () => {
+  const url = 'https://jobs.example.com/role/deferred';
+  const key = normalizeUrlKey(url);
+  upsertJob({
+    urlKey: key, url, company: 'Deferred', title: 'Engineer',
+    priority: 100, status: 'queued',
+  });
+  const claimed = claimNextJob('defer-worker', 5);
+  assert.equal(claimed.url_key, key);
+  const deferred = deferClaim(key, 'defer-worker', 60, 'temporary site outage');
+  assert.equal(deferred.status, 'queued');
+  assert.ok(Date.parse(deferred.next_attempt_at) > Date.now());
+
+  const other = claimNextJob('other-worker', 5);
+  assert.notEqual(other?.url_key, key);
+
+  openDb().prepare('UPDATE jobs SET next_attempt_at=? WHERE url_key=?')
+    .run('2000-01-01T00:00:00.000Z', key);
+  const retry = claimNextJob('retry-worker', 5);
+  assert.equal(retry.url_key, key);
 });

@@ -88,7 +88,7 @@ test('old autopilot DB migrates additively without losing queued jobs', () => {
 
   for (const name of [
     'priority', 'rank_reasons_json', 'posted_at',
-    'claimed_at', 'claim_owner', 'claim_until',
+    'claimed_at', 'claim_owner', 'claim_until', 'next_attempt_at',
   ]) {
     assert.equal(jobCols.has(name), true, name);
   }
