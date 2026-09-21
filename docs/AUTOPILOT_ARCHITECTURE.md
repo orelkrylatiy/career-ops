@@ -274,7 +274,7 @@ Each application row can also carry a user-defined analytics `profile` (for exam
 
 ## Notification outbox
 
-Telegram notifications are downstream of application state. When enabled for an outcome, `reportOutcome()` writes both the application row and a generic `notification_outbox` row in one SQLite transaction. The bot token/chat ID are never stored in SQLite. A separate delivery step calls Telegram and marks the outbox row sent; failures remain pending with exponential retry metadata.
+Telegram notifications are downstream of application state. When enabled for an outcome, `reportOutcome()` writes both the application row and a generic `notification_outbox` row in one SQLite transaction. The bot token/chat ID are never stored in SQLite. A separate delivery step atomically leases a due outbox row, calls Telegram and marks it sent; failures return to pending with exponential retry metadata. The lease prevents parallel application workers from concurrently sending the same notification.
 
 This ordering is deliberate:
 
