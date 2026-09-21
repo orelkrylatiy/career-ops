@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -72,11 +72,34 @@ try {
   const jobUrl = `http://127.0.0.1:${fixture.port}/job`;
   const profile = path.join(root, 'data', 'browser-profile');
 
+  const resumePath = path.join(root, 'data', 'smoke-resume.pdf');
+  writeFileSync(resumePath, '%PDF-1.4\n% career-ops browser smoke\n', 'utf8');
+
+  // Profile persistence is part of the production contract: a new worker
+  // process/session must be able to reuse login/localStorage state.
   runCli(['open', jobUrl, `--profile=${profile}`]);
   runCli([
     'run-code',
-    "async page => { await page.locator('input[name=name]').fill('Browser Smoke Candidate'); }",
+    "async page => { await page.evaluate(() => localStorage.setItem('careerOpsSmoke', 'persisted')); }",
   ]);
+  runCli(['close']);
+  runCli(['open', jobUrl, `--profile=${profile}`]);
+  const persisted = runCli([
+    'run-code',
+    "async page => await page.evaluate(() => localStorage.getItem('careerOpsSmoke'))",
+  ]).stdout;
+  assert.match(persisted, /persisted/, 'persistent profile should survive close/reopen');
+
+  runCli([
+    'run-code',
+    "async page => { await page.locator('input[name=name]').fill('Browser Smoke Candidate'); await page.locator('input[type=file]').click(); }",
+  ]);
+  runCli(['upload', resumePath]);
+  const uploaded = runCli([
+    'run-code',
+    "async page => await page.locator('input[type=file]').evaluate(el => el.files?.[0]?.name || '')",
+  ]).stdout;
+  assert.match(uploaded, /smoke-resume\.pdf/, 'Playwright CLI upload should attach the resume');
 
   const verifier = await import(
     pathToFileURL(path.resolve('autopilot-verify.mjs')).href + '?e2e=' + Date.now()
