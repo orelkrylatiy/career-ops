@@ -319,6 +319,7 @@ cover_letter:
 #       enabled: false
 #       outcomes: [applied, submitted_unconfirmed, validation_failed, captcha, failed]
 #       disable_web_preview: true
+#       timeout_ms: 15000
 #
 # ── Scan / JD extractor ─────────────────────────────────────────────────────
 #
