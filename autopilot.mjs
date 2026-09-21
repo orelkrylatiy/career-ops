@@ -26,6 +26,13 @@ import {
   claimNextJob, releaseClaim, deferClaim, renewClaim, JOB_STATUSES, DB_PATH,
 } from './autopilot-db.mjs';
 import { resolveResume } from './autopilot-resume.mjs';
+import { configuredProfiles, resolveApplicationProfile } from './autopilot-profile.mjs';
+import {
+  flushTelegramOutbox,
+  shouldQueueTelegram,
+  telegramPreflight,
+  telegramStatus,
+} from './autopilot-telegram.mjs';
 import { scoreJob } from './autopilot-ranking.mjs';
 import { inspectApplicationUrl } from './autopilot-url-policy.mjs';
 import { auditLog, auditLogPath } from './autopilot-log.mjs';
@@ -303,7 +310,7 @@ function runScanStep({ deep = false, refreshRegistry = false } = {}) {
       '--wide',
       '--since', '7',
       '--include-undated',
-      '--ats', 'greenhouse,lever,ashby,workday,icims',
+      '--ats', 'greenhouse,lever,ashby,workday,icims,bamboohr,paylocity',
       '--seeds', 'yc,a16z',
     ],
   ));
@@ -523,9 +530,16 @@ export function cmdLogs(limit = 50) {
   }
 }
 
-export function cmdAnalytics() {
+export function cmdAnalytics(profileKey = null) {
+  const profile = loadYamlIfExists(PROFILE_PATH);
+  const configured = configuredProfiles(profile).map((p) => ({
+    key: p.key,
+    label: p.label,
+    stack: p.stack,
+  }));
   if (!existsSync(DB_PATH)) {
     console.log(JSON.stringify({
+      profile: profileKey || null,
       total: 0,
       applied: 0,
       submitted_unconfirmed: 0,
@@ -534,11 +548,16 @@ export function cmdAnalytics() {
       by_channel: [],
       by_ats: [],
       by_resume: [],
+      by_profile: [],
       top_errors: [],
+      configured_profiles: configured,
     }, null, 2));
     return;
   }
-  console.log(JSON.stringify(applicationAnalytics(), null, 2));
+  console.log(JSON.stringify({
+    ...applicationAnalytics(profileKey),
+    configured_profiles: configured,
+  }, null, 2));
 }
 
 const PLACEHOLDER_RE = /TODO|example\.(com|org)|@example/i;
@@ -568,6 +587,11 @@ export function cmdPreflight() {
   const blockers = problems.filter((p) => !p.startsWith('candidate.phone'));
   const browser = checkPlaywrightCli();
   if (!browser.ok) blockers.push(`playwright-cli: ${browser.reason}`);
+
+  const telegram = telegramPreflight(loadYamlIfExists(PROFILE_PATH));
+  if (telegram.enabled && telegram.warnings.length) {
+    problems.push(...telegram.warnings.map((w) => `telegram: ${w}`));
+  }
 
   if (blockers.length === 0) {
     if (problems.length) {
@@ -788,16 +812,66 @@ export async function cmdReport(target, outcome, note, channel, metadata = {}) {
     };
   }
 
+  const profileConfig = loadYamlIfExists(PROFILE_PATH);
+  const applicationProfile = resolveApplicationProfile({
+    job,
+    profile: profileConfig,
+    explicitProfile: metadata.profileKey,
+    resumeVariant: metadata.resumeVariant,
+  });
+  const profileKey = applicationProfile?.key || null;
   const details = {
     ...(metadata.details || {}),
     ...(evidence ? { evidence } : {}),
+    ...(applicationProfile ? {
+      profile: {
+        key: applicationProfile.key,
+        label: applicationProfile.label,
+        reason: applicationProfile.reason,
+      },
+    } : {}),
   };
+  const notification = shouldQueueTelegram(profileConfig, outcome)
+    ? {
+      channel: 'telegram',
+      eventType: 'application_result',
+      payload: {
+        outcome,
+        job: {
+          url: job.url,
+          company: job.company || null,
+          title: job.title || null,
+          location: job.location || null,
+          priority: job.priority ?? null,
+        },
+        metadata: {
+          ats: metadata.ats ?? null,
+          resumeVariant: metadata.resumeVariant ?? null,
+          profileKey,
+          durationMs: metadata.durationMs ?? null,
+        },
+        profile: applicationProfile
+          ? {
+            key: applicationProfile.key,
+            label: applicationProfile.label,
+            stack: applicationProfile.stack,
+          }
+          : null,
+      },
+    }
+    : null;
   const updated = reportOutcome(
     job.url_key,
     outcome,
     note ?? null,
     channel ?? null,
-    { ...metadata, details, claimOwner: owner },
+    {
+      ...metadata,
+      profileKey,
+      details,
+      claimOwner: owner,
+      notification,
+    },
   );
   if (!updated) throw new Error(`job row vanished before update (url_key=${job.url_key})`);
 
@@ -817,6 +891,7 @@ export async function cmdReport(target, outcome, note, channel, metadata = {}) {
     channel: channel ?? null,
     ats: metadata.ats ?? null,
     resume_variant: metadata.resumeVariant ?? null,
+    profile_key: profileKey,
     resume_path: metadata.resumePath ?? null,
     duration_ms: metadata.durationMs ?? null,
     evidence_attempt: evidence?.attempt_id ?? null,
@@ -842,9 +917,22 @@ export async function cmdReport(target, outcome, note, channel, metadata = {}) {
   if (channel) console.log(`  channel: ${channel}`);
   if (metadata.ats) console.log(`  ats: ${metadata.ats}`);
   if (metadata.resumeVariant) console.log(`  resume: ${metadata.resumeVariant}`);
+  if (profileKey) console.log(`  profile: ${profileKey}`);
   if (metadata.evidencePath) console.log(`  evidence: ${metadata.evidencePath}`);
   if (dailyRow) {
     console.log(`  today: ${dailyRow.applications_sent} confirmed applications`);
+  }
+
+  if (notification) {
+    try {
+      const delivery = await flushTelegramOutbox({ profile: profileConfig });
+      if (delivery.sent) console.log(`  telegram: sent ${delivery.sent} notification(s)`);
+      if (delivery.error) console.error(`  telegram: pending (${delivery.error})`);
+      if (delivery.failed) console.error(`  telegram: ${delivery.failed} send failure(s), queued for retry`);
+    } catch (err) {
+      addEvent('telegram', `notification flush failed: ${err.message}`, null, 'error');
+      console.error(`  telegram: notification remains queued (${err.message})`);
+    }
   }
 }
 
@@ -862,7 +950,8 @@ function usage() {
   node autopilot.mjs [--no-scan] [--deep-scan] [--refresh-registry] [--dry-run]
   node autopilot.mjs status
   node autopilot.mjs logs [--limit 50]
-  node autopilot.mjs analytics
+  node autopilot.mjs analytics [--profile frontend]
+  node autopilot.mjs telegram <status|flush>
   node autopilot.mjs preflight
   node autopilot.mjs cap
   node autopilot.mjs next [--owner worker-0] [--lease-minutes 120] [--json]
@@ -871,7 +960,7 @@ function usage() {
   node autopilot.mjs defer "<url|url_key>" [--owner worker-0] [--minutes 60] [--note "..."]
   node autopilot.mjs report "<url|url_key>" <applied|submitted_unconfirmed|validation_failed|failed|captcha|skipped>
       [--owner worker-0] [--channel browser] [--evidence path] [--ats name]
-      [--resume variant] [--resume-path path] [--duration-ms N] [--note "..."]`);
+      [--profile frontend] [--resume variant] [--resume-path path] [--duration-ms N] [--note "..."]`);
 }
 
 async function main() {
@@ -879,7 +968,20 @@ async function main() {
 
   if (argv[0] === 'status') return cmdStatus();
   if (argv[0] === 'logs') return cmdLogs(flagValue(argv, '--limit') || 50);
-  if (argv[0] === 'analytics') return cmdAnalytics();
+  if (argv[0] === 'analytics') return cmdAnalytics(flagValue(argv, '--profile') || null);
+  if (argv[0] === 'telegram') {
+    const sub = argv[1] || 'status';
+    const profile = loadYamlIfExists(PROFILE_PATH);
+    if (sub === 'status') {
+      console.log(JSON.stringify(telegramStatus(profile), null, 2));
+      return;
+    }
+    if (sub === 'flush') {
+      console.log(JSON.stringify(await flushTelegramOutbox({ profile }), null, 2));
+      return;
+    }
+    throw new Error('telegram subcommand must be "status" or "flush"');
+  }
   if (argv[0] === 'preflight') {
     process.exitCode = cmdPreflight() ? 0 : 1;
     return;
@@ -958,6 +1060,7 @@ async function main() {
       flagValue(argv, '--channel'),
       {
         ats: flagValue(argv, '--ats') || null,
+        profileKey: flagValue(argv, '--profile') || null,
         resumeVariant: flagValue(argv, '--resume') || null,
         resumePath: flagValue(argv, '--resume-path') || null,
         durationMs,

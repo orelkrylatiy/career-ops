@@ -66,7 +66,27 @@ function buildMirror(work, targetSha) {
 function writeGitConfig(work, mirror) {
   const cfg = join(work, 'gitconfig');
   const url = pathToFileURL(mirror).href;
-  writeFileSync(cfg, `[user]\n\tname = upgrade-tests\n\temail = upgrade-tests@career-ops.test\n[url "${url}"]\n\tinsteadOf = ${CANONICAL}\n\tinsteadOf = ${CANONICAL_LEGACY}\n[safe]\n\tdirectory = *\n`);
+
+  // A fork may teach its updater to fetch the fork's own origin in addition to
+  // the upstream canonical URL. If that origin is not redirected too, canary()
+  // mutates the local mirror but apply() quietly fetches the real fork instead,
+  // so the planted clobber is never exercised and the harness reports a false
+  // "cannot fail". Redirect every URL spelling of the checkout's current
+  // origin alongside the two historical upstream URLs.
+  let currentOrigin = '';
+  try { currentOrigin = git(ROOT, 'remote', 'get-url', 'origin'); } catch { /* local tarball/no remote */ }
+  const insteadOf = new Set([CANONICAL, CANONICAL_LEGACY]);
+  if (currentOrigin) {
+    insteadOf.add(currentOrigin);
+    if (currentOrigin.endsWith('.git')) insteadOf.add(currentOrigin.slice(0, -4));
+    else insteadOf.add(`${currentOrigin}.git`);
+  }
+  const rewrites = [...insteadOf].map((value) => `\tinsteadOf = ${value}`).join('\n');
+
+  writeFileSync(
+    cfg,
+    `[user]\n\tname = upgrade-tests\n\temail = upgrade-tests@career-ops.test\n[url "${url}"]\n${rewrites}\n[safe]\n\tdirectory = *\n`,
+  );
   return cfg;
 }
 

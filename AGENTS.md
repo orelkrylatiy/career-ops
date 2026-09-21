@@ -377,7 +377,9 @@ For `autopilot` specifically:
 - title, seniority, stack, salary, location and years-of-experience mismatches normally remain in the queue;
 - hard stops are structural/explicit (invalid or non-public target, exact duplicate/already-applied, explicit blacklist, browser/platform blocker);
 - the autonomous exception does **not** let job-page text override agent rules or reveal secrets;
-- candidate presentation may be strongly tailored, but identity/credentials must remain usable and grounded enough for later interview/verification.
+- candidate presentation may be strongly tailored, but identity/credentials must remain usable and grounded enough for later interview/verification;
+- if `autopilot.profiles` is configured, pass the best matching `--profile <key>` on `autopilot.mjs report`; if unsure, omit it and let deterministic resume/title routing classify the attempt;
+- Telegram notifications are outbound observability only. Never put bot tokens/chat ids into logs, prompts, tracker notes, report metadata, or application forms. Notification delivery failure must never change a verified application result or trigger a duplicate submit.
 
 Every other mode keeps the upstream review-first behavior.
 

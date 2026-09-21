@@ -5,7 +5,7 @@
  *
  * Where scan.mjs scans the companies you track in portals.yml, this script
  * inverts the direction: it walks public directories of companies per ATS
- * (Greenhouse, Lever, Ashby, Workday, iCIMS) and surfaces fresh postings that match
+ * (Greenhouse, Lever, Ashby, Workday, iCIMS, BambooHR, Paylocity) and surfaces fresh postings that match
  * your portals.yml `title_filter` / `location_filter` — no manual company
  * curation needed.
  *
@@ -30,7 +30,7 @@
  * Usage:
  *   node scan-ats-full.mjs                      # scan all ATS directories, last 3 days
  *   node scan-ats-full.mjs --since 7            # postings from the last 7 days
- *   node scan-ats-full.mjs --ats greenhouse,workday  # subset of sources
+ *   node scan-ats-full.mjs --ats greenhouse,workday,bamboohr,paylocity  # subset of sources
  *   node scan-ats-full.mjs --limit 200          # max companies per ATS (default: all)
  *   node scan-ats-full.mjs --dry-run            # preview without writing files
  *   node scan-ats-full.mjs --liveness           # Playwright-verify matches before writing
@@ -54,6 +54,8 @@ import lever from './providers/lever.mjs';
 import ashby from './providers/ashby.mjs';
 import workday from './providers/workday.mjs';
 import icims from './providers/icims.mjs';
+import bamboohr from './providers/bamboohr.mjs';
+import paylocity from './providers/paylocity.mjs';
 import { buildTitleFilter, buildTitleFilterOverrides, buildTitleFilterWithOverrides, buildLocationFilter, buildContentFilter, matchedTitleKeywords, loadSeenUrls, normalizeUrlForDedup, appendToPipeline, appendToScanHistory, loadBlacklist, parseSinceDays, PORTALS_PATH, PIPELINE_PATH } from './scan.mjs';
 import { localToday } from './lib/local-today.mjs';
 import { printScanSummaryHeader } from './lib/scan-summary-marker.mjs';
@@ -280,6 +282,41 @@ export const SOURCES = {
       return entry;
     },
   },
+  bamboohr: {
+    provider: bamboohr,
+    // Public corpus is a flat list of BambooHR tenant slugs.
+    concurrency: 10,
+    dataset: `${DATASET_BASE}/bamboohr_companies.json`,
+    toEntry: (slug) => {
+      const tenant = String(slug ?? '').trim();
+      if (!SLUG_RE.test(tenant)) return null;
+      return entryOnHost(
+        tenant,
+        `https://${tenant}.bamboohr.com/careers`,
+        h => h === `${tenant}.bamboohr.com`,
+      );
+    },
+  },
+  paylocity: {
+    provider: paylocity,
+    // The upstream corpus is [{guid,name,jobs}, ...], not a flat slug list.
+    // Paylocity is one of the tightest shared hosts, so keep concurrency low.
+    concurrency: 5,
+    dataset: `${DATASET_BASE}/paylocity_companies_clean.json`,
+    toEntry: (row) => {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
+      const guid = typeof row.guid === 'string' ? row.guid.trim() : '';
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) return null;
+      const company = typeof row.name === 'string' && row.name.trim() ? row.name.trim() : guid;
+      const entry = entryOnHost(
+        company,
+        `https://recruiting.paylocity.com/recruiting/jobs/All/${guid}/`,
+        h => h === 'recruiting.paylocity.com',
+      );
+      if (entry) entry.paylocity = guid;
+      return entry;
+    },
+  },
 };
 
 // ── CLI args ────────────────────────────────────────────────────────
@@ -297,7 +334,7 @@ const VALUE_FLAGS = ['--since', '--limit', '--ats', '--seeds', '--md-out'];
 const USAGE = `Usage:
   node scan-ats-full.mjs                      # scan all ATS directories, last 3 days
   node scan-ats-full.mjs --since 7            # postings from the last 7 days
-  node scan-ats-full.mjs --ats greenhouse,workday  # subset of sources
+  node scan-ats-full.mjs --ats greenhouse,workday,bamboohr,paylocity  # subset of sources
   node scan-ats-full.mjs --limit 200          # max companies per ATS (default: all)
   node scan-ats-full.mjs --dry-run            # preview without writing files
   node scan-ats-full.mjs --liveness           # Playwright-verify matches before writing
