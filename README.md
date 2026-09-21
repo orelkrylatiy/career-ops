@@ -143,6 +143,9 @@ career-ops is the first reference implementation of [the CareerOps Manifesto](ht
 
 ## Quick Start
 
+**Autonomous mode requires Node.js 20+.** Node.js 22.5+ is recommended for the full tracker/indexing toolchain.
+
+
 This repository is an autonomous fork. Install **this fork**, not the upstream npm scaffolder:
 
 ```bash
