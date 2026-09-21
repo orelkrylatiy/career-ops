@@ -42,6 +42,9 @@ export function telegramSettings(profile = {}, env = process.env) {
     token: typeof env.TELEGRAM_BOT_TOKEN === 'string' ? env.TELEGRAM_BOT_TOKEN.trim() : '',
     chatId: typeof env.TELEGRAM_CHAT_ID === 'string' ? env.TELEGRAM_CHAT_ID.trim() : '',
     disableWebPreview: cfg.disable_web_preview !== false,
+    timeoutMs: Number.isFinite(Number(cfg.timeout_ms))
+      ? Math.max(1000, Math.min(60000, Math.round(Number(cfg.timeout_ms))))
+      : 15000,
   };
 }
 
@@ -125,16 +128,27 @@ export async function sendTelegramMessage(settings, text, {
   // Never include this URL in thrown/logged diagnostics: it contains the bot
   // token. Only the status code is surfaced on failure.
   const endpoint = `https://api.telegram.org/bot${settings.token}/sendMessage`;
-  const response = await fetchImpl(endpoint, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: settings.chatId,
-      text,
-      parse_mode: 'HTML',
-      disable_web_page_preview: settings.disableWebPreview,
-    }),
-  });
+  const timeoutMs = Number.isFinite(Number(settings.timeoutMs))
+    ? Math.max(1000, Math.min(60000, Math.round(Number(settings.timeoutMs))))
+    : 15000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let response;
+  try {
+    response = await fetchImpl(endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: settings.chatId,
+        text,
+        parse_mode: 'HTML',
+        disable_web_page_preview: settings.disableWebPreview,
+      }),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   if (!response?.ok) {
     throw new Error(`Telegram sendMessage failed with HTTP ${response?.status ?? 'unknown'}`);
   }
