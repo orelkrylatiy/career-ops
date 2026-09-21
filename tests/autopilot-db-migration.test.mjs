@@ -93,9 +93,19 @@ test('old autopilot DB migrates additively without losing queued jobs', () => {
     assert.equal(jobCols.has(name), true, name);
   }
   for (const name of [
-    'ats', 'resume_variant', 'resume_path', 'duration_ms', 'details_json',
+    'ats', 'resume_variant', 'profile_key', 'resume_path', 'duration_ms', 'details_json',
   ]) {
     assert.equal(appCols.has(name), true, name);
+  }
+
+  const outboxCols = new Set(
+    db.prepare('PRAGMA table_info(notification_outbox)').all().map((r) => r.name),
+  );
+  for (const name of [
+    'id', 'channel', 'event_type', 'job_url_key', 'payload_json',
+    'status', 'attempts', 'next_attempt_at', 'created_at', 'sent_at', 'last_error',
+  ]) {
+    assert.equal(outboxCols.has(name), true, `notification_outbox.${name}`);
   }
 
   const row = db.prepare('SELECT * FROM jobs WHERE company=?').get('Legacy Co');
