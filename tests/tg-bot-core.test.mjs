@@ -7,8 +7,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  handleUpdate, identifyUser, normalizeCommand, renderNoAccess, renderAbout,
-  renderAccessRequestForAdmin, escapeHtml, RECORD_LEAD_METHOD,
+  handleUpdate, identifyUser, normalizeCommand, renderNoAccess, renderStep,
+  stepKeyboard, ONBOARDING_STEPS, renderAccessRequestForAdmin, escapeHtml,
+  RECORD_LEAD_METHOD, MAIN_SCREEN_PHOTO,
 } from '../lib/tg-bot-core.mjs';
 
 const FIXTURE_STATS = {
@@ -82,25 +83,63 @@ test('unknown users are denied on data commands and told their id for the admin 
 
 // ── onboarding: the sales surface for unknown visitors ─────────────
 
-test('unknown /start shows the pitch with an access button, not a bare denial', () => {
+test('unknown /start sends the main-screen photo, then the wizard step 1 with paging', () => {
   const calls = handleUpdate(msg(999, '/start'), ctx);
-  const m = firstMessage(calls);
-  assert.match(m.payload.text, /поиск работы на автопилоте/);
-  assert.match(m.payload.text, /Без предоплаты/);
-  assert.match(m.payload.text, /закрытый бот/);
-  const flat = JSON.stringify(m.payload.reply_markup);
+  const photo = calls.find((c) => c.method === 'sendPhoto');
+  assert.ok(photo, 'photo must be sent first');
+  assert.equal(photo.photoPath, MAIN_SCREEN_PHOTO);
+  assert.match(photo.payload.caption, /главный экран/i);
+  const text = calls.find((c) => c.method === 'sendMessage');
+  assert.match(text.payload.text, /поиск работы на автопилоте/);
+  assert.match(text.payload.text, /Шаг 1 из 6/);
+  const flat = JSON.stringify(text.payload.reply_markup);
+  assert.match(flat, /step:1/); // ▶️ present on step 1, no ◀️
+  assert.doesNotMatch(flat, /step:0/);
   assert.match(flat, /Получить доступ/);
-  assert.match(flat, /Как это работает/);
 });
 
-test('/about tells the product story with the landing\'s exact terms', () => {
+test('the wizard: six steps, paging clamps, progress pill, CTA on every step', () => {
+  assert.equal(ONBOARDING_STEPS.length, 6);
+  assert.match(renderStep(0), /Шаг 1 из 6/);
+  assert.match(renderStep(5), /Шаг 6 из 6/);
+  assert.match(renderStep(99), /Шаг 6 из 6/); // clamped, never crashes
+  assert.doesNotMatch(JSON.stringify(stepKeyboard(0)), /◀️/); // first: no back
+  assert.doesNotMatch(JSON.stringify(stepKeyboard(5)), /▶️/); // last: no forward
+  assert.match(JSON.stringify(stepKeyboard(2)), /3\/6/);
+  for (let i = 0; i < ONBOARDING_STEPS.length; i++) {
+    assert.match(JSON.stringify(stepKeyboard(i)), /Получить доступ/, `CTA on step ${i + 1}`);
+  }
+  // landing-critical claims live on their steps: value, terms, privacy
+  assert.match(renderStep(1), /время возвращается вам/);
+  assert.match(renderStep(1), /видите воронку/);
+  assert.match(renderStep(4), /50% от оффера/);
+  assert.match(renderStep(4), /не гарантируем/);
+  assert.match(renderStep(5), /личной переписке не нужен/);
+});
+
+test('step paging edits the message; noop answers with just the toast', () => {
+  const calls = handleUpdate(cb(999, 'step:4'), ctx);
+  const edit = calls.find((c) => c.method === 'editMessageText');
+  assert.match(edit.payload.text, /Условия/);
+  assert.match(edit.payload.text, /Шаг 5 из 6/);
+  assert.match(JSON.stringify(edit.payload.reply_markup), /step:3/);
+
+  const noop = handleUpdate(cb(999, 'noop'), ctx);
+  assert.equal(noop.length, 1);
+  assert.equal(noop[0].method, 'answerCallbackQuery');
+
+  // known users can page too — their keyboard carries the menu row
+  const known = handleUpdate(cb(4242, 'step:1'), ctx);
+  const kEdit = known.find((c) => c.method === 'editMessageText');
+  assert.match(JSON.stringify(kEdit.payload.reply_markup), /Меню/);
+});
+
+test('/about opens the wizard for unknown and known users alike', () => {
   const unknown = firstMessage(handleUpdate(msg(999, '/about'), ctx));
-  assert.match(unknown.payload.text, /50% от оффера/);
-  assert.match(unknown.payload.text, /хотя бы одно собеседование/);
-  assert.match(unknown.payload.text, /не гарантируем.*решает работодатель/s); // the honest disclaimer, verbatim stance from the landing FAQ
-  assert.match(unknown.payload.text, /Доступ к личной переписке не нужен/);
+  assert.match(unknown.payload.text, /Шаг 1 из 6/);
   const known = firstMessage(handleUpdate(msg(4242, '/about'), ctx));
-  assert.match(known.payload.text, /50% от оффера/);
+  assert.match(known.payload.text, /Шаг 1 из 6/);
+  assert.match(JSON.stringify(known.payload.reply_markup), /Меню/);
 });
 
 test('access request notifies every admin with a ready add-profile command and records the lead', () => {
@@ -128,7 +167,6 @@ test('access-request admin text derives a slug from the visitor name', () => {
   const text = renderAccessRequestForAdmin({ userId: '555', name: 'Ivan Petrov', username: 'ivan_pt' });
   assert.match(text, /add-profile ivan-petrov --name "Имя" --tg 555/);
   assert.match(text, /@ivan_pt/);
-  assert.match(renderAbout(), /Как это работает/);
 });
 
 test('known user clicking access is told they are already in', () => {

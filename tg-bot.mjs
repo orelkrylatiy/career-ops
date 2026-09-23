@@ -25,6 +25,7 @@ import { validateFlags } from './lib/cli-flags.mjs';
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from 'fs';
+import { readFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
@@ -140,6 +141,34 @@ export async function callTelegram(token, method, payload) {
   return { status: res.status, ok: body.ok === true, description: body.description, result: body.result };
 }
 
+/**
+ * A call carrying photoPath (repo-relative) uploads the file as multipart
+ * instead of JSON. Missing asset degrades to the same caption as plain text,
+ * so a stripped checkout never breaks onboarding.
+ */
+async function executePhotoCall(token, call) {
+  const file = join(ROOT, call.photoPath);
+  const { chat_id: chatId, caption, parse_mode: parseMode, reply_markup: replyMarkup } = call.payload;
+  if (!existsSync(file)) {
+    return callTelegram(token, 'sendMessage', {
+      chat_id: chatId,
+      text: caption,
+      parse_mode: parseMode,
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+    });
+  }
+  const form = new FormData();
+  form.set('chat_id', String(chatId));
+  form.set('caption', caption);
+  form.set('parse_mode', parseMode ?? 'HTML');
+  if (replyMarkup) form.set('reply_markup', JSON.stringify(replyMarkup));
+  const bytes = await readFile(file);
+  form.set('photo', new Blob([bytes], { type: 'image/png' }), 'telegram-main-screen.png');
+  const res = await fetch(`${API_BASE}/bot${token}/sendPhoto`, { method: 'POST', body: form });
+  const body = await res.json().catch(() => ({}));
+  return { status: res.status, ok: body.ok === true, description: body.description, result: body.result };
+}
+
 async function executeCalls(token, calls, ctx) {
   for (const call of calls) {
     // Side-effect marker from the pure core: persist the access-request lead
@@ -148,7 +177,9 @@ async function executeCalls(token, calls, ctx) {
       ctx.addLead?.(call.payload);
       continue;
     }
-    const result = await callTelegram(token, call.method, call.payload);
+    const result = call.photoPath
+      ? await executePhotoCall(token, call)
+      : await callTelegram(token, call.method, call.payload);
     if (result.ok) continue;
     // Editing an unedited/old message is not worth a second message — skip it.
     if (call.method === 'editMessageText' && /not modified/.test(result.description ?? '')) continue;
