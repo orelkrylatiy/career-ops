@@ -133,6 +133,7 @@ const SYSTEM_PATHS = [
   // clean and only a second update would repair it).
   '.gitattributes',
   'dead-boards.mjs',
+  'landing/',
   'modes/README.md',
   'modes/_shared.md',
   'modes/_writing.md',
