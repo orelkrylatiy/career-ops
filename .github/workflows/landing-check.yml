@@ -1,0 +1,27 @@
+name: Landing check
+
+on:
+  push:
+    paths:
+      - "landing/**"
+      - "package.json"
+      - ".github/workflows/landing-check.yml"
+  pull_request:
+    paths:
+      - "landing/**"
+      - "package.json"
+      - ".github/workflows/landing-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Validate landing
+        run: npm run landing:check
