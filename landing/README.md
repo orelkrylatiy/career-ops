@@ -19,3 +19,11 @@ Run:
     node landing/scripts/check-site.mjs
 
 The check covers the Telegram-first product boundary, pricing copy, CTA safety, responsive/reduced-motion support, disclosure language, and guards against accidental fake social-proof metrics.
+
+## Local preview
+
+Run:
+
+    npm run landing:serve
+
+Serves `landing/` as the web root (the page pulls `/styles.css` and `/app.js` with absolute paths). `PORT` overrides the default port 4173.
