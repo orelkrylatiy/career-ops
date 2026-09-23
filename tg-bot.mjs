@@ -177,19 +177,26 @@ async function executeCalls(token, calls, ctx) {
       ctx.addLead?.(call.payload);
       continue;
     }
-    const result = call.photoPath
-      ? await executePhotoCall(token, call)
-      : await callTelegram(token, call.method, call.payload);
-    if (result.ok) continue;
-    // Editing an unedited/old message is not worth a second message — skip it.
-    if (call.method === 'editMessageText' && /not modified/.test(result.description ?? '')) continue;
-    if (call.method === 'editMessageText' && !result.ok) {
-      // Too old / deleted: fall back to sending a fresh message.
-      const { message_id, ...rest } = call.payload;
-      await callTelegram(token, 'sendMessage', rest);
-      continue;
+    // Transport errors (network blips, sleep/wake) must degrade to a logged
+    // line, never kill the service — an unsent reply is recoverable on the
+    // next update, a dead poller is not.
+    try {
+      const result = call.photoPath
+        ? await executePhotoCall(token, call)
+        : await callTelegram(token, call.method, call.payload);
+      if (result.ok) continue;
+      // Editing an unedited/old message is not worth a second message — skip it.
+      if (call.method === 'editMessageText' && /not modified/.test(result.description ?? '')) continue;
+      if (call.method === 'editMessageText' && !result.ok) {
+        // Too old / deleted: fall back to sending a fresh message.
+        const { message_id, ...rest } = call.payload;
+        await callTelegram(token, 'sendMessage', rest);
+        continue;
+      }
+      console.error(`tg-bot: ${call.method} failed: ${result.description ?? result.status}`);
+    } catch (err) {
+      console.error(`tg-bot: ${call.method} transport error: ${err.message}`);
     }
-    console.error(`tg-bot: ${call.method} failed: ${result.description ?? result.status}`);
   }
 }
 
