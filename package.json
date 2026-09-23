@@ -8,6 +8,8 @@
   },
   "scripts": {
     "doctor": "node doctor.mjs",
+    "bot": "node tg-bot.mjs",
+    "profile": "node profile.mjs",
     "or": "node openrouter-runner.mjs",
     "or:scan": "node openrouter-runner.mjs scan",
     "or:pipeline": "node openrouter-runner.mjs pipeline",
@@ -89,7 +91,8 @@
     "autopilot:preflight": "node autopilot.mjs preflight",
     "autopilot:deep-scan": "node autopilot.mjs --deep-scan",
     "autopilot:refresh-registry": "node autopilot.mjs --deep-scan --refresh-registry",
-    "landing:check": "node landing/scripts/check-site.mjs"
+    "landing:check": "node landing/scripts/check-site.mjs",
+    "landing:serve": "node landing/scripts/serve.mjs"
   },
   "keywords": [
     "ai",

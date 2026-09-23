@@ -24,13 +24,16 @@ These files contain your personal data, customizations, and work product. Update
 | `documents/*` | Your profile intake sources — master CV, LinkedIn export, diplomas, reference letters (PII — gitignored except scaffold; read locally by `intake.mjs`, see `modes/intake.md`). Scaffold files (`README.md`, `.gitkeep`) are system-owned. |
 | `data/.hired-share-state.json` | Hired Wall ask-state (asked/shared/later/never per hire) — the anti-nag memory; never committed, never read by anything but `hired-share.mjs` |
 | `data/intake-state.json` | Fingerprints of already-ingested intake sources (written by `node intake.mjs --commit`; makes re-runs propose only new material — safe to delete, next intake re-proposes everything) |
+| `data/tg-bot-leads.json` | Access-request leads from the Telegram bot's pre-login onboarding (written when an unknown visitor taps «Получить доступ»; one entry per Telegram id). Append-only sales log — review before deleting |
 | `portals.yml` | Your customized company list |
+| `profiles.yml` | Multi-account registry: profiles (one per person, mapped to Telegram user ids for the bot) → directions (analyst/designer/react/vue…), each an isolated data root under `data/profiles/<profile>/<direction>/`. Managed by `profile.mjs`, read by `tg-bot.mjs` (see [docs/PROFILES.md](docs/PROFILES.md)) |
 | `config/plugins.yml` | Your plugin activation toggles (opt-in; seeded from `config/plugins.example.yml`) |
 | `opencode.json` | Your OpenCode project config (MCP servers, model, formatter, LSP) — gitignored, copy `opencode.example.json` to start |
 | `plugins.local/` | Your own / private plugins (never auto-updated) |
 | `plugins.lock` | Integrity pins + recorded consent for your enabled plugins (generated; never auto-updated) |
 | `data/applications.md` | Your application tracker (source of truth) |
 | `data/applications.db` | Derived query index over `applications.md` (SQLite, rebuilt by `node tracker.mjs sync` — safe to delete) |
+| `data/profiles/<profile>/<direction>/` | Per-direction isolated data roots (each a full mini career-ops: own `data/`, `reports/`, `config/profile.yml`, `portals.yml`, `cv.md`, browser profile). Created by `node profile.mjs add-direction`; enter one by exporting its `CAREER_OPS_ROOT` from `node profile.mjs env <profile> <direction>` |
 | `data/pipeline.md` | Your URL inbox |
 | `data/scan-history.tsv` | Your scan history (tab-separated, append-only trailing columns; col 8: local SimHash JD fingerprint for cross-listing detection, col 9: posting date, cols 10-11: trust score/flags, col 12: normalized company key for repost/name matching). Older rows may have fewer columns — readers index by position and tolerate the absence. |
 | `data/scan-runs.tsv` | Your per-run scan counters (appended by `scan.mjs`, read by `stats.mjs`) |

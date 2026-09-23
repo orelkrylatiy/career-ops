@@ -114,6 +114,9 @@ AI-powered, CLI-agnostic job search automation: pipeline tracking, offer evaluat
 | `data/salary-observations.tsv` | Append-only salary observation log (user layer) |
 | `data/assessments.tsv` | Append-only skills-assessment log (user layer, created on first `add`) |
 | `portals.yml` | Query and company config |
+| `profiles.yml` | Multi-account registry (user layer): profiles — one per person, mapped to Telegram user ids — each holding directions (analyst, designer, react, vue…) that are fully isolated data roots under `data/profiles/<profile>/<direction>/`. Managed by `profile.mjs`, read by `tg-bot.mjs`; see `docs/PROFILES.md` |
+| `profile.mjs` | Profile/direction manager: `add-profile`/`add-direction` (creates the isolated data-root skeleton), `env`/`launch` (the CAREER_OPS_ROOT + browser session recipe per direction), `stats` |
+| `tg-bot.mjs` | Telegram bot (`npm run bot`, token `TG_BOT_TOKEN` from `.env`): identifies the Telegram user against `profiles.yml` (deny-by-default) and shows that profile's stats — directions count, funnel, recent rows. Pre-login onboarding sells the product (pitch + `/about` mirroring the landing copy) and the «Получить доступ» button pings admins with a ready `add-profile` command, logging leads to `data/tg-bot-leads.json`. Routing/rendering is pure and offline-tested in `lib/tg-bot-core.mjs`; `--dry-run <updates.json>` needs no token |
 | `templates/cv-template.html` | HTML template for CVs |
 | `templates/cv-template.tex` | LaTeX/Overleaf template for CVs |
 | `article-digest.md` | Compact proof points from portfolio (optional) |
@@ -357,6 +360,8 @@ Two separate axes:
 | Wants to update the system | `update` |
 | Wants to queue a request for later / check the inbox between sessions | `agent-inbox` — append-only checklist drained next session; nothing auto-submits |
 | Wants to add a finished project, paper, or role to the CV | `add` — source-grounded preview, confirm-before-write; dedup + insertion via `add-entry.mjs` |
+| Asks to run several specializations or people side by side (analyst / designer / react / vue…, "multi-account") | `profile` — `node profile.mjs add-direction <profile> <slug>` creates an isolated data root; `env`/`launch` print the exports + browser command to run it standalone; see `docs/PROFILES.md` |
+| Wants the Telegram bot up, or asks why it denies someone | `tg-bot` — `npm run bot` (needs `TG_BOT_TOKEN` in `.env` and the `profiles.yml` registry); access = Telegram id → profile mapping, deny-by-default |
 
 ### CV Source of Truth
 

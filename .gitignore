@@ -67,6 +67,8 @@ config/benchmarks.yml
 # project, and must survive the sync that overwrites update-system.mjs (#2421).
 config/local-paths.txt
 portals.yml
+# Multi-account registry (profiles → Telegram ids → isolated direction roots)
+profiles.yml
 modes/_profile.md
 modes/_custom.md
 modes/_brief.md
