@@ -93,3 +93,46 @@ test('regional parsers fail closed when known job markup stops parsing', () => {
     /parser produced zero/i,
   );
 });
+
+import { parseGeekjobDate, parseGeekjobResponse } from '../../providers/geekjob.mjs';
+
+test('geekjob parser normalizes public search API rows', () => {
+  const jobs = parseGeekjobResponse({
+    page: 1,
+    nextpage: 2,
+    pagecount: 3,
+    documentsCount: 263,
+    data: [
+      {
+        position: 'Frontend разработчик',
+        salary: '216K — 488K ₽',
+        country: 'Russia',
+        city: 'Moscow',
+        jobFormat: { remote: true, relocate: true, parttime: false, inhouse: false },
+        log: { modify: '21 октября', archived: null },
+        company: { type: 1, name: 'Test Co', id: 'c1' },
+        id: 'abc123',
+      },
+      { position: '', id: 'no-title' },
+      null,
+    ],
+  });
+  assert.equal(jobs.length, 1);
+  assert.equal(jobs[0].title, 'Frontend разработчик');
+  assert.equal(jobs[0].company, 'Test Co');
+  assert.equal(jobs[0].location, 'Moscow, Russia');
+  assert.equal(jobs[0].url, 'https://geekjob.ru/vacancy/abc123');
+  assert.equal(jobs[0].externalId, 'abc123');
+  assert.ok(Number.isFinite(jobs[0].postedAt));
+  assert.match(jobs[0].description, /216K — 488K/);
+  assert.match(jobs[0].description, /удалённо/);
+  assert.match(jobs[0].description, /релокация/);
+});
+
+test('geekjob row date without a year never lands in the future', () => {
+  // "5 декабря" parsed on 2026-10-21 must resolve to 2025-12-05, not 2026.
+  assert.ok(parseGeekjobDate('5 декабря') < Date.now());
+  assert.ok(Number.isFinite(parseGeekjobDate('21 октября')));
+  assert.ok(Number.isNaN(parseGeekjobDate('вчера')));
+  assert.ok(Number.isNaN(parseGeekjobDate(null)));
+});

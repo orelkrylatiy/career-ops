@@ -117,10 +117,36 @@ job_sources:
     country: RU
     kind: aggregator
     name: GeekJob
-    url: https://geekjob.ru/vacancies
-    access: browser
+    url: https://geekjob.ru/json/find/vacancy
+    provider: geekjob
+    access: public-api
     status: live
     locales: [ru]
+    search_queries:
+      - разработчик
+      - программист
+      - software
+      - backend
+      - frontend
+      - fullstack
+      - devops
+      - sre
+      - data engineer
+      - data scientist
+      - аналитик
+      - тестировщик
+      - qa
+      - machine learning
+      - искусственный интеллект
+      - информационная безопасность
+      - кибербезопасность
+      - системный администратор
+      - архитектор
+      - product manager
+      - project manager
+      - tech lead
+      - руководитель разработки
+    notes: "Public JSON search API (verified live 2026-10-21): 1-based `page` param, 100 records/page, `pagecount` in the response. Rows carry salary/format flags but no posting body; vacancies resolve to /vacancy/<id>."
   - id: ru-getmatch
     country: RU
     kind: aggregator

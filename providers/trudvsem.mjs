@@ -158,7 +158,9 @@ export default {
 
       while (pages < maxPages) {
         const url = apiUrl(query, offset);
-        const json = await fetchJsonWithRetry(ctx, url, { redirect: 'error' });
+        // opendata.trudvsem.ru regularly answers in 14+s (measured 2026-10-15),
+        // well past the 10s default — give the gov API its own budget.
+        const json = await fetchJsonWithRetry(ctx, url, { redirect: 'error', timeoutMs: 30_000 });
         const parsed = parseTrudvsemResponse(json);
         const total = Number(json?.meta?.total);
 
