@@ -467,7 +467,9 @@ try {
     }
   }
   if (thinkOpen) parts.push('\n</think>\n');
-  evaluationText = parts.join('').trim();
+  // GLM/z.ai возвращает reasoning_content отдельно, но некоторые endpoints
+  // склеивают его в content — вырезаем think-блоки из финального отчёта.
+  evaluationText = parts.join('').replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim();
   if (!evaluationText) {
     console.error('❌  The endpoint returned an empty response.');
     process.exit(1);

@@ -225,6 +225,38 @@ test('generated probe checks custom ARIA-required widgets and role buttons', () 
   assert.match(source, /complete\|finish/);
 });
 
+test('required react-select typeahead input is judged by its widget value, not its own', () => {
+  const source = buildPageProbeCode();
+  // The invisible react-select <input class="select__input"> carries aria-required
+  // but stays empty by design; the committed value lives in the sibling
+  // .select__single-value text or the container's data-value attribute.
+  assert.match(source, /select__input/);
+  assert.match(source, /select__single-value/);
+  assert.match(source, /data-value/);
+});
+
+test('native controls gate on required only; aria-required advisory inputs stay exempt', () => {
+  const source = buildPageProbeCode();
+  // Vercel/Greenhouse mark optional-but-asterisked native inputs (LinkedIn,
+  // portfolio link) with aria-required=true while required stays false — the
+  // browser's own constraint validation never blocks on them, so the pre-submit
+  // gate must not either. react-select typeaheads (role=combobox on a native
+  // input) are the exception: judged as widgets via their committed value.
+  assert.match(source, /if \(!el\.required\) return false;/);
+  assert.match(source, /isSelectWidget/);
+  assert.match(source, /role'\] === 'combobox'|role === 'combobox'/);
+});
+
+test('ARIA combobox on a native input reads the value property before widget fallback', () => {
+  const source = buildPageProbeCode();
+  // Angular Material mat-autocomplete triggers (role=combobox + aria-required
+  // on a native <input>) keep the selected value in the value PROPERTY — the
+  // value attribute stays empty. Without the property read the widget branch
+  // judges the field empty and pre-submit validation false-positives.
+  assert.match(source, /el\.tagName === 'INPUT' \|\| el\.tagName === 'TEXTAREA'/);
+  assert.match(source, /value = String\(el\.value \|\| ''\)/);
+});
+
 test('new success copy alone does not confirm an application without a transition', () => {
   const out = classifyApplicationEvidence({
     before: {
@@ -294,4 +326,40 @@ test('Playwright request parser accepts documented and raw-style list lines', ()
       statusText: '201',
     },
   ]);
+});
+
+test('ambient pre-submit challenge copy does not mask a success-URL redirect', () => {
+  // solid.jobs-style form: invisible reCAPTCHA copy present before Submit,
+  // server redirects to /apply-succeeded/<id> after a successful POST.
+  const out = classifyApplicationEvidence({
+    before: {
+      url: 'https://solid.jobs/apply/1/company-role',
+      formCount: 1,
+      blockedTextSeen: true,
+    },
+    after: {
+      url: 'https://solid.jobs/apply-succeeded/1/company-role',
+      bodyText: 'Twoja aplikacja została wysłana',
+      formCount: 0,
+      validationErrors: [],
+      nativeInvalidCount: 0,
+    },
+    network: { requests: [] },
+  });
+  assert.equal(out.outcome, 'applied');
+});
+
+test('challenge copy that appears only after submit is still blocked', () => {
+  const out = classifyApplicationEvidence({
+    before: { url: 'https://jobs.example/apply', formCount: 1 },
+    after: {
+      url: 'https://jobs.example/apply',
+      bodyText: 'Verify you are human',
+      formCount: 1,
+      validationErrors: [],
+      nativeInvalidCount: 0,
+    },
+    network: { requests: [] },
+  });
+  assert.equal(out.outcome, 'blocked');
 });

@@ -50,6 +50,8 @@ const SUCCESS_TEXT_RE = [
   /thank you (?:for|.*)applying/i,
   /thanks for applying/i,
   /application (?:has been )?(?:received|submitted)/i,
+  // "Your application for {Role Title} has been received!" — role title between the words
+  /application\b[^.\n]{0,90}?\bhas been (?:received|submitted)/i,
   /successfully submitted/i,
   /sent successfully/i,
   /erfolgreich gesendet/i,
@@ -65,7 +67,7 @@ const SUCCESS_TEXT_RE = [
   /gracias.{0,60}(?:solicitud|postulación)/i,
   /candidatura.{0,50}(?:enviada|recebida)/i,
 ];
-const SUCCESS_URL_RE = /\/(?:thank(?:-?you)?|success|confirmation|submitted|application[-_/]?complete|application[-_/]?success)(?:[/?#]|$)/i;
+const SUCCESS_URL_RE = /\/(?:thank(?:-?you)?|success|succeeded|apply[-_/]?succeeded|confirmation|submitted|application[-_/]?complete|application[-_/]?success)(?:[/?#]|$)/i;
 const BLOCKED_RE = /captcha|verify you are human|are you a human|cloudflare|access denied|bot detection|robot check/i;
 const FAILURE_TEXT_RE = /submission failed|application failed|unable to submit|could not submit|something went wrong/i;
 const SUBMISSION_URL_RE = /apply|application|candidate|submission|submit|job[-_/]?application/i;
@@ -193,11 +195,30 @@ export function buildPageProbeCode(settleMs = 0) {
             );
           };
           const requiredMissing = controls.filter((el) => {
-            const required = el.required || el.getAttribute('aria-required') === 'true';
-            if (!required) return false;
+            // Native controls are gated by the browser's own constraint
+            // validation (el.required). aria-required on a native input is
+            // advisory metadata (e.g. Vercel/Greenhouse mark optional LinkedIn
+            // fields with an asterisk + aria-required but set required=false)
+            // — a form whose inputs are not natively required will not block
+            // on them. Custom widget requirements are judged in customRequired
+            // below, where react-select value storage is also handled.
+            if (!el.required) return false;
             if (el.type === 'radio') return !radioGroupChecked(el);
             if (el.type === 'checkbox') return !el.checked;
-            return !String(el.value || '').trim();
+            if (String(el.value || '').trim()) return false;
+            // react-select keeps its chosen value OUTSIDE the typeahead <input>
+            // (sibling .select__single-value text / container data-value). The
+            // invisible input itself stays empty by design, so judge the widget,
+            // not the input.
+            if (/(^|\s)select__input(\s|$)/.test(String(el.className || ''))) {
+              const valueHost = el.closest('.select__value-container')
+                || el.closest('.select__input-container')?.parentElement;
+              const single = valueHost?.querySelector('.select__single-value');
+              const filled = String(valueHost?.getAttribute('data-value') || '').trim()
+                || String(single?.textContent || '').trim();
+              if (filled) return false;
+            }
+            return true;
           }).map((el) => ({
             tag: el.tagName.toLowerCase(),
             type: el.type || '',
@@ -206,7 +227,16 @@ export function buildPageProbeCode(settleMs = 0) {
 
           const customRequired = [...document.querySelectorAll('[aria-required="true"]')]
             .filter(visible)
-            .filter((el) => !['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))
+            .filter((el) => {
+              // Native inputs are already gated by el.required above. The one
+              // exception is a native <input> acting as a custom combobox
+              // typeahead (react-select): its committed value lives in the
+              // widget, not the input, so it is judged as a widget here.
+              const isNative = ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName);
+              const isSelectWidget = isNative
+                && String(el.getAttribute('role') || '').toLowerCase() === 'combobox';
+              return !isNative || isSelectWidget;
+            })
             .filter((el) => {
               const role = String(el.getAttribute('role') || '').toLowerCase();
               if (role === 'radiogroup') {
@@ -221,10 +251,25 @@ export function buildPageProbeCode(settleMs = 0) {
                   .some((a) => el.getAttribute(a) === 'true');
               }
               if (role === 'combobox' || role === 'textbox' || role === 'listbox') {
-                const value = el.getAttribute('value')
+                let value = el.getAttribute('value')
                   || el.getAttribute('aria-valuetext')
                   || el.getAttribute('data-value')
                   || '';
+                // Native input/textarea acting as an ARIA combobox (Angular
+                // Material mat-autocomplete trigger, other framework typeaheads):
+                // the committed value lives in the value PROPERTY, never in the
+                // value attribute — read it before falling back to widgets.
+                if (!String(value).trim() && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+                  value = String(el.value || '');
+                }
+                // react-select typeahead: read the committed value from the
+                // surrounding value container instead of the empty input.
+                if (!String(value).trim() && /(^|\s)select__input(\s|$)/.test(String(el.className || ''))) {
+                  const valueHost = el.closest('.select__value-container')
+                    || el.closest('.select__input-container')?.parentElement;
+                  value = String(valueHost?.getAttribute('data-value') || '').trim()
+                    || String(valueHost?.querySelector('.select__single-value')?.textContent || '').trim();
+                }
                 const selected = el.querySelector('[aria-selected="true"], [role="option"][aria-checked="true"]');
                 return !String(value).trim() && !selected && !textOf(el);
               }
@@ -412,7 +457,13 @@ function hasSuccessText(text) {
 
 export function classifyApplicationEvidence({ before = {}, after = {}, network = {} } = {}) {
   const body = String(after.bodyText || '');
-  const blocked = Boolean(after.blockedTextSeen) || BLOCKED_RE.test(body);
+  // Ambient challenge copy (invisible reCAPTCHA, Cloudflare widgets) is often
+  // already present in the page before Submit. A block signal only counts when
+  // it appears after the attempt — same rule as success text below.
+  const blockedAfter = Boolean(after.blockedTextSeen) || BLOCKED_RE.test(body);
+  const ambientBlocked = Boolean(before.blockedTextSeen)
+    || BLOCKED_RE.test(String(before.bodyText || ''));
+  const blocked = blockedAfter && !ambientBlocked;
   const explicitFailure = Boolean(after.failureTextSeen) || FAILURE_TEXT_RE.test(body);
   const errors = Array.isArray(after.validationErrors) ? after.validationErrors.filter(Boolean) : [];
   const errorCount = Math.max(errors.length, Number(after.validationErrorCount || 0));
