@@ -1,0 +1,20 @@
+[
+  {
+    "outputPath": "C:\\Users\\Maxim\\Desktop\\career-ops\\output\\resumes\\general.pdf",
+    "ok": true,
+    "pageCount": 2,
+    "size": 132656
+  },
+  {
+    "outputPath": "C:\\Users\\Maxim\\Desktop\\career-ops\\output\\resumes\\ai-engineer.pdf",
+    "ok": true,
+    "pageCount": 2,
+    "size": 130312
+  },
+  {
+    "outputPath": "C:\\Users\\Maxim\\Desktop\\career-ops\\output\\resumes\\frontend.pdf",
+    "ok": true,
+    "pageCount": 2,
+    "size": 130942
+  }
+]

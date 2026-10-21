@@ -1,0 +1,5 @@
+[
+  {"input": "general.html", "output": "../../output/resumes/general.pdf", "format": "a4"},
+  {"input": "ai-engineer.html", "output": "../../output/resumes/ai-engineer.pdf", "format": "a4"},
+  {"input": "frontend.html", "output": "../../output/resumes/frontend.pdf", "format": "a4"}
+]

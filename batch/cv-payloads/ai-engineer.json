@@ -1,0 +1,108 @@
+{
+  "lang": "ru",
+  "page_format": "a4",
+  "candidate": {
+    "name": "Максим Дрягин",
+    "email": "vertolet333i@gmail.com",
+    "phone": "+7 919 395-05-55",
+    "location": "Россия · remote · Telegram @maxxwway"
+  },
+  "sections": {
+    "summary": "Профиль",
+    "competencies": "Ключевые компетенции",
+    "experience": "Опыт работы",
+    "projects": "Проекты",
+    "education": "Образование",
+    "skills": "Навыки"
+  },
+  "summary": "AI/LLM engineer с фокусом на автоматизацию продуктовых и инженерных процессов. Проектирую LLM-пайплайны, agent-assisted workflows и human-in-the-loop контуры, интегрирую OpenAI-compatible API и GigaChat, строю безопасные автоматизации с валидацией состояния, retry/dedup, observability и CI quality gates. Фронтенд-бэкграунд (React/TypeScript, 4+ года) позволяет собирать AI-функции end-to-end: от API и orchestration до пользовательского интерфейса.",
+  "competencies": [
+    "LLM / Generative AI",
+    "AI Agents",
+    "Prompt Engineering",
+    "OpenAI-compatible API",
+    "GigaChat",
+    "Agentic Workflows",
+    "Python",
+    "Автоматизация (Playwright)",
+    "CI quality gates",
+    "React / TypeScript"
+  ],
+  "experience": [
+    {
+      "company": "Собственные AI/automation проекты",
+      "dates": "2025-01 — н. в.",
+      "role": "AI Engineer / LLM Automation Engineer",
+      "bullets": [
+        "Разработал hh-ops: автономный multi-profile pipeline для поиска вакансий, безопасных откликов и обработки переписки. Интегрировал LLM-генерацию сопроводительных писем и ответов работодателям через OpenAI-compatible providers.",
+        "Разделил детерминированную классификацию состояния чата и генерацию текста. Реализовал human-in-the-loop очередь для button/UI-only сценариев, чтобы система не отправляла повторные или неподходящие ответы.",
+        "Построил механизмы надёжности для автономных workflow: повторная проверка состояния перед write, stale-state protection, retry/dedup после сетевых ошибок, fail-closed правила, dry-run/live режимы и per-profile locks.",
+        "Организовал multi-profile orchestration через cron и bounded workers, автоматическую очистку завершённых переговоров и privacy-safe операционные snapshot-отчёты.",
+        "Внедрил инженерный review loop для AI-assisted разработки: декомпозиция задачи, реализация, regression tests, статический анализ и CI gates (pytest, Ruff, basedpyright, Shellcheck, Docker, матрица Python 3.11/3.13).",
+        "Разработал архитектуру образовательной платформы BrainWave с AI-ассистентом для подготовки к ОГЭ/ЕГЭ по информатике. Интегрировал GigaChat API, React/Tailwind UI и сценарии персонализированных объяснений и автоматизированной проверки заданий.",
+        "Проектировал API integrations и stateful automation так, чтобы LLM не принимала необратимые решения без deterministic guards и возможности ручной эскалации."
+      ]
+    },
+    {
+      "company": "Selecty",
+      "dates": "2024-04 — н. в.",
+      "role": "Frontend React Developer",
+      "bullets": [
+        "Веб-терминал для торговли ценными бумагами, 10K+ активных трейдеров. React 18, TypeScript, WebSocket, IndexedDB, Web Components.",
+        "Перевёл чат поддержки с iframe-SDK на Web Component с CDN-рантаймом: загрузка диалога быстрее на 15–20%, даунтайм при деплоях с ~1 минуты до нуля.",
+        "Спроектировал WebSocket-систему котировок (свечи, last price, стакан) с дедупликацией подписок и auto-reconnect."
+      ]
+    },
+    {
+      "company": "РСХБ-Интех",
+      "dates": "2022-04 — 2024-03",
+      "role": "Frontend Engineer",
+      "bullets": [
+        "«Своё Фермерство» — B2B/B2C-платформа агробизнеса, 3K+ поставщиков. React, TypeScript, Web Workers, Web Locks API.",
+        "Каталог 18K+ товаров: загрузка с 3,8 до 0,9 секунды; фильтрация 18K+ позиций в Web Worker: задержка интерфейса с 200–400 мс до ~16 мс.",
+        "AI-сервис подбора семян по 8 агрономическим параметрам; спрос через платформу вырос на 30%."
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "hh-ops",
+      "description": "Автономный multi-profile job-search pipeline: LLM-сопроводительные и ответы работодателям, human-in-the-loop очередь, retry/dedup, per-profile locks.",
+      "tech": "Python · OpenAI-compatible API · SQLite · Playwright"
+    },
+    {
+      "name": "BrainWave",
+      "description": "Образовательная платформа с AI-ассистентом (ОГЭ/ЕГЭ информатика): персонализированные объяснения и автопроверка заданий.",
+      "tech": "GigaChat API · React · Tailwind"
+    }
+  ],
+  "education": [
+    {
+      "title": "Высшее образование",
+      "org": "МГТУ им. Н.Э. Баумана",
+      "year": "2026"
+    }
+  ],
+  "skills": [
+    {
+      "category": "AI / LLM",
+      "items": ["OpenAI-compatible API", "GigaChat", "Prompt Engineering", "AI Agents", "Agentic Workflows", "Human-in-the-loop"]
+    },
+    {
+      "category": "Языки",
+      "items": ["Python", "JavaScript / TypeScript"]
+    },
+    {
+      "category": "Frontend",
+      "items": ["React 18", "Redux Toolkit / RTK Query", "Web Components", "WebSocket", "IndexedDB"]
+    },
+    {
+      "category": "Инфраструктура",
+      "items": ["Docker", "GitHub Actions", "SQLite", "Playwright", "Pytest", "Ruff", "basedpyright"]
+    },
+    {
+      "category": "Языки общения",
+      "items": ["Русский — родной", "Английский — B2"]
+    }
+  ]
+}

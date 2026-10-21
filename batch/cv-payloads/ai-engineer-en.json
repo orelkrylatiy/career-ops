@@ -1,0 +1,100 @@
+{
+  "lang": "en",
+  "page_format": "a4",
+  "candidate": {
+    "name": "Maksim Dryagin",
+    "email": "vertolet333i@gmail.com",
+    "phone": "+7 919 395-05-55",
+    "location": "Russia · Remote · Telegram @maxxwway"
+  },
+  "summary": "AI/LLM engineer focused on automating product and engineering workflows. I design LLM pipelines, agent-assisted workflows and human-in-the-loop controls, integrate OpenAI-compatible APIs and GigaChat, and build reliable automations with state validation, retry/dedup, observability and CI quality gates. A 4+ year frontend background (React/TypeScript) lets me ship AI features end-to-end: from API and orchestration to the user interface.",
+  "competencies": [
+    "LLM / Generative AI",
+    "AI Agents",
+    "Prompt Engineering",
+    "OpenAI-compatible API",
+    "GigaChat",
+    "Agentic Workflows",
+    "Python",
+    "Automation (Playwright)",
+    "CI quality gates",
+    "React / TypeScript"
+  ],
+  "experience": [
+    {
+      "company": "Independent AI/automation projects",
+      "dates": "2025-01 — present",
+      "role": "AI Engineer / LLM Automation Engineer",
+      "bullets": [
+        "Built hh-ops: an autonomous multi-profile job-search pipeline for vacancy discovery, safe applications and correspondence, with LLM-generated cover letters and employer replies via OpenAI-compatible providers.",
+        "Separated deterministic chat-state classification from text generation; human-in-the-loop queue for button/UI-only scenarios so the system never sends duplicate or unsuitable replies.",
+        "Reliability machinery for autonomous workflows: state re-checks before writes, stale-state protection, retry/dedup after network errors, fail-closed rules, dry-run/live modes, per-profile locks.",
+        "Multi-profile orchestration via cron and bounded workers, automatic cleanup of finished negotiations, privacy-safe operational snapshot reports.",
+        "Engineering review loop for AI-assisted development: task decomposition, regression tests, static analysis, CI gates (pytest, Ruff, basedpyright, Shellcheck, Docker, Python 3.11/3.13 matrix).",
+        "Designed BrainWave, an education platform with an AI assistant (CS exam prep): GigaChat API, React/Tailwind UI, personalized explanations and automated task checking.",
+        "Designed API integrations and stateful automation so the LLM never takes irreversible actions without deterministic guards and a manual escalation path."
+      ]
+    },
+    {
+      "company": "Selecty",
+      "dates": "2024-04 — present",
+      "role": "Frontend React Developer",
+      "bullets": [
+        "Web trading terminal for 10K+ active traders. React 18, TypeScript, WebSocket, IndexedDB, Web Components.",
+        "Migrated the support chat from an iframe SDK to a Web Component with a CDN runtime: dialog load 15–20% faster, deploy downtime from ~1 minute to zero.",
+        "Designed the WebSocket market-data system (candles, last price, order book) with subscription dedup and auto-reconnect."
+      ]
+    },
+    {
+      "company": "RSHB-Intech (Rosselkhozbank group)",
+      "dates": "2022-04 — 2024-03",
+      "role": "Frontend Engineer",
+      "bullets": [
+        "B2B/B2C agribusiness platform, 3K+ suppliers. React, TypeScript, Web Workers, Web Locks API.",
+        "18K+ item catalog: load time from 3.8s to 0.9s; filtering in a Web Worker: UI latency from 200–400ms down to ~16ms.",
+        "AI seed-selection service over 8 agronomic parameters; demand via the platform grew 30%."
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "hh-ops",
+      "description": "Autonomous multi-profile job-search pipeline: LLM cover letters and employer replies, human-in-the-loop queue, retry/dedup, per-profile locks.",
+      "tech": "Python · OpenAI-compatible API · SQLite · Playwright"
+    },
+    {
+      "name": "BrainWave",
+      "description": "Education platform with an AI assistant (CS exam prep): personalized explanations and automated task checking.",
+      "tech": "GigaChat API · React · Tailwind"
+    }
+  ],
+  "education": [
+    {
+      "title": "Higher education",
+      "org": "Bauman Moscow State Technical University",
+      "year": "2026"
+    }
+  ],
+  "skills": [
+    {
+      "category": "AI / LLM",
+      "items": ["OpenAI-compatible API", "GigaChat", "Prompt Engineering", "AI Agents", "Agentic Workflows", "Human-in-the-loop"]
+    },
+    {
+      "category": "Languages",
+      "items": ["Python", "JavaScript / TypeScript"]
+    },
+    {
+      "category": "Frontend",
+      "items": ["React 18", "Redux Toolkit / RTK Query", "Web Components", "WebSocket", "IndexedDB"]
+    },
+    {
+      "category": "Infrastructure",
+      "items": ["Docker", "GitHub Actions", "SQLite", "Playwright", "Pytest", "Ruff", "basedpyright"]
+    },
+    {
+      "category": "Spoken",
+      "items": ["Russian — native", "English — B2"]
+    }
+  ]
+}

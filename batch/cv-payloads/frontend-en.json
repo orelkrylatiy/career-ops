@@ -1,0 +1,100 @@
+{
+  "lang": "en",
+  "page_format": "a4",
+  "candidate": {
+    "name": "Maksim Dryagin",
+    "email": "vertolet333i@gmail.com",
+    "phone": "+7 919 395-05-55",
+    "location": "Russia · Remote · Telegram @maxxwway"
+  },
+  "summary": "Frontend developer (React, TypeScript), 4+ years of commercial experience: a trading terminal for 10K+ active traders and a B2B/B2C agribusiness platform for 3K+ suppliers. I own the performance of complex interfaces (18K+ item catalog, WebSocket market data, Web Workers), widget architecture and real-time reliability. Additionally I build AI/LLM automations in Python — from API integrations to agent pipelines.",
+  "competencies": [
+    "React 18",
+    "TypeScript",
+    "Redux Toolkit / RTK Query",
+    "WebSocket",
+    "Web Components",
+    "Web Workers",
+    "UI performance",
+    "IndexedDB",
+    "Plugin architecture",
+    "Python / LLM"
+  ],
+  "experience": [
+    {
+      "company": "Selecty",
+      "dates": "2024-04 — present",
+      "role": "Frontend React Developer",
+      "bullets": [
+        "Web trading terminal for 10K+ active traders. React 18, TypeScript, Redux Toolkit, RTK Query, WebSocket, IndexedDB, Web Components.",
+        "Migrated the support chat from an iframe SDK to a Web Component with a CDN runtime: dialog load 15–20% faster, deploy downtime from ~1 minute to zero.",
+        "Designed the WebSocket market-data system (candles, last price, order book) with subscription dedup, auto-reconnect and fallback paths.",
+        "Fixed a race condition in the trading form: wrong order quantity when quickly switching lots / amount / % modes.",
+        "Cross-tab workspace sync: IndexedDB, storage events, distributed lock. Plugin architecture with 20+ widget types."
+      ]
+    },
+    {
+      "company": "RSHB-Intech (Rosselkhozbank group)",
+      "dates": "2022-04 — 2024-03",
+      "role": "Frontend Engineer",
+      "bullets": [
+        "B2B/B2C agribusiness platform, 3K+ suppliers. React, TypeScript, Redux Toolkit, Web Workers, Web Locks API.",
+        "18K+ item catalog: load time from 3.8s to 0.9s, steady 58–60 FPS scrolling.",
+        "18K+ item filtering in a Web Worker: UI latency from 200–400ms down to ~16ms.",
+        "Web Locks API and a shared cross-tab cache: −70% duplicate requests; 15+ parameter filters: −65% API calls.",
+        "Dashboard for 3K+ suppliers: charts, XLSX export, real-time via WebSocket.",
+        "AI seed-selection service over 8 agronomic parameters; demand via the platform grew 30%."
+      ]
+    },
+    {
+      "company": "Independent AI/automation projects",
+      "dates": "2025-01 — present",
+      "role": "AI Engineer / LLM Automation Engineer",
+      "bullets": [
+        "hh-ops: autonomous multi-profile job-search pipeline with LLM-generated texts; reliability: retry/dedup, stale-state protection, fail-closed rules, human-in-the-loop queue.",
+        "BrainWave: education platform with an AI assistant (CS exam prep) — GigaChat API + React/Tailwind UI."
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "hh-ops",
+      "description": "Autonomous multi-profile job-search pipeline: LLM cover letters and employer replies, human-in-the-loop queue, retry/dedup, per-profile locks.",
+      "tech": "Python · OpenAI-compatible API · SQLite · Playwright"
+    },
+    {
+      "name": "BrainWave",
+      "description": "Education platform with an AI assistant (CS exam prep): personalized explanations and automated task checking.",
+      "tech": "GigaChat API · React · Tailwind"
+    }
+  ],
+  "education": [
+    {
+      "title": "Higher education",
+      "org": "Bauman Moscow State Technical University",
+      "year": "2026"
+    }
+  ],
+  "skills": [
+    {
+      "category": "Frontend",
+      "items": ["React 18", "Redux Toolkit / RTK Query", "Web Components", "WebSocket", "Web Workers", "Web Locks API", "IndexedDB", "Tailwind CSS"]
+    },
+    {
+      "category": "Languages",
+      "items": ["JavaScript / TypeScript", "Python"]
+    },
+    {
+      "category": "AI / LLM",
+      "items": ["OpenAI-compatible API", "GigaChat", "AI Agents", "Prompt Engineering"]
+    },
+    {
+      "category": "Infrastructure",
+      "items": ["Docker", "GitHub Actions", "SQLite", "Playwright", "Pytest"]
+    },
+    {
+      "category": "Spoken",
+      "items": ["Russian — native", "English — B2"]
+    }
+  ]
+}
