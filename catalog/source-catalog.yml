@@ -109,10 +109,25 @@ job_sources:
     kind: aggregator
     name: Хабр Карьера
     url: https://career.habr.com/vacancies
-    access: oauth-api-or-browser
+    provider: habr-career
+    access: public-ssr-state
     status: live
     locales: [ru]
-    notes: "Official API requires an activated OAuth app; public vacancy pages remain useful through browser extraction."
+    search_queries:
+      - frontend
+      - frontend разработчик
+      - react
+      - backend
+      - fullstack
+      - nodejs
+      - ai
+      - llm
+      - machine learning
+      - data engineer
+      - devops
+      - разработчик
+      - программист
+    notes: "Official API is OAuth-gated, but the SSR search page embeds its full state (vacancies.list: id/title/remote/company/date) in an application/json script blob. Verified live 2026-10-21; ?page=N pagination. Discovery only — applying still needs an OAuth session."
   - id: ru-geekjob
     country: RU
     kind: aggregator
@@ -169,10 +184,23 @@ job_sources:
     kind: aggregator
     name: SuperJob
     url: https://www.superjob.ru/vacancy/search/
-    access: app-key-api-or-browser
+    provider: superjob
+    access: public-ssr-html
     status: live
     locales: [ru]
-    notes: "API requires X-Api-App-Id; keep outside zero-auth core."
+    search_queries:
+      - frontend
+      - react
+      - backend
+      - fullstack
+      - nodejs
+      - ai
+      - llm
+      - machine learning
+      - data engineer
+      - devops
+      - разработчик
+    notes: "API requires X-Api-App-Id and window.APP_STATE holds no vacancy entities, but each search page ships a schema.org ItemList of canonical vacancy URLs (~40/page). Provider derives slug titles; no salary/company/date at list level — discovery + title ranking only. Verified live 2026-10-21."
   # Kazakhstan
   - id: kz-enbek
     country: KZ
