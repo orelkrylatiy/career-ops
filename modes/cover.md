@@ -282,6 +282,32 @@ Resolve the cover-letter template with the shared resolver (do not hardcode `cov
 
 Fill the resolved template's `{{...}}` placeholders. A non-zero exit means the named template is missing/invalid — surface it, do not silently fall back.
 
+## Step 8b — Framework gate (validate the draft, offline)
+
+Before asking for approval, run the assembled letter through the communication
+framework's offline validator (no LLM call, no cost):
+
+```bash
+py humanizer-bridge.py validate --channel hh --type application --language <output lang> --text-file letter.txt
+```
+
+(`python3` instead of `py` off Windows.) The reply is one JSON object: the
+normalized `text`, a `hard` flag and `issues` with stable codes
+(`template_similarity`, `forbidden_smiley`, `too_short`, ...).
+
+- Any `"hard": true` issue must be fixed in the draft and the gate re-run
+  before Step 9.
+- Soft issues are judgment calls — surface them to the user with the draft.
+- The validator checks voice and format only. It never injects facts; the
+  letter's facts still come exclusively from the in-scope files (AGENTS.md →
+  Source-of-Truth Boundary).
+- Soft-fail: on a fresh clone without Python 3.11 + `humanizer_framework`,
+  say the gate was skipped and rely on the Language rules above. Never block
+  the letter on bridge unavailability, never hide that the gate did not run.
+- Generation alternative: for the intro paragraph the framework can generate
+  from a goal (`py humanizer-bridge.py write --goal "..." --type application`)
+  — still ground every claim in cv.md/article-digest.md yourself before use.
+
 ## Step 9 — Generate PDF
 
 Only after explicit user approval.

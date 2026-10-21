@@ -192,6 +192,21 @@ For each question, generate the response following:
 6. **Recruiter-side risk map**: Use `modes/heuristics/recruiter-side.md` to identify what doubt the question is trying to resolve (motivation, stack fit, logistics, comp, work-auth, availability, seniority) and answer that doubt directly.
 7. **Disclosure discipline**: Answer logistics questions truthfully when asked, but do not volunteer sensitive or HR-only details in unrelated motivation/fit answers.
 
+**Framework gate (per free-text answer, offline):** before presenting, run the
+draft through the communication framework's validator — save it to a temp file, then:
+
+```bash
+py humanizer-bridge.py validate --channel hh --type application --language <output lang> --text-file answer.txt
+```
+
+- Use `--type chat_reply` for short conversational answers, `--type application`
+  for cover-letter fields and long-form answers (they get a larger length budget).
+- `"hard": true` → fix and re-run before the answer is shown. Soft issues:
+  surface with the answer.
+- Soft-fail: without Python 3.11 + `humanizer_framework`, present anyway and
+  note the gate was skipped. The validator checks voice/format only — facts
+  still come exclusively from the report and in-scope files.
+
 **Output format:**
 
 ```text
