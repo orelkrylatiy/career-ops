@@ -139,6 +139,18 @@ Use the candidate profile/CV/application context for concrete identity and histo
 
 Do not invent a different identity or credentials whose falsity would make the submitted application unusable later. When an application asks for a fact that is not available, prefer a truthful/neutral option when possible; if the site makes the flow genuinely impossible, record the actual blocker and continue the queue.
 
+**Humanizer gate (before the text enters the form).** Autopilot texts reach the employer without human review, so every free-text answer passes the offline validator first — save the draft to a temp file, then:
+
+~~~bash
+py humanizer-bridge.py validate --channel hh --type application --language <output lang> --text-file answer.txt
+~~~
+
+- `--type chat_reply` for short conversational answers, `--type application` for cover-letter fields and long-form answers (larger length budget).
+- `"hard": true` → fix the draft and re-run the gate before it goes into the form. Soft issues: fix when cheap, otherwise proceed.
+- Facts still come only from the candidate context (profile/CV/report) — the validator checks voice and format, never supplies facts.
+- Soft-fail: if Python 3.11 + `humanizer_framework` are unavailable, proceed without the gate and record `humanizer: skipped (bridge unavailable)` in the run report. Never block an application on bridge unavailability, never hide that the gate did not run.
+- Long cover-letter fields may alternatively be generated from a goal (`py humanizer-bridge.py write --goal "..." --type application`) — still grounded in candidate context only.
+
 ## Deterministic submit verification
 
 A click on Submit is **not** proof that an application was sent.

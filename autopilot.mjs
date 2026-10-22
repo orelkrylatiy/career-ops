@@ -122,6 +122,17 @@ function loadTitleFilter() {
   return { positive: norm(tf.positive), negative: norm(tf.negative) };
 }
 
+// Explicit candidate policy, intentionally opt-in.  A strict market must be
+// verified from the discovered location or a local job-board domain; an
+// unlabeled "Remote" posting is not enough to safely submit on the candidate's
+// behalf.
+const RUSSIA_MARKET_RE = /(?:\brussia\b|\brussian federation\b|росси(?:я|и|йская|йской)|\bmoscow\b|москва|санкт[- ]?петербург|\bst\.? petersburg\b)/i;
+function matchesStrictMarket(entry, profile) {
+  if (String(profile?.autopilot?.strict_market || '').toLowerCase() !== 'russia') return true;
+  const host = hostOf(entry?.url || '');
+  return host.endsWith('.ru') || RUSSIA_MARKET_RE.test(`${entry?.title || ''} ${entry?.location || ''}`);
+}
+
 const SUBMITTED_TRACKER_STATUSES = new Set([
   'applied', 'responded', 'interview', 'offer', 'rejected', 'hired',
 ]);
@@ -421,6 +432,11 @@ export async function cmdRun(flags = {}) {
       }
       if (blacklistedSource) {
         decisions.push(`SKIPPED hard: explicit source blacklist (${blacklistedSource}) | ${label}`);
+        counts.hardSkipped++;
+        continue;
+      }
+      if (!matchesStrictMarket(entry, profile)) {
+        decisions.push(`SKIPPED hard: outside strict Russia market | ${label}`);
         counts.hardSkipped++;
         continue;
       }

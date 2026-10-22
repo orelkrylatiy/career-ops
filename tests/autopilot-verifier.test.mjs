@@ -363,3 +363,70 @@ test('challenge copy that appears only after submit is still blocked', () => {
   });
   assert.equal(out.outcome, 'blocked');
 });
+
+test('GeekJob post-submit state with disappearing submit button is applied', () => {
+  // GeekJob keeps the respond <form> and the URL; the submit button is
+  // replaced by the "already responded" success copy. That swap is the
+  // deterministic transition.
+  const out = classifyApplicationEvidence({
+    before: {
+      url: 'https://geekjob.ru/vacancy/6ad260fdb9a005db540342b7',
+      formCount: 1,
+      submitCount: 1,
+    },
+    after: {
+      url: 'https://geekjob.ru/vacancy/6ad260fdb9a005db540342b7',
+      bodyText: 'Уже откликнулись. Вы успешно отправили запрос на эту вакансию. Повторно отправить запрос можно через 7 дней',
+      formCount: 1,
+      submitCount: 0,
+      validationErrors: [],
+      nativeInvalidCount: 0,
+    },
+    network: { requests: [] },
+  });
+  assert.equal(out.outcome, 'applied');
+  assert.equal(out.confidence, 'medium');
+});
+
+test('submit button disappearing without new success copy stays unconfirmed', () => {
+  const out = classifyApplicationEvidence({
+    before: {
+      url: 'https://geekjob.ru/vacancy/6ad260fdb9a005db540342b7',
+      formCount: 1,
+      submitCount: 1,
+    },
+    after: {
+      url: 'https://geekjob.ru/vacancy/6ad260fdb9a005db540342b7',
+      bodyText: 'form quietly re-rendered',
+      formCount: 1,
+      submitCount: 0,
+      validationErrors: [],
+      nativeInvalidCount: 0,
+    },
+    network: { requests: [] },
+  });
+  assert.equal(out.outcome, 'submitted_unconfirmed');
+});
+
+test('pre-existing GeekJob already-responded copy is not a new confirmation', () => {
+  // A second visit to an already-responded vacancy must not classify as a
+  // fresh application: the success copy was there before any submit click.
+  const out = classifyApplicationEvidence({
+    before: {
+      url: 'https://geekjob.ru/vacancy/6ad260fdb9a005db540342b7',
+      formCount: 1,
+      submitCount: 0,
+      bodyText: 'Уже откликнулись. Вы успешно отправили запрос на эту вакансию.',
+    },
+    after: {
+      url: 'https://geekjob.ru/vacancy/6ad260fdb9a005db540342b7',
+      bodyText: 'Уже откликнулись. Вы успешно отправили запрос на эту вакансию.',
+      formCount: 1,
+      submitCount: 0,
+      validationErrors: [],
+      nativeInvalidCount: 0,
+    },
+    network: { requests: [] },
+  });
+  assert.notEqual(out.outcome, 'applied');
+});

@@ -24,6 +24,7 @@ location:
 autopilot:
   remote_only: true
   blocked_locations: [London]
+  strict_market: Russia
 `, 'utf8');
 
 writeFileSync(path.join(ROOT, 'data', 'pipeline.md'), `
@@ -58,21 +59,20 @@ const dbMod = await import(
   pathToFileURL(path.resolve('autopilot-db.mjs')).href
 );
 
-test('wide queue keeps weak title/location matches and only hard-stops explicit blacklist', async () => {
+test('strict Russia market gates queue admission before a browser can claim a posting', async () => {
   const counts = await autopilot.cmdRun({ noScan: true, dryRun: false });
   assert.equal(counts.pending, 4);
-  assert.equal(counts.queuedNew, 3);
-  assert.equal(counts.hardSkipped, 1);
+  assert.equal(counts.queuedNew, 1);
+  assert.equal(counts.hardSkipped, 3);
 
   const rows = dbMod.openDb()
     .prepare('SELECT company, title, priority, status FROM jobs ORDER BY priority DESC')
     .all();
-  assert.deepEqual(rows.map((r) => r.company).sort(), ['Good Co', 'Other Co', 'Weak Co']);
+  assert.deepEqual(rows.map((r) => r.company).sort(), ['Good Co']);
   assert.ok(rows.every((r) => r.status === 'queued'));
 
   const good = rows.find((r) => r.company === 'Good Co');
-  const weak = rows.find((r) => r.company === 'Weak Co');
-  assert.ok(good.priority > weak.priority);
+  assert.ok(good.priority > 0);
 });
 
 test.after(() => {

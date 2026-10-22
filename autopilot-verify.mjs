@@ -59,6 +59,9 @@ const SUCCESS_TEXT_RE = [
   /application complete/i,
   /спасибо.{0,60}(?:отклик|заявк)/i,
   /(?:отклик|заявк).{0,40}(?:отправлен|принят|получен)/i,
+  // GeekJob: respond box swaps to the post-submit state without URL change
+  /вы успешно отправили запрос/i,
+  /уже откликнулись/i,
   /bewerbung.{0,50}(?:eingegangen|übermittelt|gesendet)/i,
   /vielen dank.{0,60}bewerbung/i,
   /candidature.{0,50}(?:reçue|envoyée|transmise)/i,
@@ -504,12 +507,16 @@ export function classifyApplicationEvidence({ before = {}, after = {}, network =
   const networkFailure = candidateRequests.some((r) => r.status != null && r.status >= 400);
   const formGone = Number(before.formCount || 0) > 0 && Number(after.formCount || 0) === 0;
   const urlChanged = Boolean(before.url && after.url && before.url !== after.url);
+  // GeekJob-style flows keep the <form> element and URL but replace its
+  // content: the real Submit control disappears and the success state takes
+  // its place. That transition is as deterministic as the form going away.
+  const submitGone = Number(before.submitCount || 0) > 0 && Number(after.submitCount || 0) === 0;
 
-  if (strongUiSuccess && !effectiveBlocked && (networkSuccess || formGone || urlChanged)) {
+  if (strongUiSuccess && !effectiveBlocked && (networkSuccess || formGone || urlChanged || submitGone)) {
     return {
       outcome: 'applied',
       confidence: networkSuccess ? 'high' : 'medium',
-      signals: { strongUiSuccess, networkSuccess, formGone, urlChanged },
+      signals: { strongUiSuccess, networkSuccess, formGone, urlChanged, submitGone },
     };
   }
   if (effectiveBlocked) {
