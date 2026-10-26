@@ -511,12 +511,18 @@ export function classifyApplicationEvidence({ before = {}, after = {}, network =
   // content: the real Submit control disappears and the success state takes
   // its place. That transition is as deterministic as the form going away.
   const submitGone = Number(before.submitCount || 0) > 0 && Number(after.submitCount || 0) === 0;
+  // Habr replaces the one-click "Откликнуться" control with a separate
+  // "Дополнить отклик" form on the same page after a successful response.
+  const habrResponseTransition = /^https:\/\/career\.habr\.com\/vacancies\/\d+/i.test(String(before.url || ''))
+    && Number(before.submitCount || 0) > Number(after.submitCount || 0)
+    && strongUiSuccess;
 
-  if (strongUiSuccess && !effectiveBlocked && (networkSuccess || formGone || urlChanged || submitGone)) {
+  if (strongUiSuccess && !effectiveBlocked && !errorCount && !invalid
+    && (networkSuccess || formGone || urlChanged || submitGone || habrResponseTransition)) {
     return {
       outcome: 'applied',
       confidence: networkSuccess ? 'high' : 'medium',
-      signals: { strongUiSuccess, networkSuccess, formGone, urlChanged, submitGone },
+      signals: { strongUiSuccess, networkSuccess, formGone, urlChanged, submitGone, habrResponseTransition },
     };
   }
   if (effectiveBlocked) {

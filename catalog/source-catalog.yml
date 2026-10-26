@@ -70,40 +70,6 @@ company_directories:
 
 job_sources:
   # Russia
-  - id: ru-trudvsem
-    country: RU
-    kind: aggregator
-    name: Работа России
-    url: http://opendata.trudvsem.ru/api/v1/vacancies
-    provider: trudvsem
-    access: public-api
-    status: live
-    locales: [ru]
-    search_queries:
-      - разработчик
-      - программист
-      - software
-      - backend
-      - frontend
-      - fullstack
-      - devops
-      - sre
-      - data engineer
-      - data scientist
-      - аналитик
-      - тестировщик
-      - qa
-      - machine learning
-      - искусственный интеллект
-      - информационная безопасность
-      - кибербезопасность
-      - системный администратор
-      - архитектор
-      - product manager
-      - project manager
-      - tech lead
-      - руководитель разработки
-    notes: "Official open-data API; up to 100 records/page and 10k records per query window. Multiple overlapping IT queries widen coverage; Career-Ops adds no result ceiling."
   - id: ru-habr-career
     country: RU
     kind: aggregator

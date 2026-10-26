@@ -33,6 +33,45 @@ test('explicit confirmation is a confirmed application', () => {
   assert.equal(out.confidence, 'high');
 });
 
+test('Habr one-click response is confirmed when the response control becomes a supplement form', () => {
+  const out = classifyApplicationEvidence({
+    before: {
+      url: 'https://career.habr.com/vacancies/1000169456',
+      submitCount: 2,
+      successTextSeen: false,
+    },
+    after: {
+      url: 'https://career.habr.com/vacancies/1000169456',
+      submitCount: 1,
+      successTextSeen: true,
+      validationErrors: [],
+      nativeInvalidCount: 0,
+    },
+    network: { requests: [] },
+  });
+  assert.equal(out.outcome, 'applied');
+  assert.equal(out.confidence, 'medium');
+});
+
+test('Habr confirmation already visible before a click is not a new application', () => {
+  const out = classifyApplicationEvidence({
+    before: {
+      url: 'https://career.habr.com/vacancies/1000169456',
+      submitCount: 1,
+      successTextSeen: true,
+    },
+    after: {
+      url: 'https://career.habr.com/vacancies/1000169456',
+      submitCount: 0,
+      successTextSeen: true,
+      validationErrors: [],
+      nativeInvalidCount: 0,
+    },
+    network: { requests: [] },
+  });
+  assert.equal(out.outcome, 'submitted_unconfirmed');
+});
+
 test('successful submit-like request without confirmation is unconfirmed', () => {
   const out = classifyApplicationEvidence({
     before: { url: 'https://jobs.example/apply', formCount: 1 },

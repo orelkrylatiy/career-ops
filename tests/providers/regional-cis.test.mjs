@@ -1,37 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseTrudvsemResponse } from '../../providers/trudvsem.mjs';
 import { parseStaffAmListing } from '../../providers/staffam.mjs';
 import { parseCareerCenterListing } from '../../providers/careercenter-am.mjs';
 import { parseIshUzListing } from '../../providers/ishuz.mjs';
-
-test('trudvsem parser normalizes official open-data vacancy shape', () => {
-  const jobs = parseTrudvsemResponse({
-    status: '200',
-    meta: { total: '1' },
-    results: {
-      vacancies: [{
-        vacancy: {
-          id: 'v-42',
-          'job-name': 'Backend разработчик',
-          company: { name: 'ООО Тест', companycode: 'c-7' },
-          region: { name: 'Москва' },
-          addresses: { address: [{ location: 'Москва', street: 'Тверская' }] },
-          'creation-date': '2026-09-17T10:00:00Z',
-          vac_url: 'https://trudvsem.ru/vacancy/card/c-7/v-42',
-          duty: 'Node.js',
-        },
-      }],
-    },
-  });
-  assert.equal(jobs.length, 1);
-  assert.equal(jobs[0].title, 'Backend разработчик');
-  assert.equal(jobs[0].company, 'ООО Тест');
-  assert.match(jobs[0].location, /Москва/);
-  assert.equal(jobs[0].externalId, 'v-42');
-  assert.equal(jobs[0].description, 'Node.js');
-});
 
 test('staff.am parser extracts job, company, location and date from a card', () => {
   const html = `

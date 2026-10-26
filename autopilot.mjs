@@ -127,10 +127,13 @@ function loadTitleFilter() {
 // unlabeled "Remote" posting is not enough to safely submit on the candidate's
 // behalf.
 const RUSSIA_MARKET_RE = /(?:\brussia\b|\brussian federation\b|росси(?:я|и|йская|йской)|\bmoscow\b|москва|санкт[- ]?петербург|\bst\.? petersburg\b)/i;
+const RUSSIA_JOB_BOARD_HOSTS = new Set(['career.habr.com']);
 function matchesStrictMarket(entry, profile) {
   if (String(profile?.autopilot?.strict_market || '').toLowerCase() !== 'russia') return true;
   const host = hostOf(entry?.url || '');
-  return host.endsWith('.ru') || RUSSIA_MARKET_RE.test(`${entry?.title || ''} ${entry?.location || ''}`);
+  return host.endsWith('.ru')
+    || RUSSIA_JOB_BOARD_HOSTS.has(host)
+    || RUSSIA_MARKET_RE.test(`${entry?.title || ''} ${entry?.location || ''}`);
 }
 
 const SUBMITTED_TRACKER_STATUSES = new Set([

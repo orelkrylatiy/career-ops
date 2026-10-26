@@ -69,7 +69,7 @@ Important existing provider families include:
 - Europe: Arbeitnow, Welcome to the Jungle, JustJoin.it, No Fluff Jobs, Landing.jobs, The Hub, Arbeitsagentur, VDAB, GetManfred and others.
 - Americas: Built In, The Muse, Get on Board, Job Bank Canada and ATS-hosted company boards.
 - Asia/Africa: MyCareersFuture, Jobstreet/SEEK, Glints, Yourator, ITviec, CareerViet, Senjob and several large-company providers.
-- Regional custom layer: Работа России, Staff.am, CareerCenter.am and ish.uz.
+- Regional custom layer: Staff.am, CareerCenter.am and ish.uz.
 
 Existing useful components:
 
@@ -132,29 +132,7 @@ Browser fallback is source-local. A broken or blocked source does not stop the g
 
 ## 3. Russia source plan
 
-### 3.1 Работа России: first-class API source
-
-The official open-data API exposes all vacancies as JSON with GET requests.
-
-Useful capabilities:
-
-- all vacancies;
-- employer-specific vacancies;
-- lookup by INN/OGRN;
-- region filters;
-- text search;
-- 100 records per page;
-- up to 10,000 records in a query response window;
-- modifiedFrom / modifiedTo incremental synchronization.
-
-Recommended implementation: keep providers/trudvsem.mjs, but make incremental modified-date scanning the normal scheduled path. It is wasteful to recrawl the full national dataset each run.
-
-Official docs:
-https://trudvsem.ru/opendata/api
-Documented API base:
-http://opendata.trudvsem.ru/api/v1/vacancies
-
-### 3.2 HeadHunter: highest-priority authenticated integration
+### 3.1 HeadHunter: highest-priority authenticated integration
 
 HH has an official applicant API and is more valuable than browser scraping for Russia/CIS.
 
@@ -404,7 +382,7 @@ Recommended job record:
 {
   "job_id": "stable internal id",
   "url_key": "normalized posting identity",
-  "source": "hh|trudvsem|greenhouse|...",
+  "source": "hh|greenhouse|...",
   "source_job_id": "provider id",
   "ats": "greenhouse|workday|custom|...",
   "company": "Acme",
@@ -468,7 +446,7 @@ A score of 15 should mean "later", not "delete".
 Suggested default ordering:
 
 ~~~text
-fresh Russian direct-company / HH / Работа России
+fresh Russian direct-company / HH
         >
 fresh high-match worldwide remote
         >
@@ -711,7 +689,7 @@ Suggested starting policy:
 - company directory refresh (CNews/RBC etc.): daily/weekly, not every scan;
 - source health/resolution refresh: daily plus on failure.
 
-Use conditional/incremental sync whenever the source supports it. Работа России modifiedFrom is the clearest example.
+Use conditional/incremental sync whenever the source supports it.
 
 ### Application worker
 
@@ -799,7 +777,7 @@ Implemented baseline:
 
 Next source work should expand **discovery coverage**, not introduce an unverified submit shortcut:
 
-- deepen HeadHunter, SuperJob, Работа России and other regional/global feeds where their public/applicant APIs permit search;
+- deepen HeadHunter, SuperJob and other regional/global feeds where their public/applicant APIs permit search;
 - add/curate more of the existing provider catalog into the registry;
 - improve career-page/ATS resolution and source-specific health/backoff;
 - measure production browser failure classes before considering a second browser engine.
@@ -853,16 +831,15 @@ No manual browsing is required in the normal cycle. Human intervention is for in
 
 1. The repository already has the hard part of discovery: a large provider ecosystem, ATS scanners and a persistent source registry. Reuse it.
 2. Russia should be seeded by both IT-company and broad-employer directories, then resolved to direct career endpoints.
-3. Работа России is an excellent open incremental API source.
-4. HH and SuperJob are unusually valuable candidate-authorized APIs; prioritize them for discovery/context research, while keeping v1 submission browser-only.
-5. Most global ATS APIs are excellent for public discovery but their submission endpoints use employer/customer credentials. Browser submission remains the generic solution.
-6. Global collection should be API/feed heavy and browser light.
-7. Do not filter the funnel aggressively. Dedup and known-impossible technical states are hard stops; fit signals are ranking.
-8. Playwright CLI is the best default browser layer for this coding-agent workflow: Playwright explicitly positions it as the lower-token interface, with daemon sessions, accessibility refs, persistent profiles and CDP attach.
-9. Do not add Browser Use/MCP/Computer Use fallback in v1. First measure Playwright CLI failure classes; add another engine only if the evidence shows a recurring gap that Playwright CLI plus `run-code` cannot solve.
-10. One dedicated persistent automation Chrome profile is enough initially. Parallel workers require separate profiles.
-11. The agent should receive a structured job packet and generic application prompt, not site-specific step scripts.
-12. Telegram/SMS/notification features are outside the web-autopilot core and should not shape the architecture.
+3. HH and SuperJob are unusually valuable candidate-authorized APIs; prioritize them for discovery/context research, while keeping v1 submission browser-only.
+4. Most global ATS APIs are excellent for public discovery but their submission endpoints use employer/customer credentials. Browser submission remains the generic solution.
+5. Global collection should be API/feed heavy and browser light.
+6. Do not filter the funnel aggressively. Dedup and known-impossible technical states are hard stops; fit signals are ranking.
+7. Playwright CLI is the best default browser layer for this coding-agent workflow: Playwright explicitly positions it as the lower-token interface, with daemon sessions, accessibility refs, persistent profiles and CDP attach.
+8. Do not add Browser Use/MCP/Computer Use fallback in v1. First measure Playwright CLI failure classes; add another engine only if the evidence shows a recurring gap that Playwright CLI plus `run-code` cannot solve.
+9. One dedicated persistent automation Chrome profile is enough initially. Parallel workers require separate profiles.
+10. The agent should receive a structured job packet and generic application prompt, not site-specific step scripts.
+11. Telegram/SMS/notification features are outside the web-autopilot core and should not shape the architecture.
 
 ## Research references
 
@@ -877,7 +854,6 @@ Repository:
 - docs/AUTOPILOT_ARCHITECTURE.md
 
 Russia:
-- Работа России API: https://trudvsem.ru/opendata/api
 - HeadHunter API: https://api.hh.ru/openapi/redoc
 - HeadHunter API repository: https://github.com/hhru/api
 - SuperJob API: https://api.superjob.ru/

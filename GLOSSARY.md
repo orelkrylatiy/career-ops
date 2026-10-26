@@ -72,8 +72,8 @@ Playwright: заполнить форму отклика, детерминиро
 ## Поиск и оценка
 
 - **Portal** — источник вакансий из `portals.yml` (компания + поисковые запросы).
-- **Provider** — 106 модулей в `providers/` под конкретное ATS (Greenhouse, Ashby,
-  Lever, Workday, trudvsem.ru, …).
+- **Provider** — модули в `providers/` под конкретное ATS или job board
+  (Greenhouse, Ashby, Lever, Workday, …).
 - **Scan** — zero-token сканирование порталов (`scan.mjs`, `scan-ats-full.mjs`
   reverse-ATS). История: `data/scan-history.tsv`, прогоны: `data/scan-runs.tsv`,
   здоровье порталов: `data/portal-health.tsv`.
