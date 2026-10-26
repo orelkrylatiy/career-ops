@@ -101,3 +101,35 @@ test('gmail plugin gates saveProcessedIds behind !ctx.dryRun (#2354)', async () 
     else rmSync(statePath, { force: true });
   }
 });
+
+test('gmail notify dry-run verifies sender and never sends or records a key', async () => {
+  const gmailMod = await import(pathToFileURL(join(ROOT, 'plugins/gmail/index.mjs')).href);
+  const statePath = join(ROOT, 'data', 'gmail-sent.json');
+  const oldState = existsSync(statePath) ? readFileSync(statePath) : null;
+  const calls = [];
+  const mockCtx = {
+    dryRun: true,
+    env: { GMAIL_CLIENT_ID: 'x', GMAIL_CLIENT_SECRET: 'y', GMAIL_REFRESH_TOKEN: 'z' },
+    settings: { sender_email: 'sender@example.com' },
+    fetch: async (url, opts = {}) => {
+      calls.push({ url, opts });
+      if (url.includes('oauth2')) return { ok: true, json: async () => ({ access_token: 'fake' }) };
+      if (url.endsWith('/profile')) return { ok: true, json: async () => ({ emailAddress: 'sender@example.com' }) };
+      throw new Error(`unexpected send in dry-run: ${url}`);
+    },
+    log: () => {},
+  };
+  try {
+    const result = await gmailMod.default.notify({
+      to: 'recruiter@example.com', subject: 'Application', body: 'Hello', key: 'req-123',
+    }, mockCtx);
+    assert.equal(result.dryRun, true);
+    assert.equal(result.sent, false);
+    assert.equal(calls.some(call => call.url.endsWith('/messages/send')), false);
+    assert.equal(existsSync(statePath), oldState !== null);
+    pass('gmail notify dry-run verifies sender without sending or mutating ledger');
+  } finally {
+    if (oldState !== null) writeFileSync(statePath, oldState);
+    else rmSync(statePath, { force: true });
+  }
+});

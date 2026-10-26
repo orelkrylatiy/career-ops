@@ -27,6 +27,7 @@ import {
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me';
 const STATE_PATH = 'data/gmail-state.json'; // the plugin's own processed-id cursor
+const SENT_STATE_PATH = 'data/gmail-sent.json'; // idempotency ledger for explicit sends
 
 /** Exchange the long-lived refresh token for a short-lived access token. */
 async function getAccessToken({ clientId, clientSecret, refreshToken }, fetchFn = globalThis.fetch) {
@@ -65,6 +66,79 @@ function saveProcessedIds(ids) {
   } catch (err) {
     console.warn(`gmail: could not persist processed-id state — ${err.message}`);
   }
+}
+
+function loadSentKeys() {
+  if (!existsSync(SENT_STATE_PATH)) return new Set();
+  try {
+    const state = JSON.parse(readFileSync(SENT_STATE_PATH, 'utf-8'));
+    return new Set(Array.isArray(state.keys) ? state.keys : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveSentKeys(keys) {
+  mkdirSync('data', { recursive: true });
+  writeFileSync(SENT_STATE_PATH, JSON.stringify({ keys: [...keys] }, null, 2), 'utf-8');
+}
+
+function encodeBase64Url(text) {
+  return Buffer.from(text, 'utf-8').toString('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function headerValue(value, field) {
+  const text = String(value ?? '').trim();
+  if (!text || /[\r\n]/.test(text)) throw new Error(`gmail: invalid ${field}`);
+  return text;
+}
+
+async function profileEmail(token, fetchFn) {
+  const res = await fetchFn(`${GMAIL_API}/profile`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`Gmail profile lookup failed: ${res.status}`);
+  const data = await res.json();
+  if (!data.emailAddress) throw new Error('Gmail profile lookup returned no emailAddress');
+  return String(data.emailAddress);
+}
+
+async function sendEmail(ctx, token, payload) {
+  const to = headerValue(payload?.to, 'recipient');
+  const subject = headerValue(payload?.subject, 'subject');
+  const body = String(payload?.body ?? '').trim();
+  if (!body) throw new Error('gmail: body is required');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) throw new Error('gmail: invalid recipient email');
+
+  const sender = await profileEmail(token, ctx.fetch);
+  const expectedSender = ctx.settings?.sender_email ? String(ctx.settings.sender_email).trim() : '';
+  if (expectedSender && sender.toLowerCase() !== expectedSender.toLowerCase()) {
+    throw new Error('gmail: OAuth account does not match configured sender_email');
+  }
+
+  const key = String(payload.key || `${sender.toLowerCase()}|${to.toLowerCase()}|${subject}`);
+  const sentKeys = loadSentKeys();
+  if (sentKeys.has(key)) return { sent: false, duplicate: true, key, sender };
+  if (ctx.dryRun) return { sent: false, dryRun: true, duplicate: false, key, sender, to, subject };
+
+  const raw = [
+    `From: ${sender}`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    'Content-Type: text/plain; charset=utf-8',
+    'MIME-Version: 1.0',
+    '',
+    body,
+  ].join('\r\n');
+  const res = await ctx.fetch(`${GMAIL_API}/messages/send`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ raw: encodeBase64Url(raw) }),
+  });
+  if (!res.ok) throw new Error(`Gmail send failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
+  const data = await res.json();
+  sentKeys.add(key);
+  saveSentKeys(sentKeys);
+  return { sent: true, duplicate: false, key, sender, messageId: data.id || null, to, subject };
 }
 
 /** @type {{ ingest: (ctx: any) => Promise<object[]> }} */
@@ -141,5 +215,17 @@ export default {
 
     if (!ctx?.dryRun) saveProcessedIds(processedIds);
     return jobs;
+  },
+
+  /** Explicit, user-invoked outbound mail. Never called by scan/autopilot. */
+  async notify(payload, ctx) {
+    const clientId = ctx?.env?.GMAIL_CLIENT_ID;
+    const clientSecret = ctx?.env?.GMAIL_CLIENT_SECRET;
+    const refreshToken = ctx?.env?.GMAIL_REFRESH_TOKEN;
+    if (!clientId || !clientSecret || !refreshToken) {
+      throw new Error('gmail: missing GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET / GMAIL_REFRESH_TOKEN in .env');
+    }
+    const token = await getAccessToken({ clientId, clientSecret, refreshToken }, ctx.fetch);
+    return sendEmail(ctx, token, payload);
   },
 };

@@ -33,3 +33,4 @@ plugins:
     enabled: false
     # label: "Job Leads"     # the Gmail label to scan
     # days_back: 7           # how far back to look
+    # sender_email: "you@example.com"  # optional identity check before sending
