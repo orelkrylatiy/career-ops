@@ -24,7 +24,7 @@ jobs:
           node --check autopilot.mjs
           node --check autopilot-log.mjs
       - name: Unit tests
-        run: node --test tests/autopilot-runner.test.mjs tests/autopilot-mail.test.mjs tests/autopilot-diagnostics.test.mjs
+        run: node --test tests/autopilot-runner.test.mjs tests/autopilot-mail.test.mjs tests/autopilot-diagnostics.test.mjs tests/autopilot-db-metadata.test.mjs tests/autopilot-doc-contract.test.mjs tests/source-registry.test.mjs tests/autopilot-wide-queue.test.mjs
 
   browser-smoke:
     runs-on: ubuntu-latest
