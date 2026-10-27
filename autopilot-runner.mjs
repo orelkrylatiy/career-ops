@@ -126,20 +126,26 @@ export function workerPrompt(job, owner) {
   ].join('\n');
 }
 
-export async function runAgent(agent, prompt, timeoutMs, env) {
+export async function runAgent(agent, prompt, timeoutMs, env, { capture = false } = {}) {
   const [bin, args] = agentCommand(agent, prompt);
   return new Promise((resolve) => {
     const child = spawn(bin, args, {
-      cwd: ROOT, env: { ...process.env, ...env }, stdio: 'inherit',
+      cwd: ROOT, env: { ...process.env, ...env }, stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
       shell: false, windowsHide: true, detached: process.platform !== 'win32',
     });
     let complete = false;
     let timedOut = false;
+    let output = '';
+    if (capture) {
+      child.stdout?.on('data', chunk => { if (output.length < 64_000) output += String(chunk).slice(0, 64_000 - output.length); });
+      // Drain stderr but never persist secrets from coding-agent diagnostics.
+      child.stderr?.on('data', () => {});
+    }
     const finish = (result) => {
       if (complete) return;
       complete = true;
       clearTimeout(timer);
-      resolve({ ...result, timedOut });
+      resolve({ ...result, timedOut, ...(capture ? { output } : {}) });
     };
     child.on('error', e => finish({ ok: false, error: e.message }));
     child.on('close', (code, signal) => finish({ ok: code === 0 && !timedOut, code, signal }));
@@ -182,8 +188,10 @@ export async function main(argv = process.argv.slice(2)) {
     // BEFORE leasing any vacancy; a failed account cannot consume a whole queue.
     const probe = await runAgent(agent,
       'Career Ops readiness check: respond with exactly READY. Do not browse, read files, or take actions.',
-      90_000, { AUTOPILOT_RUN_ID: runId });
-    if (!probe.ok) throw new Error('coding-agent login/model probe failed; fix CLI authorization first');
+      90_000, { AUTOPILOT_RUN_ID: runId }, { capture: true });
+    if (!probe.ok || !/^\s*READY\s*$/im.test(probe.output || '')) {
+      throw new Error('coding-agent login/model probe failed; fix CLI authorization first');
+    }
     // A Playwright --help check also does not prove Chromium can launch.
     assertBrowserReady();
     if (!opts.noScan) {
