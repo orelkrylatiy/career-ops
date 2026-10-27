@@ -4,6 +4,7 @@
 import 'dotenv/config';
 import { Buffer } from 'node:buffer';
 import { isMainModule } from './lib/is-main-module.mjs';
+import { isAuthenticEmail } from './plugins/gmail/_helpers.mjs';
 
 const API = 'https://gmail.googleapis.com/gmail/v1/users/me';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -99,7 +100,7 @@ export async function findVerification({ token, domain, urlHost = null, since, f
     if (Number(msg.internalDate) < since * 1000) continue;
     const headers = msg.payload?.headers || [];
     const from = headers.find(h => String(h.name).toLowerCase() === 'from')?.value || '';
-    if (!matchesDomain(from, domain)) continue;
+    if (!matchesDomain(from, domain) || !isAuthenticEmail(headers)) continue;
     const subject = headers.find(h => String(h.name).toLowerCase() === 'subject')?.value || '';
     const found = extractVerification(subject + '\n' + decodeMime(msg.payload), urlHost);
     if (found.code || found.link) return found;
