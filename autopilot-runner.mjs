@@ -84,7 +84,7 @@ export function workerPrompt(job, owner) {
     'Select and verify a matching PDF with autopilot-resume.mjs. Use only truthful candidate facts.',
     'Generate a specific cover letter/answers; validate all free text via humanizer-bridge.py where available.',
     'For sign-in/registration using candidate email, use existing authorized browser accounts first.',
-    'If a site sends an email verification code, invoke node autopilot-mail.mjs wait --domain <sender-domain> --since <unix-seconds>.',
+    'If a site sends an email verification code, invoke node autopilot-mail.mjs wait --domain <sender-domain> --url-host <site-host> --since <unix-seconds>.',
     'Only use codes from freshly requested messages with independently verified sender domains; do not echo secrets in reports.',
     'If account creation needs a new password, SMS, 2FA, CAPTCHA or non-routine consent, do not guess or bypass it: report captcha or failed with needs_user_action note and move on.',
     'Use node autopilot-verify.mjs begin before clicking real Submit, finish immediately after, and report through node autopilot.mjs report with the matching evidence receipt.',
@@ -155,6 +155,13 @@ export async function main(argv = process.argv.slice(2)) {
       const job = cmdNext({ owner, json: false });
       if (!job) break;
       counters.claimed++;
+      // Historical SQLite queues may predate the HH exclusion in the scanner.
+      const sourceHost = new URL(job.url).hostname.toLowerCase();
+      if (/^(?:[a-z0-9-]+\.)*hh\.(?:ru|kz|uz)$/.test(sourceHost)) {
+        await cmdReport(job.url, 'skipped', 'HeadHunter belongs to an independent product', null, { owner });
+        counters.skipped++;
+        continue;
+      }
       const jid = safeJobId(job);
       auditLog('worker_start', { job_id: jid, agent, priority: job.priority ?? 50 });
       const result = await runAgent(agent, workerPrompt(job, owner), opts.timeoutMinutes * 60_000, {
