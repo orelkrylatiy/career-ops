@@ -1,0 +1,40 @@
+name: Browser Autopilot contract
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies (no production browser traffic)
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Verify module syntax
+        run: |
+          node --check autopilot-runner.mjs
+          node --check autopilot-mail.mjs
+          node --check autopilot-diagnostics.mjs
+          node --check autopilot.mjs
+          node --check autopilot-log.mjs
+      - name: Unit tests
+        run: node --test tests/autopilot-runner.test.mjs tests/autopilot-mail.test.mjs tests/autopilot-diagnostics.test.mjs
+
+  browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: Test real Playwright CLI against local fake career form
+        run: node tests/autopilot-browser-e2e.mjs
