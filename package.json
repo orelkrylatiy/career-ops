@@ -80,7 +80,7 @@
     "sources:status": "node source-registry.mjs status",
     "scan:regional": "node scan-regional.mjs",
     "test:sources": "node --test tests/source-registry.test.mjs tests/providers/regional-cis.test.mjs",
-    "autopilot": "node autopilot.mjs",
+    "autopilot": "node autopilot-runner.mjs",
     "autopilot:status": "node autopilot.mjs status",
     "autopilot:resume": "node autopilot-resume.mjs",
     "autopilot:logs": "node autopilot.mjs logs",
@@ -92,7 +92,12 @@
     "autopilot:deep-scan": "node autopilot.mjs --deep-scan",
     "autopilot:refresh-registry": "node autopilot.mjs --deep-scan --refresh-registry",
     "landing:check": "node landing/scripts/check-site.mjs",
-    "landing:serve": "node landing/scripts/serve.mjs"
+    "landing:serve": "node landing/scripts/serve.mjs",
+    "autopilot:start": "node autopilot-runner.mjs",
+    "autopilot:scan": "node autopilot.mjs",
+    "autopilot:diagnose": "node autopilot-diagnostics.mjs",
+    "autopilot:mail:doctor": "node autopilot-mail.mjs doctor",
+    "test:autopilot:browser": "node tests/autopilot-browser-e2e.mjs"
   },
   "keywords": [
     "ai",
