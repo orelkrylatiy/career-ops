@@ -136,7 +136,7 @@ Jobs now support:
 - `claim_until`;
 - `next_attempt_at` for transient pre-submit backoff.
 
-`node autopilot.mjs next --json` atomically leases the highest-priority queued job for 120 minutes by default. Expired leases are returned automatically, and the worker renews the lease immediately before arming Submit evidence.
+`node autopilot.mjs next --json` atomically leases the highest-priority queued job for 120 minutes by default. Expired leases are quarantined for human review (not automatically requeued), because a crashed worker could already have submitted; the worker renews the lease immediately before arming Submit evidence.
 
 This allows a single autonomous worker now and safe multi-worker expansion later.
 
@@ -271,13 +271,15 @@ Only confirmed `applied` increments the confirmed daily counter and writes the A
 
 Scheduling is outside the core loop.
 
-A future scheduler starts the agent harness, not only `autopilot.mjs`.
+A scheduler should start `npm run autopilot` (the actual runner), **not** the queue-only `node autopilot.mjs`.
+
+The old code-agent-as-scheduler layout is still supported when the user invokes the mode inside an existing coding CLI; avoid recursively launching another coding agent.
 
 Typical run:
 
 ~~~text
 scheduler
-  -> coding agent
+  -> autopilot-runner.mjs
   -> autopilot preflight
   -> wide scan + enqueue
   -> open persistent Playwright CLI session

@@ -258,8 +258,9 @@ cover_letter:
 
 # ── Autonomous worker (fork extension) ────────────────────────────────────────
 #
-# The fork's autopilot is an explicit opt-in autonomous application mode.
-# Default Career-Ops modes remain review-first.
+# This fork's primary command is npm run autopilot (autonomous browser apply).
+# HH.ru / hh-ops are explicitly outside the project scope.
+# Configure candidate facts and valid resumes before launch.
 #
 # autopilot:
 #   # Legacy/final fallback. Existing setups with only this key keep working.

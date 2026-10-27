@@ -20,10 +20,10 @@ test('fork quick start states the autonomous Node requirement', () => {
   assert.match(readme, /Autonomous mode requires Node\.js 20\+/);
 });
 
-test('root agent contract routes explicit autonomous work to autopilot', () => {
-  assert.match(agents, /Explicitly asks for autonomous \/ unattended job applications/);
-  assert.match(agents, /This fork has one explicit exception: \*\*`autopilot`\*\*/);
-  assert.match(agents, /records `Applied` only when `autopilot-verify\.mjs` confirms/);
+test('fork agent contract is autonomous-browser-first and excludes HH', () => {
+  assert.match(agents, /AUTONOMOUS BY DEFAULT/);
+  assert.match(agents, /HeadHunter, hh-ops/);
+  assert.match(agents, /npm run autopilot/);
   assert.match(modesReadme, /`autopilot\.md` \| `autopilot`/);
 });
 
@@ -31,10 +31,10 @@ test('autonomous runtime requires Node 20 or newer', () => {
   assert.equal(packageJson.engines.node, '>=20');
 });
 
-test('shared skill router exposes autopilot as a top-level persistent-browser mode', () => {
+test('shared skill router exposes autopilot without nested coding agents', () => {
   assert.match(skill, /\| `autopilot` \| `autopilot` \|/);
   assert.match(skill, /\/career-ops autopilot/);
   assert.match(skill, /Applies to:[^\n]*`autopilot`/);
-  assert.match(skill, /Do not nest `autopilot` in another subagent/);
-  assert.match(skill, /Run the career-ops autopilot mode autonomously until the queue is empty/);
+  assert.match(skill, /No nested coding agents/);
+  assert.match(skill, /HeadHunter is out of scope/);
 });

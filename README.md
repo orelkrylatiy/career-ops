@@ -1,3 +1,5 @@
+> **This fork defaults to autonomous browser applications.** Run `npm run autopilot` to scan Russian career sites and aggregators, claim jobs and launch a coding agent controlling Playwright CLI; confirmed submissions require verifier evidence. **HeadHunter/hh-ops are explicitly out of scope.** Gmail email OTP lookup is optional. See [Browser Autopilot Guide](docs/BROWSER_AUTOPILOT.md) and [GLOSSARY](GLOSSARY.md). The upstream project remains review-first; the legacy web Apply preview is not this runner.
+
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/wordmark-dark.svg"><img src="docs/wordmark-light.svg" alt="career-ops" width="250" height="56"></picture></p>
 
 
@@ -92,7 +94,7 @@
 </p>
 
 
-> **Fork note — autonomous web worker:** default Career-Ops modes remain review-first. This fork also ships an explicit opt-in `autopilot` mode that uses wide-funnel discovery, a priority SQLite queue, prepared/tailored resume fallback, and direct Playwright CLI control of a persistent Chromium profile. Browser submissions are counted as applied only after deterministic post-submit evidence confirms them. See [Autonomous Worker Architecture](docs/AUTOPILOT_ARCHITECTURE.md). <!-- fork-autopilot: wide-funnel autonomous submit -->
+> **Fork note — autonomous web worker:** this fork uses a single-command autonomous browser `autopilot` as its main entrypoint that uses wide-funnel discovery, a priority SQLite queue, prepared/tailored resume fallback, and direct Playwright CLI control of a persistent Chromium profile. Browser submissions are counted as applied only after deterministic post-submit evidence confirms them. See [Autonomous Worker Architecture](docs/AUTOPILOT_ARCHITECTURE.md). <!-- fork-autopilot: wide-funnel autonomous submit -->
 
 ## What Is This
 
@@ -105,7 +107,7 @@ career-ops ([career-ops.org](https://career-ops.org), also known as **careerops*
 - **Tracks everything** in a single source of truth with integrity checks
 - **Researches companies and finds the right person to contact** -- applications get you in the queue; research gets you a conversation
 
-> **Default modes remain selective and review-first.** The fork-specific `autopilot` is intentionally different: it keeps a wide application funnel, uses fit/preferences to order work rather than discard it, and autonomously submits web forms through Playwright CLI.
+> **Main mode is fully autonomous** through `npm run autopilot`. Historical upstream review-first routes are secondary: it keeps a wide application funnel, uses fit/preferences to order work rather than discard it, and autonomously submits web forms through Playwright CLI.
 
 career-ops is agentic: whichever AI coding CLI you choose navigates career pages with Playwright, evaluates fit by reasoning about your CV vs the job description (not keyword matching), and adapts your resume per listing.
 
@@ -132,7 +134,7 @@ career-ops is the first reference implementation of [the CareerOps Manifesto](ht
 | **Funded Company Discovery** | Review-first `company:funded` command surfaces recently funded companies and source diagnostics from structured public feeds without editing your data |
 | **Batch Processing**     | Parallel evaluation with headless CLI workers (`claude -p` / `opencode run`)                                                             |
 | **Dashboard TUI**        | Terminal UI to browse, filter, and sort your pipeline                                                                                    |
-| **Human-in-the-Loop by default** | Default Career-Ops modes remain review-first. The fork's explicit opt-in `autopilot` is an autonomous wide-funnel exception with deterministic submit verification. |
+| **Browser Autopilot** | `npm run autopilot` submits on career sites with Playwright and deterministic evidence; stops only at genuinely required human gates. |
 | **Pipeline Integrity**   | Automated merge, dedup, status normalization, health checks                                                                              |
 | **Interview Suite**      | Time-blocked prep plans, practice sessions with feedback, post-interview debriefs ([`interview/`](modes/interview/README.md)), and a company red-flag detector ([`interview-redflag`](modes/interview-redflag.md)) |
 | **Offer Stage**          | Contract reading companion -- clause walk plus a lawyer question list ([`offer-prep`](modes/offer-prep.md)) -- and a desired/advertised/actual salary-gap analyzer (`salary-gap.mjs`) |
@@ -173,7 +175,10 @@ Useful fork commands:
 
 ```bash
 npm run autopilot:preflight          # profile/resume/Playwright CLI checks
-npm run autopilot                    # normal wide refresh + queue
+npm run autopilot                    # scan + browser agent + verified applications
+npm run autopilot -- --max-jobs 2     # autonomous, bounded test run
+npm run autopilot:scan               # queue-only internal helper
+npm run autopilot:diagnose           # sanitized run diagnostics
 npm run autopilot:deep-scan          # broad ATS + regional/global discovery
 npm run autopilot:refresh-registry   # deep scan + refresh company/source resolution
 npm run autopilot:status

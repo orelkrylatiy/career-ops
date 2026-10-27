@@ -36,7 +36,7 @@ Run the career-ops scan mode and summarize new matches.
 Run the career-ops pipeline mode for data/pipeline.md.
 Run the career-ops pdf mode for the latest evaluated role.
 Run the career-ops tracker mode and summarize the current statuses.
-Run the career-ops autopilot mode autonomously until the queue is empty.
+Run the autonomous career-ops mode. If invoked inside an already running coding agent, execute the per-job lease/browser loop directly from modes/autopilot.md (no nested coding CLI). From a normal shell or scheduler, run npm run autopilot once. HeadHunter is out of scope.
 ```
 
 ## Mode Routing
@@ -71,7 +71,7 @@ Determine the mode from `$mode`:
 | `agent-inbox` | `agent-inbox` |
 | `inbox` | `agent-inbox` |
 | `pipeline` | `pipeline` |
-| `apply` | `apply` |
+| `apply` | `autopilot` |
 | `autopilot` | `autopilot` |
 | `scan` | `scan` |
 | `discover` | `discover` |
@@ -155,7 +155,7 @@ Available commands:
   /career-ops project   → Evaluate portfolio project idea
   /career-ops tracker   → Application status overview
   /career-ops agent-inbox → Queue/drain requests for the next session (data/agent-inbox.md)
-  /career-ops apply     → Live application assistant (reads form + generates answers; review-first)
+  /career-ops apply     → Alias of autonomous browser autopilot in this fork
   /career-ops autopilot → Autonomous wide-funnel web applications (Playwright CLI + verified Submit)
   /career-ops scan      → Scan portals and discover new offers
   /career-ops discover  → Resolve a company list to scannable ATS boards + append to portals.yml (zero-token)
@@ -194,7 +194,7 @@ Applies to: `tracker`, `agent-inbox`, `deep`, `interview-prep`, `interview`, `re
 
 ### Modes delegated to subagent
 
-**Do not nest `autopilot` in another subagent.** Autopilot owns a long-lived queue lease and a named persistent Playwright CLI session; it must run in the top-level coding-agent process that the user/scheduler launched. A scheduler should start that top-level agent with the autopilot prompt, not wrap another agent around it.
+**No nested coding agents.** From a plain terminal/scheduler use `npm run autopilot` (runner spawns one worker per job). From an existing Claude/Codex/OpenCode interactive agent execute preflight, scan, `autopilot.mjs next`, Playwright, verifier, `report`, next directly in that agent. Do not invoke a second `claude`/`codex`/`opencode` subprocess from inside a coding-agent session. A worker spawned by the runner handles only its already claimed job. A scheduler should start that top-level agent with the autopilot prompt, not wrap another agent around it.
 
 For `scan`, `apply` (with Playwright), and `pipeline` (3+ URLs): launch as a worker/subagent with the content of `_shared.md` + `_profile.md` (if exists) + `_custom.md` (if exists) + `modes/{mode}.md` injected into the worker prompt. If your CLI exposes an `Agent(...)` primitive, the call looks like this:
 

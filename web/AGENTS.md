@@ -17,8 +17,7 @@ before changing anything under `web/`.
    write path, and it is single on purpose. Never write a user's file from a route
    that bypasses it.
 
-3. **Nothing is ever submitted automatically.** The apply flow fills in and previews;
-   a human presses send. There is no exception, no flag, and no "just for testing".
+3. **Autopilot is the primary product flow.** The live autonomous engine is `npm run autopilot`. The older web Apply/drive preview routes do not submit and are legacy, not a valid entrypoint for autonomous applications. They must never mark a job `Applied`. Future UI launchers must delegate to `autopilot-runner.mjs` and the verifier; never implement a second unverified submit path. HeadHunter/hh-ops are out of scope.
 
 ## A missing file is not a malformed file
 

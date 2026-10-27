@@ -362,6 +362,10 @@ export async function cmdRun(flags = {}) {
       scanResult = 'dry-run:no-network-scan';
     }
 
+    if (/(?:^|\s)[^\s:]+:(?:failed|spawn-failed)(?:\s|$)/.test(scanResult)) {
+      throw new Error('discovery failed (' + scanResult + '); refusing to use a stale queue');
+    }
+
     const entries = parsePipelinePending(readTextIfExists(PIPELINE_PATH));
     counts.pending = entries.length;
 
@@ -381,6 +385,14 @@ export async function cmdRun(flags = {}) {
 
       if (!urlKey) {
         decisions.push(`SKIPPED hard: invalid URL | ${label}`);
+        counts.hardSkipped++;
+        continue;
+      }
+
+      // HeadHunter is a separate product; never queue HH URLs in Career Ops.
+      const sourceHost = hostOf(entry.url);
+      if (/^(?:[a-z0-9-]+\.)*hh\.(?:ru|kz|uz)$/.test(sourceHost)) {
+        decisions.push('SKIPPED hard: HeadHunter excluded from Career Ops');
         counts.hardSkipped++;
         continue;
       }
