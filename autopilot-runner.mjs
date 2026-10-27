@@ -42,8 +42,30 @@ export function parseRunnerArgs(argv) {
   return config;
 }
 
+/**
+ * Windows global Node CLIs are often .cmd shims. Running their untrusted
+ * application prompt via shell:true would allow shell interpolation. Instead
+ * use a fixed PowerShell program and base64-encode the argv array: the command
+ * is one of three hardcoded CLI names and every argument is data, not source.
+ */
+export function platformCommand(binary, args, platform = process.platform) {
+  if (platform !== 'win32') return [binary, args];
+  if (!SUPPORTED_AGENTS.includes(binary)) throw new Error('unsupported Windows CLI executable');
+  const encodedArgs = Buffer.from(JSON.stringify(args), 'utf8').toString('base64');
+  const script = [
+    '$ErrorActionPreference = "Stop"',
+    '$json = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("' + encodedArgs + '"))',
+    '$argv = @((ConvertFrom-Json -InputObject $json))',
+    '$bin = "' + binary + '"',
+    '& $bin @argv',
+    'if ($null -ne $LASTEXITCODE) { exit $LASTEXITCODE } else { exit 0 }',
+  ].join('; ');
+  return ['powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')]];
+}
+
 function available(binary) {
-  const res = spawnSync(binary, ['--version'], { encoding: 'utf8', timeout: 15_000, shell: false, windowsHide: true });
+  const [command, args] = platformCommand(binary, ['--version']);
+  const res = spawnSync(command, args, { encoding: 'utf8', timeout: 15_000, shell: false, windowsHide: true });
   return !res.error && res.status === 0;
 }
 
@@ -127,7 +149,8 @@ export function workerPrompt(job, owner) {
 }
 
 export async function runAgent(agent, prompt, timeoutMs, env, { capture = false } = {}) {
-  const [bin, args] = agentCommand(agent, prompt);
+  const [cli, cliArgs] = agentCommand(agent, prompt);
+  const [bin, args] = platformCommand(cli, cliArgs);
   return new Promise((resolve) => {
     const child = spawn(bin, args, {
       cwd: ROOT, env: { ...process.env, ...env }, stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
