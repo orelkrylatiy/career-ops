@@ -177,8 +177,14 @@ export async function main(argv = process.argv.slice(2)) {
     }
     if (!cmdPreflight()) throw new Error('preflight failed');
     agent = resolveAgent(opts.agent);
-    // A CLI --version or a Playwright --help check does NOT prove that Chrome
-    // starts successfully. Fail before scanning or leasing real jobs.
+    // --version does not prove the coding CLI is authenticated or has model
+    // access. A fixed, safe one-word prompt tests the actual noninteractive path
+    // BEFORE leasing any vacancy; a failed account cannot consume a whole queue.
+    const probe = await runAgent(agent,
+      'Career Ops readiness check: respond with exactly READY. Do not browse, read files, or take actions.',
+      90_000, { AUTOPILOT_RUN_ID: runId });
+    if (!probe.ok) throw new Error('coding-agent login/model probe failed; fix CLI authorization first');
+    // A Playwright --help check also does not prove Chromium can launch.
     assertBrowserReady();
     if (!opts.noScan) {
       // Includes Russian providers + resolved company ATS boards; never includes HH.
