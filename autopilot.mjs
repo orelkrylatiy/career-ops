@@ -389,6 +389,14 @@ export async function cmdRun(flags = {}) {
         continue;
       }
 
+      // HeadHunter is a separate product; never queue HH URLs in Career Ops.
+      const sourceHost = hostOf(entry.url);
+      if (/^(?:[a-z0-9-]+\.)*hh\.(?:ru|kz|uz)$/.test(sourceHost)) {
+        decisions.push('SKIPPED hard: HeadHunter excluded from Career Ops');
+        counts.hardSkipped++;
+        continue;
+      }
+
       const destination = inspectApplicationUrl(entry.url);
       if (!destination.ok) {
         decisions.push(
