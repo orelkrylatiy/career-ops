@@ -134,7 +134,7 @@ export async function main(argv = process.argv.slice(2)) {
   process.env.AUTOPILOT_RUN_ID = runId;
   const started = Date.now();
   const counters = { claimed: 0, applied: 0, submitted_unconfirmed: 0, deferred: 0, captcha: 0, failed: 0, validation_failed: 0, skipped: 0, no_outcome: 0 };
-  const owner = process.env.AUTOPILOT_WORKER_ID || 'worker-0';
+  const owner = process.env.AUTOPILOT_WORKER_ID || ('worker-' + runId.replace(/[^a-z0-9]/gi, '').slice(0, 16));
   let error = null;
   let agent = null;
   auditLog('runner_start', { no_scan: opts.noScan, refresh_registry: opts.refresh, dry_run: opts.dryRun });
