@@ -15,7 +15,9 @@ jobs:
         with:
           node-version: '22'
       - name: Install dependencies (no production browser traffic)
-        run: npm install --ignore-scripts --no-audit --no-fund
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          npm rebuild better-sqlite3
       - name: Verify module syntax
         run: |
           node --check autopilot-runner.mjs
@@ -34,7 +36,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install --ignore-scripts --no-audit --no-fund
+      - run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          npm rebuild better-sqlite3
       - run: npx playwright install --with-deps chromium
       - name: Test real Playwright CLI against local fake career form
         run: node tests/autopilot-browser-e2e.mjs
