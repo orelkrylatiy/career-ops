@@ -631,6 +631,14 @@ function exportDiscoveryQueue(country = null) {
   return { path: DISCOVERY_QUEUE_PATH, count: rows.length };
 }
 
+// Scope invariant: HeadHunter is handled by another product, not Career Ops.
+function nonHeadHunter(entry) {
+  const target = String(entry?.careers_url || entry?.api || entry?.url || '');
+  try {
+    return !/^(?:[a-z0-9-]+\.)*hh\.(?:ru|kz|uz)$/.test(new URL(target).hostname.toLowerCase());
+  } catch { return true; }
+}
+
 function exportPortals(country = null) {
   const catalog = loadCatalog();
   const base = loadUserPortals();
@@ -692,8 +700,8 @@ function exportPortals(country = null) {
 
   const doc = {
     ...base,
-    tracked_companies: dedupeEntries([...existingCompanies, ...resolved]),
-    job_boards: dedupeEntries([...existingBoards, ...catalogBoards]),
+    tracked_companies: dedupeEntries([...existingCompanies, ...resolved].filter(nonHeadHunter)),
+    job_boards: dedupeEntries([...existingBoards, ...catalogBoards].filter(nonHeadHunter)),
   };
   mkdirSync(path.dirname(EXPORT_PATH), { recursive: true });
   writeFileSync(EXPORT_PATH, yaml.dump(doc, { lineWidth: 140, noRefs: true, sortKeys: false }), 'utf8');
