@@ -183,6 +183,17 @@ export async function runAgent(agent, prompt, timeoutMs, env, { capture = false 
   });
 }
 
+/** Environment contract shared by the agent, Playwright CLI and verifier. */
+export function workerEnvironment(owner, runId, session = BROWSER_SESSION) {
+  if (!/^[a-z0-9_.-]{1,80}$/i.test(session)) throw new Error('invalid browser session');
+  return {
+    AUTOPILOT_WORKER_ID: owner,
+    AUTOPILOT_BROWSER_SESSION: session,
+    PLAYWRIGHT_CLI_SESSION: session,
+    AUTOPILOT_RUN_ID: runId,
+  };
+}
+
 export function safeJobId(job) {
   return createHash('sha256').update(String(job.url_key || job.url)).digest('hex').slice(0, 16);
 }
@@ -235,15 +246,8 @@ export async function main(argv = process.argv.slice(2)) {
       }
       const jid = safeJobId(job);
       auditLog('worker_start', { job_id: jid, agent, priority: job.priority ?? 50 });
-      const result = await runAgent(agent, workerPrompt(job, owner), opts.timeoutMinutes * 60_000, {
-        AUTOPILOT_WORKER_ID: owner,
-        AUTOPILOT_BROWSER_SESSION: BROWSER_SESSION,
-        // Playwright CLI reads this variable, not AUTOPILOT_BROWSER_SESSION.
-        // Without it a coding agent may accidentally drive the "default" session
-        // while the verifier inspects "career-ops-worker-0".
-        PLAYWRIGHT_CLI_SESSION: BROWSER_SESSION,
-        AUTOPILOT_RUN_ID: runId,
-      });
+      const result = await runAgent(agent, workerPrompt(job, owner), opts.timeoutMinutes * 60_000,
+        workerEnvironment(owner, runId));
       const actual = getJob(job.url_key);
       if (actual?.status === 'claimed' && actual.claim_owner === owner) {
         // Never auto-retry an ambiguous run: Submit could already have happened.
