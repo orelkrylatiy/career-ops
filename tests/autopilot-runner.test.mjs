@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRunnerArgs, resolveAgent, agentCommand, platformCommand, assertBrowserReady, safeJobId, workerPrompt } from '../autopilot-runner.mjs';
+import { parseRunnerArgs, resolveAgent, agentCommand, platformCommand, assertBrowserReady, safeJobId, workerPrompt, workerEnvironment } from '../autopilot-runner.mjs';
 
 test('runner defaults to real autonomous mode and accepts bounded options', () => {
   assert.equal(parseRunnerArgs([]).dryRun, false);
@@ -59,4 +59,12 @@ test('Windows npm CLI shims use encoded argv, never interpolate an untrusted pro
   assert.deepEqual(JSON.parse(Buffer.from(encoded, 'base64').toString('utf8')), argv);
   assert.throws(() => platformCommand('not-allowed', [], 'win32'), /unsupported/);
   assert.deepEqual(platformCommand('claude', argv, 'linux'), ['claude', argv]);
+});
+
+test('agent and verifier share exact Playwright CLI named session', () => {
+  const env = workerEnvironment('worker-1','run-1','career-ops-worker-0');
+  assert.equal(env.PLAYWRIGHT_CLI_SESSION, 'career-ops-worker-0');
+  assert.equal(env.AUTOPILOT_BROWSER_SESSION, env.PLAYWRIGHT_CLI_SESSION);
+  assert.equal(env.AUTOPILOT_WORKER_ID, 'worker-1');
+  assert.throws(() => workerEnvironment('worker-1','run-1','../../other'), /invalid browser session/);
 });
