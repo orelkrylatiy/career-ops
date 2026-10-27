@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseMailArgs, matchesDomain, decodeMime, extractVerification, findVerification } from '../autopilot-mail.mjs';
+import { parseMailArgs, matchesDomain, decodeMime, extractVerification, findVerification, isVerifiedGmailSender } from '../autopilot-mail.mjs';
 
 test('verification mailbox search requires recent time and a validated domain', () => {
   const now = Math.floor(Date.now()/1000);
@@ -26,13 +26,27 @@ test('Gmail lookup enforces DMARC and sender match, even when search returned a 
       : url.includes('/messages/1?')
         ? { internalDate:String(now), payload:{ headers:[
             {name:'From',value:'evil@attacker.test'},
-            {name:'Authentication-Results',value:'mx.google.com; dmarc=pass'}
+            {name:'Authentication-Results',value:'mx.google.com; dmarc=pass header.from=example.org'}
           ],body:{data:text} } }
         : { internalDate:String(now),payload:{headers:[
             {name:'From',value:'auth@example.org'},
-            {name:'Authentication-Results',value:'mx.google.com; dmarc=pass'}
+            {name:'Authentication-Results',value:'mx.google.com; dmarc=pass header.from=example.org'}
           ],body:{data:text} } },
   });
   const found=await findVerification({token:'fake',domain:'example.org',since:Math.floor(now/1000)-2,fetchFn});
   assert.equal(found.code,'246810');
+});
+
+test('rejects forged or unaligned Authentication-Results on OTP messages', () => {
+  const headers = [
+    {name: 'From', value: 'accounts@example.org'},
+    {name: 'Authentication-Results', value: 'mx.google.com; dmarc=pass header.from=attacker.test'}
+  ];
+  assert.equal(isVerifiedGmailSender(headers, 'example.org'), false);
+  headers[1].value = 'evil-mx.test; dmarc=pass header.from=example.org';
+  assert.equal(isVerifiedGmailSender(headers, 'example.org'), false);
+  headers[1].value = 'mx.google.com; dmarc=fail header.from=example.org';
+  assert.equal(isVerifiedGmailSender(headers, 'example.org'), false);
+  headers[1].value = 'mx.google.com; dmarc=pass header.from=example.org';
+  assert.equal(isVerifiedGmailSender(headers, 'example.org'), true);
 });
