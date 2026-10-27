@@ -80,7 +80,7 @@ export function agentCommand(agent, prompt) {
   // Noninteractive CLI sessions are intentionally authorized to operate a
   // dedicated browser profile. Run on a trusted, isolated machine/account.
   if (agent === 'claude') return ['claude', ['-p', prompt, '--permission-mode', 'bypassPermissions']];
-  if (agent === 'codex') return ['codex', ['exec', '--ask-for-approval', 'never', '--sandbox', 'danger-full-access', prompt]];
+  if (agent === 'codex') return ['codex', ['--ask-for-approval', 'never', 'exec', '--sandbox', 'danger-full-access', prompt]];
   if (agent === 'opencode') return ['opencode', ['run', '--auto', prompt]];
   throw new Error('unsupported agent');
 }
