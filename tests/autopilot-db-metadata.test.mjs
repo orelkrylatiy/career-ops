@@ -76,6 +76,20 @@ test('priority queue claims highest-priority job and can release the lease', () 
   assert.equal(released.status, 'queued');
 });
 
+test('expired browser claims are quarantined, not resubmitted', () => {
+  const url = 'https://jobs.example.com/role/expired-claim';
+  const key = normalizeUrlKey(url);
+  upsertJob({urlKey:key,url,company:'Expiry',title:'Engineer',priority:99,status:'queued'});
+  const claimed = claimNextJob('expiring-worker', 1);
+  assert.equal(claimed.url_key,key);
+  openDb().prepare("UPDATE jobs SET claim_until='2000-01-01T00:00:00.000Z' WHERE url_key=?").run(key);
+  const next=claimNextJob('another-worker', 5);
+  assert.notEqual(next?.url_key,key);
+  const actual=openDb().prepare('SELECT status,note FROM jobs WHERE url_key=?').get(key);
+  assert.equal(actual.status,'failed');
+  assert.match(actual.note,/review before retry/);
+});
+
 test('job observability columns exist after additive migration', () => {
   const cols = new Set(openDb().prepare('PRAGMA table_info(jobs)').all().map((row) => row.name));
   for (const name of ['priority', 'rank_reasons_json', 'posted_at', 'claimed_at', 'claim_owner', 'claim_until', 'next_attempt_at']) {
