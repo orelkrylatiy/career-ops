@@ -16,6 +16,14 @@ test('agent detection and invocation are deterministic, without shell interpolat
   assert.equal(command, 'opencode');
   assert.equal(args.at(-1), 'a quote " and ; shell');
 });
+test('Codex global approval option precedes exec (CLI parsing regression)', () => {
+  const [binary, args] = agentCommand('codex', 'apply to an example job');
+  assert.equal(binary, 'codex');
+  assert.deepEqual(args.slice(0, 3), ['--ask-for-approval', 'never', 'exec']);
+  assert.ok(args.indexOf('--sandbox') > args.indexOf('exec'));
+  assert.equal(args.at(-1), 'apply to an example job');
+});
+
 test('worker instruction requires evidence and never uses HH Ops', () => {
   const job = { url_key: 'https://example.com/1', url: 'https://example.com/1', title: 'Engineer', company: 'Acme' };
   const instruction = workerPrompt(job, 'worker-0');
