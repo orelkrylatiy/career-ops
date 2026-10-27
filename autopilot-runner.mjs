@@ -63,6 +63,7 @@ export function agentCommand(agent, prompt) {
 function runStep(file, args, env = {}) {
   const r = spawnSync(process.execPath, [path.join(ROOT, file), ...args], {
     cwd: ROOT, stdio: 'inherit', shell: false, env: { ...process.env, ...env },
+    timeout: Number(process.env.AUTOPILOT_SCAN_TIMEOUT_MS) || 45 * 60_000,
   });
   if (r.error || r.status !== 0) throw new Error(file + ' failed (' + (r.error?.message || r.status) + ')');
 }
@@ -132,7 +133,7 @@ export async function main(argv = process.argv.slice(2)) {
   const runId = process.env.AUTOPILOT_RUN_ID || randomUUID();
   process.env.AUTOPILOT_RUN_ID = runId;
   const started = Date.now();
-  const counters = { claimed: 0, applied: 0, submitted_unconfirmed: 0, deferred: 0, captcha: 0, failed: 0, skipped: 0, no_outcome: 0 };
+  const counters = { claimed: 0, applied: 0, submitted_unconfirmed: 0, deferred: 0, captcha: 0, failed: 0, validation_failed: 0, skipped: 0, no_outcome: 0 };
   const owner = process.env.AUTOPILOT_WORKER_ID || 'worker-0';
   let error = null;
   let agent = null;
