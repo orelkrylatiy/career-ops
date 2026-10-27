@@ -36,31 +36,20 @@ Hard queue stops are intentionally narrow:
 
 Title, stack, seniority, location, salary, remote/onsite preference, sponsorship uncertainty, and years-of-experience mismatch are **ranking signals**, not admission gates.
 
-## One autonomous run
+## One autonomous run versus per-job worker
 
-1. Run `node autopilot.mjs preflight`.
-2. Run `node autopilot.mjs` for the normal configured/API refresh.
-   - At least once per day, use `node autopilot.mjs --deep-scan` to add public ATS-directory + VC-seed + regional catalog discovery.
-   - Use `node autopilot.mjs --deep-scan --refresh-registry` periodically when you want to refresh regional company/source resolution as well.
-   - Normal refresh calls `scan.mjs --wide`.
-   - Deep refresh also walks public Greenhouse/Lever/Ashby/Workday/iCIMS directories, YC/a16z seed portfolios, and the regional source registry.
-   - Structured providers/APIs/RSS/HTML collect postings.
-   - Jobs are deduplicated, softly ranked, and queued in SQLite.
-3. Open one named persistent Playwright CLI browser session.
-4. Repeatedly run `node autopilot.mjs next --json`.
-5. For each claimed job:
-   - fetch/read the full live JD;
-   - choose the best prepared resume, or generate a tailored resume when useful;
-   - if tailored generation fails, fall back immediately to a prepared resume;
-   - open the real application URL in Playwright CLI;
-   - fill the form from candidate context;
-   - before Submit, arm deterministic evidence with `autopilot-verify.mjs begin`;
-   - click Submit with Playwright CLI;
-   - verify the result with `autopilot-verify.mjs finish`;
-   - report exactly the verifier outcome.
-6. Repeat until `next --json` returns an empty queue.
+**Entry from the human/scheduler:** `npm run autopilot`, optionally `--max-jobs 3` or `--refresh-registry`. The runner handles preflight, RF scan, SQLite queue refresh, leasing jobs, choosing a CLI, timeouts and JSON reports. Do **not** launch `node autopilot.mjs` alone and expect submissions: that program maintains the queue.
 
-SQLite is authoritative. `data/autopilot-queue.md` is only a generated human-readable view.
+**Inside a worker spawned by the runner:** the job is **already claimed** by `AUTOPILOT_WORKER_ID`. Do not invoke `npm run autopilot`, do not run discovery, and do not claim another job. Only:
+1. Read the supplied job URL and verify its live JD/company and blacklist. **Never use HH.**
+2. Choose the matching PDF from candidate facts/resume manifest, or generate a validated tailored version if useful.
+3. Open the real application in the named persistent Playwright CLI session.
+4. Authenticate via existing session; for fresh email codes use the scoped `autopilot-mail.mjs wait` helper with current timestamp and verified domain. Never bypass CAPTCHA/SMS/2FA.
+5. Fill the form truthfully, check free-text with Humanizer if available, renew lease, arm `autopilot-verify.mjs begin`.
+6. Submit, immediately finish verification and call `node autopilot.mjs report ... --owner <worker>` with the receipt, or defer/reject safely before Submit.
+7. Exit. The runner checks the database state before taking the next job.
+
+SQLite is authoritative for queue/outcomes; Markdown tracker is the user-facing history. A possibly-submitted job must never be retried on worker timeout.
 
 ## Browser
 
