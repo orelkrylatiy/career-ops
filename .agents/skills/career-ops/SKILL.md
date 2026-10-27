@@ -36,7 +36,7 @@ Run the career-ops scan mode and summarize new matches.
 Run the career-ops pipeline mode for data/pipeline.md.
 Run the career-ops pdf mode for the latest evaluated role.
 Run the career-ops tracker mode and summarize the current statuses.
-Run npm run autopilot once, then inspect the reported results. HeadHunter is out of scope.
+Run the autonomous career-ops mode. If invoked inside an already running coding agent, execute the per-job lease/browser loop directly from modes/autopilot.md (no nested coding CLI). From a normal shell or scheduler, run npm run autopilot once. HeadHunter is out of scope.
 ```
 
 ## Mode Routing
@@ -194,7 +194,7 @@ Applies to: `tracker`, `agent-inbox`, `deep`, `interview-prep`, `interview`, `re
 
 ### Modes delegated to subagent
 
-**Do not start another autopilot runner inside its own browser worker.** For a human-invoked command, launch `npm run autopilot` once. The runner owns queue leases and starts one coding-agent per job. An already-running worker follows `modes/autopilot.md` without spawning a nested runner. A scheduler should start that top-level agent with the autopilot prompt, not wrap another agent around it.
+**No nested coding agents.** From a plain terminal/scheduler use `npm run autopilot` (runner spawns one worker per job). From an existing Claude/Codex/OpenCode interactive agent execute preflight, scan, `autopilot.mjs next`, Playwright, verifier, `report`, next directly in that agent. Do not invoke a second `claude`/`codex`/`opencode` subprocess from inside a coding-agent session. A worker spawned by the runner handles only its already claimed job. A scheduler should start that top-level agent with the autopilot prompt, not wrap another agent around it.
 
 For `scan`, `apply` (with Playwright), and `pipeline` (3+ URLs): launch as a worker/subagent with the content of `_shared.md` + `_profile.md` (if exists) + `_custom.md` (if exists) + `modes/{mode}.md` injected into the worker prompt. If your CLI exposes an `Agent(...)` primitive, the call looks like this:
 
