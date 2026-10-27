@@ -112,7 +112,7 @@ node autopilot.mjs defer "<job-url>" --owner worker-0 --minutes 60 --note "tempo
 
 Deferred jobs remain queued but are not claimable until their `next_attempt_at` time. Never use defer after an ambiguous submit; `submitted_unconfirmed` remains terminal until reviewed to prevent duplicate applications.
 
-Expired leases automatically return to the queue.
+Expired leases are **quarantined as failed/requires review** rather than requeued: a crashed browser worker might already have clicked Submit.
 
 ## Resume strategy
 
