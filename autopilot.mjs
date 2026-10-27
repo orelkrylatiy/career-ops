@@ -362,6 +362,10 @@ export async function cmdRun(flags = {}) {
       scanResult = 'dry-run:no-network-scan';
     }
 
+    if (/(?:^|\s)[^\s:]+:(?:failed|spawn-failed)(?:\s|$)/.test(scanResult)) {
+      throw new Error('discovery failed (' + scanResult + '); refusing to use a stale queue');
+    }
+
     const entries = parsePipelinePending(readTextIfExists(PIPELINE_PATH));
     counts.pending = entries.length;
 
