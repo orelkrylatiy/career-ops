@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRunnerArgs, resolveAgent, agentCommand, safeJobId, workerPrompt } from '../autopilot-runner.mjs';
+import { parseRunnerArgs, resolveAgent, agentCommand, assertBrowserReady, safeJobId, workerPrompt } from '../autopilot-runner.mjs';
 
 test('runner defaults to real autonomous mode and accepts bounded options', () => {
   assert.equal(parseRunnerArgs([]).dryRun, false);
@@ -24,4 +24,17 @@ test('worker instruction requires evidence and never uses HH Ops', () => {
   assert.match(instruction, /autopilot-mail.mjs/);
   assert.match(instruction, /never HeadHunter/);
   assert.equal(safeJobId(job).length, 16);
+});
+
+test('browser must open a real named session and snapshot BEFORE processing jobs', () => {
+  const calls = [];
+  const mockedRun = (_binary, args) => { calls.push(args); return { status: 0 }; };
+  const info = assertBrowserReady({ headless: true, run: mockedRun });
+  assert.equal(info.session, 'career-ops-worker-0');
+  assert.equal(calls.length, 2);
+  assert.ok(calls[0].includes('open'));
+  assert.ok(calls[0].includes('about:blank'));
+  assert.ok(calls[0].some(s => String(s).startsWith('--profile=')));
+  assert.equal(calls[1].at(-1), 'snapshot');
+  assert.throws(() => assertBrowserReady({ headless: true, run: () => ({status: 1}) }), /browser startup\/snapshot failed/);
 });
