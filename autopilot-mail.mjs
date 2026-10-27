@@ -39,6 +39,23 @@ export function matchesDomain(sender, expected) {
   return domain === expected.toLowerCase() || domain.endsWith('.' + expected.toLowerCase());
 }
 
+/**
+ * Gmail can carry old/forged Authentication-Results headers added by senders.
+ * Require the first Google MX authentication result to explicitly authenticate
+ * the same From domain. A bare "dmarc=pass" from an unrelated domain is not
+ * sufficient to trust an OTP or registration link.
+ */
+export function isVerifiedGmailSender(headers, expectedDomain) {
+  if (!isAuthenticEmail(headers)) return false;
+  const from = headers.find(h => String(h.name).toLowerCase() === 'from')?.value || '';
+  if (!matchesDomain(from, expectedDomain)) return false;
+  const authentic = headers.find(h => String(h.name).toLowerCase() === 'authentication-results')?.value || '';
+  if (!/^\s*mx\.google\.com\s*;/i.test(authentic)) return false;
+  if (!/\bdmarc=pass\b/i.test(authentic)) return false;
+  const alignedFrom = authentic.match(/\bheader\.from=([a-z0-9.-]+)/i)?.[1];
+  return Boolean(alignedFrom && matchesDomain('verification@' + alignedFrom, expectedDomain));
+}
+
 export function decodeMime(payload) {
   if (!payload || typeof payload !== 'object') return '';
   let text = '';
@@ -100,7 +117,7 @@ export async function findVerification({ token, domain, urlHost = null, since, f
     if (Number(msg.internalDate) < since * 1000) continue;
     const headers = msg.payload?.headers || [];
     const from = headers.find(h => String(h.name).toLowerCase() === 'from')?.value || '';
-    if (!matchesDomain(from, domain) || !isAuthenticEmail(headers)) continue;
+    if (!isVerifiedGmailSender(headers, domain)) continue;
     const subject = headers.find(h => String(h.name).toLowerCase() === 'subject')?.value || '';
     const found = extractVerification(subject + '\n' + decodeMime(msg.payload), urlHost);
     if (found.code || found.link) return found;
