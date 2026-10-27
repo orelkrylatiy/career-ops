@@ -3,11 +3,12 @@
 // this process owns discovery, atomic leases, error handling and the run report.
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cmdNext, cmdPreflight, cmdReport, cmdRun } from './autopilot.mjs';
-import { getJob, openDb, statusCounts } from './autopilot-db.mjs';
+import { getJob, statusCounts } from './autopilot-db.mjs';
 import { auditLog } from './autopilot-log.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
@@ -16,6 +17,7 @@ const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DATA_ROOT = getCareerOpsRoot();
 const SUPPORTED_AGENTS = ['claude', 'codex', 'opencode'];
 const DEFAULT_TIMEOUT_MIN = 25;
+const require = createRequire(import.meta.url);
 
 export function parseRunnerArgs(argv) {
   const config = { agent: 'auto', maxJobs: Infinity, noScan: false, refresh: false, dryRun: false, timeoutMinutes: DEFAULT_TIMEOUT_MIN };
@@ -66,6 +68,33 @@ function runStep(file, args, env = {}) {
     timeout: Number(process.env.AUTOPILOT_SCAN_TIMEOUT_MS) || 45 * 60_000,
   });
   if (r.error || r.status !== 0) throw new Error(file + ' failed (' + (r.error?.message || r.status) + ')');
+}
+
+/**
+ * Prove that the actual persistent Chromium session can open a harmless page
+ * and return a snapshot before claiming a real job. No external traffic.
+ */
+export function assertBrowserReady({ headless = process.env.AUTOPILOT_BROWSER_HEADLESS === '1', run = spawnSync } = {}) {
+  const pkg = require.resolve('playwright');
+  const binary = path.join(path.dirname(pkg), 'cli.js');
+  const session = process.env.AUTOPILOT_BROWSER_SESSION || 'career-ops-worker-0';
+  if (!/^[a-z0-9_.-]{1,80}$/i.test(session)) throw new Error('invalid browser session identifier');
+  const profile = path.join(DATA_ROOT, 'data', 'browser-profile');
+  mkdirSync(path.dirname(profile), { recursive: true });
+  const call = (args) => {
+    const res = run(process.execPath, [binary, 'cli', '-s=' + session, ...args], {
+      cwd: ROOT, encoding: 'utf8', shell: false, windowsHide: true,
+      timeout: 60_000, maxBuffer: 2 * 1024 * 1024,
+    });
+    if (res.error || res.status !== 0) {
+      const reason = res.error?.code === 'ETIMEDOUT' ? 'TIMEOUT' : 'CLI_FAILED';
+      throw new Error('browser startup/snapshot failed [' + reason + '] (check Chromium display/session/profile)');
+    }
+    return res;
+  };
+  call(['open', 'about:blank', '--profile=' + profile, ...(headless ? [] : ['--headed'])]);
+  call(['snapshot']);
+  return { session, headless };
 }
 
 export function workerPrompt(job, owner) {
@@ -147,6 +176,9 @@ export async function main(argv = process.argv.slice(2)) {
     }
     if (!cmdPreflight()) throw new Error('preflight failed');
     agent = resolveAgent(opts.agent);
+    // A CLI --version or a Playwright --help check does NOT prove that Chrome
+    // starts successfully. Fail before scanning or leasing real jobs.
+    assertBrowserReady();
     if (!opts.noScan) {
       // Includes Russian providers + resolved company ATS boards; never includes HH.
       runStep('scan-regional.mjs', ['--country', 'RU', ...(opts.refresh ? ['--refresh'] : [])]);
@@ -191,7 +223,12 @@ export async function main(argv = process.argv.slice(2)) {
         job_id: jid, agent, outcome: actual?.status || 'unknown',
         agent_exit: result.code ?? -1, timed_out: result.timedOut, ok: result.ok,
       }, { level: result.ok ? 'info' : 'warn' });
-      if (!result.ok) console.error('[autopilot] agent exited abnormally; job outcome recorded safely.');
+      if (!result.ok) {
+        // Missing CLI login, provider outage or permission failures must not
+        // sweep the entire queue into failed outcomes.
+        console.error('[autopilot] agent exited abnormally; stopping rather than consuming more jobs.');
+        throw new Error('agent worker failed; stopped after first affected job');
+      }
     }
   } catch (e) {
     error = e.message || String(e);
