@@ -90,24 +90,24 @@ Use refs from Playwright snapshots whenever possible. CSS/Playwright locators an
 node autopilot.mjs next --json
 ~~~
 
-This atomically leases the highest-priority queued job. Default worker owner is `worker-0`; default lease is 120 minutes.
+This atomically leases the highest-priority queued job. When invoked directly the default owner is `worker-0`; the runner assigns a unique owner via `AUTOPILOT_WORKER_ID`. All examples below inherit that environment variable unless explicitly overridden. Default lease is 120 minutes.
 
 Explicit form:
 
 ~~~bash
-node autopilot.mjs next --owner worker-0 --lease-minutes 120 --json
+node autopilot.mjs next --lease-minutes 120 --json
 ~~~
 
 If the agent decides not to attempt the job yet and has not submitted anything, it may release it immediately:
 
 ~~~bash
-node autopilot.mjs release "<job-url>" --owner worker-0
+node autopilot.mjs release "<job-url>"
 ~~~
 
 For a transient **pre-submit** problem (temporary 5xx/navigation failure, site unavailable, browser crash before Submit), defer it instead of making the failure terminal or immediately reclaiming the same job:
 
 ~~~bash
-node autopilot.mjs defer "<job-url>" --owner worker-0 --minutes 60 --note "temporary site failure"
+node autopilot.mjs defer "<job-url>" --minutes 60 --note "temporary site failure"
 ~~~
 
 Deferred jobs remain queued but are not claimable until their `next_attempt_at` time. Never use defer after an ambiguous submit; `submitted_unconfirmed` remains terminal until reviewed to prevent duplicate applications.
@@ -163,7 +163,7 @@ A click on Submit is **not** proof that an application was sent.
 Immediately before the real Submit click, renew the queue lease and then arm evidence:
 
 ~~~bash
-node autopilot.mjs renew "<job-url>" --owner worker-0 --lease-minutes 120
+node autopilot.mjs renew "<job-url>" --lease-minutes 120
 node autopilot-verify.mjs begin "<job-url>" --session career-ops-worker-0
 ~~~
 
