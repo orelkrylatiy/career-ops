@@ -56,6 +56,22 @@ export function isVerifiedGmailSender(headers, expectedDomain) {
   return Boolean(alignedFrom && matchesDomain('verification@' + alignedFrom, expectedDomain));
 }
 
+// Gmail API exposes message headers verbatim. A forged Authentication-Results
+// field from an untrusted sender must not count as Google authentication.
+export function isGoogleAuthenticatedSender(headers, address) {
+  const match = String(address || '').match(/(?:<|\\b)([A-Z0-9._%+-]+)@([A-Z0-9.-]+)>?/i);
+  const fromDomain = match?.[2]?.toLowerCase();
+  if (!fromDomain || !isAuthenticEmail(headers)) return false;
+  return (headers || []).some(h => {
+    if (String(h.name).toLowerCase() !== 'authentication-results') return false;
+    const auth = String(h.value || '');
+    const google = /^\\s*mx\\.google\\.com\\s*;/i.test(auth);
+    const dmarc = /\\bdmarc\\s*=\\s*pass\\b/i.test(auth);
+    const alignment = auth.match(/\\bheader\\.from\\s*=\\s*([a-z0-9.-]+)/i)?.[1]?.toLowerCase();
+    return google && dmarc && alignment === fromDomain;
+  });
+}
+
 export function decodeMime(payload) {
   if (!payload || typeof payload !== 'object') return '';
   let text = '';
