@@ -15,7 +15,7 @@ test('code extraction prefers labelled OTPs and never offers cross-host confirma
   assert.equal(extractVerification(body,'accounts.example.com').code,'123456');
   assert.match(extractVerification(body,'accounts.example.com').link,/verify/);
   assert.equal(extractVerification(body,'attacker.test').link,null);
-  assert.equal(extractVerification('just order 123456'),'code' in {},false);
+  assert.equal(extractVerification('just order 123456').code, null);
 });
 test('Gmail lookup enforces DMARC and sender match, even when search returned a message', async () => {
   const now = Date.now();
