@@ -132,36 +132,10 @@ Browser fallback is source-local. A broken or blocked source does not stop the g
 
 ## 3. Russia source plan
 
-### 3.1 HeadHunter: highest-priority authenticated integration
-
-HH has an official applicant API and is more valuable than browser scraping for Russia/CIS.
-
-Verified capabilities:
-
-- vacancy search and vacancy detail;
-- applicant OAuth;
-- applicant-specific vacancy fields;
-- suitable resume list;
-- negotiations/application history;
-- POST application to a vacancy with a chosen resume and optional/required message.
-
-Important fallback: HH documents a test_required error for vacancies where a test must be completed; those cannot currently be applied to through the application API. Direct/external vacancies can also hand off to an employer URL. Those cases go to the browser worker.
-
-Target:
-
-~~~text
-HH API search
-    |
-    +--> normal HH vacancy -> candidate OAuth API apply
-    |
-    +--> test_required / external response_url -> browser queue
-~~~
-
-This should be one of the first new integrations after the architecture refactor.
-
-Docs:
-https://api.hh.ru/openapi/redoc
-https://github.com/hhru/api
+> hh.ru / HeadHunter was removed from this project on 2026-10-28: the user runs
+> hh.ru in a separate project, so this codebase does not scan, register or apply
+> through it. The source is blocked via `autopilot.blacklist_sources` in
+> `config/profile.yml`.
 
 ### 3.3 SuperJob: API-first once credentials are configured
 
@@ -630,7 +604,7 @@ There are two useful classes of API, but they have different roles in the implem
 
 ### Candidate-owned APIs
 
-HeadHunter and SuperJob expose applicant-authorized APIs and are worth keeping in the source research because they can materially improve discovery and applicant context.
+SuperJob exposes an applicant-authorized API and is worth keeping in the source research because it can materially improve discovery and applicant context. HeadHunter (hh.ru) is out of scope for this fork as of 2026-10-28.
 
 They are **not** a production submission channel in v1. The current worker deliberately keeps a single application execution path so success semantics, retries, evidence and debugging are not split between two engines.
 
@@ -777,7 +751,7 @@ Implemented baseline:
 
 Next source work should expand **discovery coverage**, not introduce an unverified submit shortcut:
 
-- deepen HeadHunter, SuperJob and other regional/global feeds where their public/applicant APIs permit search;
+- deepen SuperJob and other regional/global feeds where their public/applicant APIs permit search;
 - add/curate more of the existing provider catalog into the registry;
 - improve career-page/ATS resolution and source-specific health/backoff;
 - measure production browser failure classes before considering a second browser engine.
@@ -854,8 +828,6 @@ Repository:
 - docs/AUTOPILOT_ARCHITECTURE.md
 
 Russia:
-- HeadHunter API: https://api.hh.ru/openapi/redoc
-- HeadHunter API repository: https://github.com/hhru/api
 - SuperJob API: https://api.superjob.ru/
 - Habr Career API rules: https://career.habr.com/info/legal/api_rules
 - CNews500 2025: https://www.cnews.ru/reviews/rynok_it_itogi_2025/articles/cnews500_krupnejshie_it-kompanii_rossii

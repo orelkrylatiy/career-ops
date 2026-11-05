@@ -23,12 +23,12 @@
 ```markdown
 ## Ожидающие
 - [ ] https://jobs.example.com/posting/123
-- [ ] https://hh.ru/vacancy/12345678 | Компания | Senior Backend
+- [ ] https://career.habr.com/vacancies/1234567 | Компания | Senior Backend
 - [!] https://private.url/job — Ошибка: требуется авторизация
 
 ## Обработанные
 - [x] #143 | https://jobs.example.com/posting/789 | Acme Corp | AI PM | 4.2/5 | PDF ✅
-- [x] #144 | https://hh.ru/vacancy/87654321 | BigCo | Backend | 2.1/5 | PDF ❌
+- [x] #144 | https://career.habr.com/vacancies/7654321 | BigCo | Backend | 2.1/5 | PDF ❌
 ```
 
 ## Определение JD из URL
@@ -39,7 +39,6 @@
 3. **WebSearch (последний ресурс):** Поиск на вторичных порталах.
 
 **Особые случаи:**
-- **hh.ru**: API доступен: `https://api.hh.ru/vacancies/{id}` — JSON с полным описанием
 - **LinkedIn**: Может требовать логин → пометить `[!]`, попросить вставить текст
 - **PDF**: Если URL на PDF — прочитать через Read tool
 - **`local:` префикс**: Читать локальный файл. Пример: `local:jds/company-role.md`

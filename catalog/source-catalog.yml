@@ -136,15 +136,6 @@ job_sources:
     access: browser
     status: live
     locales: [ru, en]
-  - id: ru-hh
-    country: RU
-    kind: aggregator
-    name: HeadHunter
-    url: https://hh.ru/search/vacancy
-    access: oauth-api-or-browser
-    status: live
-    locales: [ru]
-    notes: "Anonymous API search prompts CAPTCHA after the first request; use an authorized connector/session."
   - id: ru-superjob
     country: RU
     kind: aggregator

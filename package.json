@@ -89,6 +89,8 @@
     "autopilot:verify": "node autopilot-verify.mjs",
     "autopilot:browser:doctor": "node autopilot-verify.mjs doctor",
     "autopilot:preflight": "node autopilot.mjs preflight",
+    "gmail:profile": "node gmail-api.mjs profile",
+    "gmail:search": "node gmail-api.mjs search",
     "autopilot:deep-scan": "node autopilot.mjs --deep-scan",
     "autopilot:refresh-registry": "node autopilot.mjs --deep-scan --refresh-registry",
     "landing:check": "node landing/scripts/check-site.mjs",
