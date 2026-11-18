@@ -38,7 +38,7 @@ Title, stack, seniority, location, salary, remote/onsite preference, sponsorship
 
 ## One autonomous run versus per-job worker
 
-**Entry from the human/scheduler:** `npm run autopilot`, optionally `--max-jobs 3` or `--refresh-registry`. The runner handles preflight, RF scan, SQLite queue refresh, leasing jobs, choosing a CLI, timeouts and JSON reports. Do **not** launch `node autopilot.mjs` alone and expect submissions: that program maintains the queue.
+**Entry from the human/scheduler:** `npm run autopilot`, optionally `--max-jobs 3` or `--refresh-registry`. The runner handles preflight, configured + Russian regional + broad ATS scans, SQLite queue refresh, leasing jobs, choosing a CLI, timeouts and JSON reports. Do **not** launch `node autopilot.mjs` alone and expect submissions: that program maintains the queue.
 
 **If the user entered `/career-ops autopilot` inside an already running coding agent:** do not call `npm run autopilot` (which could nest a second coding CLI). Instead follow the former single-agent orchestration: `node autopilot.mjs preflight`, `node autopilot-scan.mjs`, `node autopilot.mjs --no-scan`, then repeat `node autopilot.mjs next --json` and the per-job browser/verification/report steps below until empty. No HeadHunter. The agent is then both orchestrator and worker.
 

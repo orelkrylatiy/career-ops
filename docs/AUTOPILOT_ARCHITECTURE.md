@@ -73,7 +73,7 @@ The existing provider ecosystem remains the core collection layer.
 portals.yml + source-registry.db + catalog/source-catalog.yml
         |
         v
-scan.mjs --wide / scan-regional.mjs
+autopilot-scan.mjs (configured sources + RU regional catalog + ATS directories)
         |
         v
 providers/*
@@ -93,7 +93,7 @@ autopilot.mjs
 data/autopilot.db
 ~~~
 
-`scan.mjs --wide` is deliberately different from the normal review-first scanner configuration. It bypasses preference/fit filters such as title, tier, location, configured posting age, salary, description/content, country eligibility and visa. Explicit CLI date bounds remain explicit.
+`autopilot-scan.mjs` is deliberately different from the normal review-first scanner configuration. It bypasses preference/fit filters such as title, tier, location, configured posting age, salary, description/content, country eligibility and visa. Explicit CLI date bounds remain explicit.
 
 It still keeps source safety checks, explicit blacklist behavior and canonical URL dedup.
 
