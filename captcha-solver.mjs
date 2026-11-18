@@ -24,8 +24,8 @@
 //
 // Solvers, in order:
 //   1. OpenCode CLI vision model — env CAPTCHA_OPENCODE_COMMAND (default
-//      `opencode`), CAPTCHA_OPENCODE_MODEL (comma list, default
-//      `openai/gpt-6.1-sol,openai/gpt-5.6-sol`).
+//      `opencode`), CAPTCHA_OPENCODE_MODEL (optional comma-separated IDs).
+//      When unset, uses the model already configured in the local CLI.
 //   2. OpenAI-compatible vision API — OPENAI_API_KEY + OPENAI_BASE_URL,
 //      model CAPTCHA_VISION_MODEL || OPENAI_MODEL.
 //
@@ -484,19 +484,25 @@ export function ocrWithOpencode(imagePath, { timeoutMs } = {}) {
   const command = process.env.CAPTCHA_OPENCODE_COMMAND || 'opencode';
   const executable = resolveExecutable(command);
   if (!executable) throw new Error(`OpenCode executable not found: ${command}`);
-  const models = (process.env.CAPTCHA_OPENCODE_MODEL || 'openai/gpt-6.1-sol,openai/gpt-5.6-sol')
+  // Use the model already configured in the authenticated OpenCode CLI by
+  // default. The earlier hard-coded model names were not guaranteed to be
+  // installed or accessible and prevented otherwise-valid local setups.
+  // An explicit CAPTCHA_OPENCODE_MODEL list overrides the local default.
+  const configuredModels = String(process.env.CAPTCHA_OPENCODE_MODEL || '')
     .split(',').map((m) => m.trim()).filter(Boolean);
+  const models = configuredModels.length ? configuredModels : [null];
   const timeout = timeoutMs ?? (Number(process.env.CAPTCHA_OPENCODE_TIMEOUT_MS) || 120_000);
 
   let lastError = null;
   for (const model of models) {
-    const res = spawnCli(executable, ['run', '--model', model, '--file', path.resolve(imagePath), OCR_PROMPT], { timeout });
+    const args = ['run', ...(model ? ['--model', model] : []), '--file', path.resolve(imagePath), OCR_PROMPT];
+    const res = spawnCli(executable, args, { timeout });
     if (res.error) { lastError = res.error; continue; }
     if (res.status !== 0) {
       lastError = new Error(`OpenCode (${model}) exited ${res.status}: ${String(res.stderr || res.stdout || '').trim().slice(0, 300)}`);
       continue;
     }
-    return { provider: 'opencode', model, answer: String(res.stdout || '').trim() };
+    return { provider: 'opencode', model: model || 'configured-default', answer: String(res.stdout || '').trim() };
   }
   throw lastError || new Error('OpenCode produced no result');
 }

@@ -45,8 +45,8 @@ const PIPELINE_PATH = process.env.CAREER_OPS_PIPELINE || path.join(DATA_ROOT, 'd
 const TRACKER_PATH = resolveTrackerPath(DATA_ROOT);
 const BLACKLIST_PATH = path.join(DATA_ROOT, 'data', 'blacklist.md');
 export const QUEUE_PATH = path.join(DATA_ROOT, 'data', 'autopilot-queue.md');
-const SCAN_PATH = path.join(CODE_ROOT, 'scan.mjs');
-const ATS_FULL_PATH = path.join(CODE_ROOT, 'scan-ats-full.mjs');
+const SCAN_PATH = path.join(CODE_ROOT, 'autopilot-scan.mjs');
+const ATS_FULL_PATH = path.join(CODE_ROOT, 'autopilot-scan.mjs');
 const SOURCE_REGISTRY_PATH = path.join(CODE_ROOT, 'source-registry.mjs');
 const REGIONAL_PORTALS_PATH = process.env.CAREER_OPS_EXPANDED_PORTALS
   || path.join(DATA_ROOT, 'data', 'portals-regional.generated.yml');
@@ -282,7 +282,7 @@ function runNodeDiscoveryStep(label, script, args, extraEnv = {}) {
 
 function runScanStep({ deep = false, refreshRegistry = false } = {}) {
   const results = [
-    runNodeDiscoveryStep('configured', SCAN_PATH, ['--wide']),
+    runNodeDiscoveryStep('configured', SCAN_PATH, []),
   ];
 
   if (!deep) return results.join(' ');
@@ -302,7 +302,7 @@ function runScanStep({ deep = false, refreshRegistry = false } = {}) {
     results.push(runNodeDiscoveryStep(
       'regional',
       SCAN_PATH,
-      ['--wide'],
+      [],
       { CAREER_OPS_PORTALS: REGIONAL_PORTALS_PATH },
     ));
   }
@@ -314,7 +314,7 @@ function runScanStep({ deep = false, refreshRegistry = false } = {}) {
     'ats-full',
     ATS_FULL_PATH,
     [
-      '--wide',
+      '--ats-full',
       '--since', '7',
       '--include-undated',
       '--ats', 'greenhouse,lever,ashby,workday,icims',
@@ -362,6 +362,10 @@ export async function cmdRun(flags = {}) {
       scanResult = 'dry-run:no-network-scan';
     }
 
+    if (/(?:^|\s)[^\s:]+:(?:failed|spawn-failed)(?:\s|$)/.test(scanResult)) {
+      throw new Error('discovery failed (' + scanResult + '); refusing to use a stale queue');
+    }
+
     const entries = parsePipelinePending(readTextIfExists(PIPELINE_PATH));
     counts.pending = entries.length;
 
@@ -381,6 +385,14 @@ export async function cmdRun(flags = {}) {
 
       if (!urlKey) {
         decisions.push(`SKIPPED hard: invalid URL | ${label}`);
+        counts.hardSkipped++;
+        continue;
+      }
+
+      // HeadHunter is a separate product; never queue HH URLs in Career Ops.
+      const sourceHost = hostOf(entry.url);
+      if (/^(?:[a-z0-9-]+\.)*hh\.(?:ru|kz|uz)$/.test(sourceHost)) {
+        decisions.push('SKIPPED hard: HeadHunter excluded from Career Ops');
         counts.hardSkipped++;
         continue;
       }
@@ -438,11 +450,7 @@ export async function cmdRun(flags = {}) {
         counts.hardSkipped++;
         continue;
       }
-      if (!matchesStrictMarket(entry, profile)) {
-        decisions.push(`SKIPPED hard: outside strict Russia market | ${label}`);
-        counts.hardSkipped++;
-        continue;
-      }
+      // Location and market fit are soft ranking signals in autonomous mode.
 
       const rank = scoreJob(entry, { titleFilter, profile });
       decisions.push(`QUEUED P${rank.priority} | ${label}`);
@@ -703,8 +711,9 @@ function writeTrackerAdditionTsv(job, note) {
   if (reserved.status !== 0) {
     throw new Error(`reserve-report-num failed: ${reserved.stderr?.trim() || reserved.status}`);
   }
-  const num = (reserved.stdout.match(/\d{1,3}/) || [])[0];
-  if (!num) throw new Error(`could not parse report number from: ${reserved.stdout}`);
+  const reservedNum = String(reserved.stdout || '').trim().match(/^(\d+)$/);
+  const num = reservedNum?.[1] || null;
+  if (!num) throw new Error('could not parse reserved report number');
 
   const date = localDateStr();
   const slug = String(job.company || 'company')
