@@ -78,3 +78,27 @@ test('a pending CAPTCHA is a job-specific blocker, not a global stop', () => {
   assert.equal(detectBlockingChallenge({run:missing}), null);
   assert.equal(detectBlockingChallenge({run: () => ({status: 1})}), null);
 });
+
+test('unattended browser defaults to headless Chromium without a display', () => {
+  const prevHeaded = process.env.AUTOPILOT_BROWSER_HEADED;
+  const prevHeadless = process.env.AUTOPILOT_BROWSER_HEADLESS;
+  try {
+    delete process.env.AUTOPILOT_BROWSER_HEADED;
+    delete process.env.AUTOPILOT_BROWSER_HEADLESS;
+    const calls = [];
+    const run = (_bin, args) => { calls.push(args); return { status: 0 }; };
+    const result = assertBrowserReady({ run });
+    assert.equal(result.headless, true);
+    assert.ok(!calls.flat().includes('--headed'));
+    process.env.AUTOPILOT_BROWSER_HEADED = '1';
+    calls.length = 0;
+    const withWindow = assertBrowserReady({ run });
+    assert.equal(withWindow.headless, false);
+    assert.ok(calls.flat().includes('--headed'));
+  } finally {
+    if (prevHeaded == null) delete process.env.AUTOPILOT_BROWSER_HEADED;
+    else process.env.AUTOPILOT_BROWSER_HEADED = prevHeaded;
+    if (prevHeadless == null) delete process.env.AUTOPILOT_BROWSER_HEADLESS;
+    else process.env.AUTOPILOT_BROWSER_HEADLESS = prevHeadless;
+  }
+});

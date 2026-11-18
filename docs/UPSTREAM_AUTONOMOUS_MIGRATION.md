@@ -118,3 +118,22 @@ autonomously on sites that require them.
 
 The integration branch has not been runtime-tested on the user's workstation,
 and an unverified site submission must never be described as successful.
+
+## Headless server deployment and restored local profiles
+
+`npm run autopilot` now opens Playwright Chromium **headlessly by default**,
+which does not require an X server. Set `AUTOPILOT_BROWSER_HEADED=1` when a
+graphical desktop is available and a visible browser is explicitly preferred.
+A saved dedicated browser session is reused, and the same session name is
+shared with the CAPTCHA and evidence verifier.
+
+The fork's local profiles/directions manager is restored as
+`npm run profile -- ...` (also `node profile.mjs ...`), without mandatory
+Telegram identifiers. The original optional Telegram metadata field is only
+read for legacy registry compatibility and is not a transport. Read
+`docs/PROFILES.md` to isolate multiple candidate tracks and their cookies.
+
+The old fork also contained a Telegram-focused landing, mail utilities and
+other experimental artifacts that are deliberately **not** part of this
+upstream-first integration. This preserves the autonomous job-applying core,
+not exact parity with every non-core file from the old fork.

@@ -97,7 +97,7 @@ function runStep(file, args, env = {}) {
  * Prove that the actual persistent Chromium session can open a harmless page
  * and return a snapshot before claiming a real job. No external traffic.
  */
-export function assertBrowserReady({ headless = process.env.AUTOPILOT_BROWSER_HEADLESS === '1', run = spawnSync } = {}) {
+export function assertBrowserReady({ headless = process.env.AUTOPILOT_BROWSER_HEADED !== '1' && process.env.AUTOPILOT_BROWSER_HEADLESS !== '0', run = spawnSync } = {}) {
   const pkg = require.resolve('playwright');
   const binary = path.join(path.dirname(pkg), 'cli.js');
   const session = BROWSER_SESSION;
