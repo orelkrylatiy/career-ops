@@ -1,6 +1,8 @@
 # Autonomous Web Worker Architecture
 
 > Detailed source/API/browser research: [WEB_AUTOPILOT_RESEARCH.md](./WEB_AUTOPILOT_RESEARCH.md).
+>
+> **Operator documentation (RU):** [AUTOPILOT_RU.md](./AUTOPILOT_RU.md) · [CAPTCHA_RU.md](./CAPTCHA_RU.md) · [RU_SOURCES.md](./RU_SOURCES.md).
 
 This document describes the fork-specific autonomous web application layer.
 
@@ -67,7 +69,7 @@ It is deterministic and does not trust the agent's self-report.
 
 ## Discovery
 
-The existing provider ecosystem remains the core collection layer.
+The existing provider ecosystem remains the core collection layer. The runner also exports the **RU regional catalog** via `source-registry.mjs export --country RU` and scans it. Having a parser in `providers/` is not sufficient without an enabled source; see [RU_SOURCES.md](./RU_SOURCES.md).
 
 ~~~text
 portals.yml + source-registry.db + catalog/source-catalog.yml
@@ -136,7 +138,7 @@ Jobs now support:
 - `claim_until`;
 - `next_attempt_at` for transient pre-submit backoff.
 
-`node autopilot.mjs next --json` atomically leases the highest-priority queued job for 120 minutes by default. Expired leases are returned automatically, and the worker renews the lease immediately before arming Submit evidence.
+`node autopilot.mjs next --json` atomically leases the highest-priority queued job for 120 minutes by default. Expired/ambiguous leases are **quarantined rather than silently requeued**, because the worker may already have submitted an application. The worker renews the active lease immediately before arming Submit evidence.
 
 This allows a single autonomous worker now and safe multi-worker expansion later.
 
@@ -162,7 +164,7 @@ One initial worker should use:
 session: career-ops-worker-0
 profile: data/browser-profile
 browser: Playwright-managed Chromium (default; Chrome channel optional)
-headed: yes while stabilizing
+headed: no by default on VPS; AUTOPILOT_BROWSER_HEADED=1 for visible debugging
 ~~~
 
 The profile is user/runtime data and must never be committed.

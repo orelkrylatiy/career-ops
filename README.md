@@ -2,6 +2,8 @@
 
 <p align="center">The open-source AI job search agent.</p>
 
+> **Autonomous fork (PR #6):** This fork adds an explicitly invoked, unattended application worker. **[Русское руководство по автопилоту](docs/AUTOPILOT_RU.md)** · [CAPTCHA](docs/CAPTCHA_RU.md) · [RU sources](docs/RU_SOURCES.md). Upstream standard apply remains review-first; autonomous mode is a separate opt-in. Integration is not yet end-to-end verified.
+
 <p align="center">
   <a href="README.md">English</a> |
   <a href="README.es.md">Español</a> |
@@ -642,4 +644,4 @@ Code is MIT; data in [`employers/`](employers/) is [CC BY 4.0](employers/LICENSE
 
 This fork preserves the current upstream CareerOps experience and adds an **explicitly invoked, unattended browser worker**. It uses official CareerOps job-source discovery, a separate SQLite priority queue, per-job CV selection, a persistent Playwright browser, and evidence-based application receipts. It does **not** use HeadHunter or Telegram. Upstream's standard `apply` mode remains review-first.
 
-Run `npm run autopilot:dry-run` to preview safely. After configuring the normal CareerOps user profile and authorizing a coding CLI, run `npm run autopilot -- --agent codex --max-jobs 3` for a small initial batch; then omit the limit for the full queue. Text-image CAPTCHA challenges are retried automatically using `captcha-solver.mjs`; an unsolved site-specific challenge is recorded and the runner proceeds with the next vacancy. The worker never submits twice after an unconfirmed result. See [the migration and operations guide](docs/UPSTREAM_AUTONOMOUS_MIGRATION.md).
+Run `npm run autopilot:dry-run` to preview safely. After configuring the normal CareerOps user profile and authorizing a coding CLI, run `npm run autopilot -- --agent codex --max-jobs 3` for a small initial batch; then omit the limit for the full queue. Text-image CAPTCHA challenges are retried automatically using `captcha-solver.mjs`; an unsolved site-specific challenge is recorded and the runner proceeds with the next vacancy. The worker never submits twice after an unconfirmed result. See the [Russian operational guide](docs/AUTOPILOT_RU.md), [CAPTCHA provider reference](docs/CAPTCHA_RU.md), [RU source matrix](docs/RU_SOURCES.md) and [upstream migration notes](docs/UPSTREAM_AUTONOMOUS_MIGRATION.md). **Do not enable continuous unsupervised operation without isolated credentials, successful CI and verified browser smoke tests.**

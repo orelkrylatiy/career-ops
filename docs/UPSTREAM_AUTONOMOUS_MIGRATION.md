@@ -1,5 +1,7 @@
 # CareerOps 1.40.0 upstream integration (autonomous fork)
 
+> **User-facing documentation:** [AUTOPILOT_RU.md](./AUTOPILOT_RU.md) · [CAPTCHA_RU.md](./CAPTCHA_RU.md) · [RU_SOURCES.md](./RU_SOURCES.md). This file is a technical migration log; operational setup belongs in the linked guides.
+
 This integration branch uses the upstream career-ops-hq/career-ops main tree at commit
 `18e114599c2b830daa962afe798f518212733c46` (2026-11-18), retaining its
 web dashboard, providers, employer registry, privacy guard, updater and tests.
@@ -65,9 +67,9 @@ SuperJob; Armenia and Uzbekistan providers are included as separately
 scoped sources. Their presence in `providers/` is not enough to activate
 discovery: the runner now exports the `source-registry.mjs` Russian catalog
 and scans its generated portals file in addition to the user's configured
-employers and upstream ATS feeds. The initial regional export uses the
-published catalog; refreshing/verification of the company directories
-requires separately running the registry `full` workflow.
+employers and upstream ATS feeds. The ordinary regional export uses the published catalog; `--refresh-registry`
+asks the runner to invoke the `full --country RU` registry workflow (a slower,
+network-dependent sync/verify/enrich/resolve/export cycle).
 
 - `AUTOPILOT_REGIONAL=off`: skip the curated RU catalog (opt out).
 - `AUTOPILOT_DISCOVERY=configured`: skip the broad ATS-directory scan, but

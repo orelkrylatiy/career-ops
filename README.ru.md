@@ -2,6 +2,8 @@
 
 <p align="center">ИИ-агент с открытым кодом для поиска работы.</p>
 
+> **Автономный CareerOps в нашем форке (PR #6):** [Полное руководство по запуску на Linux/VPS](docs/AUTOPILOT_RU.md) · [CAPTCHA и модели](docs/CAPTCHA_RU.md) · [Российские площадки](docs/RU_SOURCES.md) · [Профили](docs/PROFILES.md). Автономная отправка включается отдельно командой `npm run autopilot`; обычный режим просмотра заявок сохранён. Полный CI и реальные отклики для новой интеграции пока не подтверждены.
+
 <p align="center">
   <a href="README.md">English</a> |
   <a href="README.es.md">Español</a> |

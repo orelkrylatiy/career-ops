@@ -24,8 +24,8 @@
 //
 // Solvers, in order:
 //   1. OpenCode CLI vision model — env CAPTCHA_OPENCODE_COMMAND (default
-//      `opencode`), CAPTCHA_OPENCODE_MODEL (comma list, default
-//      `openai/gpt-6.1-sol,openai/gpt-5.6-sol`).
+//      `opencode`), CAPTCHA_OPENCODE_MODEL (optional comma-separated IDs).
+//      When unset, uses the model already configured in the local CLI.
 //   2. OpenAI-compatible vision API — OPENAI_API_KEY + OPENAI_BASE_URL,
 //      model CAPTCHA_VISION_MODEL || OPENAI_MODEL.
 //

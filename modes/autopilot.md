@@ -1,5 +1,7 @@
 # Mode: autopilot — Autonomous Web Applications
 
+> Руководство оператора: [AUTOPILOT_RU.md](../docs/AUTOPILOT_RU.md) · [CAPTCHA_RU.md](../docs/CAPTCHA_RU.md) · [RU_SOURCES.md](../docs/RU_SOURCES.md). This file is the **agent execution contract**, not a beginner setup guide.
+
 This fork-specific mode is an autonomous web job applier. Its job is to keep the funnel wide, claim work from SQLite, and complete real application forms with a coding agent driving **Playwright CLI directly**.
 
 There is no Telegram transport, no HeadHunter source, and no custom browser-step JSON protocol. Discovery uses the temporary-config adapter `autopilot-scan.mjs` around modern upstream scanners.
@@ -57,7 +59,7 @@ SQLite is authoritative for queue/outcomes; Markdown tracker is the user-facing 
 
 Use Playwright CLI, not `autopilot-browser.mjs` and not generated step files.
 
-Recommended first worker:
+For a visible debugging session on a **Linux desktop** (not headless VPS):
 
 ~~~bash
 export PLAYWRIGHT_CLI_SESSION=career-ops-worker-0
@@ -65,6 +67,8 @@ npx playwright cli -s=career-ops-worker-0 open "about:blank" \
   --profile="./data/browser-profile" \
   --headed
 ~~~
+
+The autonomous runner itself defaults to **headless Chromium**, so a VPS does not need an X display. Set `AUTOPILOT_BROWSER_HEADED=1` only when using an available graphical session. The CLI example above is for manual debugging, not a prerequisite.
 
 On PowerShell, set the environment variable with the normal PowerShell syntax.
 
@@ -147,14 +151,14 @@ Do not invent a different identity or credentials whose falsity would make the s
 **Humanizer gate (before the text enters the form).** Autopilot texts reach the employer without human review, so every free-text answer passes the offline validator first — save the draft to a temp file, then:
 
 ~~~bash
-py humanizer-bridge.py validate --type application --language <output lang> --text-file answer.txt
+python3 humanizer-bridge.py validate --type application --language <output lang> --text-file answer.txt
 ~~~
 
 - `--type chat_reply` for short conversational answers, `--type application` for cover-letter fields and long-form answers (larger length budget).
 - `"hard": true` → fix the draft and re-run the gate before it goes into the form. Soft issues: fix when cheap, otherwise proceed.
 - Facts still come only from the candidate context (profile/CV/report) — the validator checks voice and format, never supplies facts.
 - Soft-fail: if Python 3.11 + `humanizer_framework` are unavailable, proceed without the gate and record `humanizer: skipped (bridge unavailable)` in the run report. Never block an application on bridge unavailability, never hide that the gate did not run.
-- Long cover-letter fields may alternatively be generated from a goal (`py humanizer-bridge.py write --goal "..." --type application`) — still grounded in candidate context only.
+- Long cover-letter fields may alternatively be generated from a goal (`python3 humanizer-bridge.py write --goal "..." --type application`) — still grounded in candidate context only.
 
 ## Deterministic submit verification
 
