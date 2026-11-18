@@ -1,6 +1,8 @@
 name: Autonomous CareerOps integration
 
 on:
+  push:
+    branches: ['feat/upstream-1-40-autonomous-20261118']
   pull_request:
     paths:
       - 'autopilot*'
