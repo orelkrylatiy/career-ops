@@ -36,6 +36,23 @@ To test against a local fixture use the existing autopilot browser test rather
 than real jobs. Do not merge until upstream and fork CI are green and a single
 real-job workflow has been evaluated in an isolated user environment.
 
+## Update safety and discovery
+
+The upstream updater's `apply` command is intentionally guarded in this
+fork: its manifest does not own the additional autonomous modules and would
+overwrite the fork's entry points. Sync future upstream versions through
+reviewed merge commits, not through the vanilla self-updater.
+
+By default the runner scans both user-configured boards and modern upstream
+reverse ATS directories. Set `AUTOPILOT_DISCOVERY=configured` to restrict
+network discovery to already-configured sources, or use
+`AUTOPILOT_ATS_SINCE_DAYS=7` to reduce the reverse-scan window.
+
+If a single worker exits without reporting a verified outcome, that job is
+quarantined and the runner continues. After three consecutive worker failures
+a circuit breaker stops the run to avoid exhausting the queue during an agent
+outage. CAPTCHA failures with recorded job-specific status do not trip it.
+
 ## Verification gap
 
 The connector migration cannot run a persistent authenticated Chromium profile

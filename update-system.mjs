@@ -4793,6 +4793,13 @@ export function trustsEnvTargetRef(authenticatedReexec, legacyReexec) {
 }
 
 async function apply() {
+  // This branch is an upstream merge plus a fork-owned autonomous worker.
+  // The generic upstream path updater replaces AGENTS.md and package.json
+  // without knowing about the worker, silently disabling autonomous apply.
+  // Refuse this destructive update path; use a reviewed upstream merge.
+  if (existsSync(join(ROOT, 'autopilot-runner.mjs'))) {
+    throw new Error('Autonomous CareerOps fork: the upstream self-updater would overwrite fork integration files. Sync upstream through a reviewed Git branch/PR instead; no files changed.');
+  }
   assertOwnGitToplevel();
   const local = localVersion();
   // Environment variables are a private one-use channel for the self-reexec;

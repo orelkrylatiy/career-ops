@@ -209,6 +209,7 @@ export async function main(argv = process.argv.slice(2)) {
   const owner = process.env.AUTOPILOT_WORKER_ID || ('worker-' + runId.replace(/[^a-z0-9]/gi, '').slice(0, 16));
   let error = null;
   let agent = null;
+  let consecutiveWorkerFailures = 0;
   auditLog('runner_start', { no_scan: opts.noScan, refresh_registry: opts.refresh, dry_run: opts.dryRun });
   try {
     if (opts.dryRun) {
@@ -285,10 +286,15 @@ export async function main(argv = process.argv.slice(2)) {
         agent_exit: result.code ?? -1, timed_out: result.timedOut, ok: result.ok,
       }, { level: result.ok ? 'info' : 'warn' });
       if (!result.ok && !['captcha', 'skipped', 'validation_failed'].includes(actual?.status)) {
-        // Missing CLI login, provider outage or permission failures must not
-        // sweep the entire queue into failed outcomes.
-        console.error('[autopilot] agent exited abnormally; stopping rather than consuming more jobs.');
-        throw new Error('agent worker failed; stopped after first affected job');
+        // One failed job must not stop unrelated applications. An agent outage
+        // is different: break after three consecutive worker failures.
+        consecutiveWorkerFailures++;
+        console.error('[autopilot] isolated worker failure (' + consecutiveWorkerFailures + '/3); continuing with next job');
+        if (consecutiveWorkerFailures >= 3) {
+          throw new Error('coding agent failed for three consecutive jobs; circuit breaker stopped this run');
+        }
+      } else {
+        consecutiveWorkerFailures = 0;
       }
     }
   } catch (e) {
