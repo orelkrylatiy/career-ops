@@ -7,7 +7,7 @@ const profile = {
   autopilot: {
     remote_only: true,
     blocked_locations: ['london'],
-    priority_sources: ['career.habr.com'],
+    priority_sources: ['hh.ru'],
     priority_locations: ['russia'],
   },
 };
@@ -21,7 +21,7 @@ test('matching jobs rank higher but non-matches remain eligible', () => {
   const strong = scoreJob({
     title: 'Senior React Frontend Engineer',
     location: 'Remote, Russia',
-    url: 'https://career.habr.com/vacancies/1',
+    url: 'https://hh.ru/vacancy/1',
     posted: '2026-09-20T12:00:00Z',
   }, { profile, titleFilter, nowMs: now });
   const weak = scoreJob({

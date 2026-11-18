@@ -19,6 +19,7 @@
 // Run:  node plugins.mjs run gmail
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { dirname, join, resolve } from 'path';
 import {
   extractUrls, isCleanUrl, isAuthenticEmail, parseRoleAtCompany,
   getMessageBody, companyFromUrl,
@@ -26,8 +27,16 @@ import {
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me';
-const STATE_PATH = 'data/gmail-state.json'; // the plugin's own processed-id cursor
-const SENT_STATE_PATH = 'data/gmail-sent.json'; // idempotency ledger for explicit sends
+const STATE_FILE = join('data', 'gmail-state.json'); // the plugin's own processed-id cursor
+
+// The cursor is user-layer data, so it lives under the data root (ctx.dataRoot)
+// like the pipeline the engine writes these leads to. A ctx that carries no
+// dataRoot comes from an engine older than the capability, and keeps the
+// working directory that engine's plugins used.
+const statePath = (ctx) => join(ctx?.dataRoot || process.cwd(), STATE_FILE);
+// Where the cursor was kept before: relative to the working directory, which is
+// the data root only when the two happen to coincide.
+const legacyStatePath = () => resolve(STATE_FILE);
 
 /** Exchange the long-lived refresh token for a short-lived access token. */
 async function getAccessToken({ clientId, clientSecret, refreshToken }, fetchFn = globalThis.fetch) {
@@ -49,96 +58,35 @@ async function getAccessToken({ clientId, clientSecret, refreshToken }, fetchFn 
   return data.access_token;
 }
 
-function loadProcessedIds() {
-  if (!existsSync(STATE_PATH)) return new Set();
+function loadProcessedIds(ctx) {
+  let path = statePath(ctx);
+  if (!existsSync(path)) {
+    // No cursor under the data root yet. Read the one an earlier version left
+    // in the working directory, so the first run after the move does not
+    // re-ingest every message it had already processed. The next save writes
+    // the data-root file, and from then on this branch is never taken. The old
+    // file is left where it is.
+    const legacy = legacyStatePath();
+    if (!existsSync(legacy)) return new Set();
+    ctx.log(`gmail: using the processed-id cursor at ${legacy}; the next save writes it to ${path}`);
+    path = legacy;
+  }
   try {
-    const state = JSON.parse(readFileSync(STATE_PATH, 'utf-8'));
+    const state = JSON.parse(readFileSync(path, 'utf-8'));
     return new Set(state.processed_message_ids || []);
   } catch {
     return new Set();
   }
 }
 
-function saveProcessedIds(ids) {
+function saveProcessedIds(ids, ctx) {
   try {
-    mkdirSync('data', { recursive: true });
-    writeFileSync(STATE_PATH, JSON.stringify({ processed_message_ids: [...ids] }, null, 2), 'utf-8');
+    const path = statePath(ctx);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, JSON.stringify({ processed_message_ids: [...ids] }, null, 2), 'utf-8');
   } catch (err) {
     console.warn(`gmail: could not persist processed-id state — ${err.message}`);
   }
-}
-
-function loadSentKeys() {
-  if (!existsSync(SENT_STATE_PATH)) return new Set();
-  try {
-    const state = JSON.parse(readFileSync(SENT_STATE_PATH, 'utf-8'));
-    return new Set(Array.isArray(state.keys) ? state.keys : []);
-  } catch {
-    return new Set();
-  }
-}
-
-function saveSentKeys(keys) {
-  mkdirSync('data', { recursive: true });
-  writeFileSync(SENT_STATE_PATH, JSON.stringify({ keys: [...keys] }, null, 2), 'utf-8');
-}
-
-function encodeBase64Url(text) {
-  return Buffer.from(text, 'utf-8').toString('base64')
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-}
-
-function headerValue(value, field) {
-  const text = String(value ?? '').trim();
-  if (!text || /[\r\n]/.test(text)) throw new Error(`gmail: invalid ${field}`);
-  return text;
-}
-
-async function profileEmail(token, fetchFn) {
-  const res = await fetchFn(`${GMAIL_API}/profile`, { headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) throw new Error(`Gmail profile lookup failed: ${res.status}`);
-  const data = await res.json();
-  if (!data.emailAddress) throw new Error('Gmail profile lookup returned no emailAddress');
-  return String(data.emailAddress);
-}
-
-async function sendEmail(ctx, token, payload) {
-  const to = headerValue(payload?.to, 'recipient');
-  const subject = headerValue(payload?.subject, 'subject');
-  const body = String(payload?.body ?? '').trim();
-  if (!body) throw new Error('gmail: body is required');
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) throw new Error('gmail: invalid recipient email');
-
-  const sender = await profileEmail(token, ctx.fetch);
-  const expectedSender = ctx.settings?.sender_email ? String(ctx.settings.sender_email).trim() : '';
-  if (expectedSender && sender.toLowerCase() !== expectedSender.toLowerCase()) {
-    throw new Error('gmail: OAuth account does not match configured sender_email');
-  }
-
-  const key = String(payload.key || `${sender.toLowerCase()}|${to.toLowerCase()}|${subject}`);
-  const sentKeys = loadSentKeys();
-  if (sentKeys.has(key)) return { sent: false, duplicate: true, key, sender };
-  if (ctx.dryRun) return { sent: false, dryRun: true, duplicate: false, key, sender, to, subject };
-
-  const raw = [
-    `From: ${sender}`,
-    `To: ${to}`,
-    `Subject: ${subject}`,
-    'Content-Type: text/plain; charset=utf-8',
-    'MIME-Version: 1.0',
-    '',
-    body,
-  ].join('\r\n');
-  const res = await ctx.fetch(`${GMAIL_API}/messages/send`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ raw: encodeBase64Url(raw) }),
-  });
-  if (!res.ok) throw new Error(`Gmail send failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
-  const data = await res.json();
-  sentKeys.add(key);
-  saveSentKeys(sentKeys);
-  return { sent: true, duplicate: false, key, sender, messageId: data.id || null, to, subject };
 }
 
 /** @type {{ ingest: (ctx: any) => Promise<object[]> }} */
@@ -174,7 +122,7 @@ export default {
       pageToken = data.nextPageToken;
     } while (pageToken);
 
-    const processedIds = loadProcessedIds();
+    const processedIds = loadProcessedIds(ctx);
     const seenUrls = new Set();
     const jobs = [];
 
@@ -213,19 +161,7 @@ export default {
       processedIds.add(m.id);
     }
 
-    if (!ctx?.dryRun) saveProcessedIds(processedIds);
+    if (!ctx?.dryRun) saveProcessedIds(processedIds, ctx);
     return jobs;
-  },
-
-  /** Explicit, user-invoked outbound mail. Never called by scan/autopilot. */
-  async notify(payload, ctx) {
-    const clientId = ctx?.env?.GMAIL_CLIENT_ID;
-    const clientSecret = ctx?.env?.GMAIL_CLIENT_SECRET;
-    const refreshToken = ctx?.env?.GMAIL_REFRESH_TOKEN;
-    if (!clientId || !clientSecret || !refreshToken) {
-      throw new Error('gmail: missing GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET / GMAIL_REFRESH_TOKEN in .env');
-    }
-    const token = await getAccessToken({ clientId, clientSecret, refreshToken }, ctx.fetch);
-    return sendEmail(ctx, token, payload);
   },
 };

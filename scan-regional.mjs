@@ -63,9 +63,9 @@ function main() {
   // Keep the scanner as the one canonical ingestion path. It receives the
   // generated catalog as an env override while every other user-owned config
   // file remains untouched.
-  const scanArgs = ['--wide'];
+  const scanArgs = [];
   if (opts.dryRun) scanArgs.push('--dry-run');
-  runNode('scan.mjs', scanArgs, { CAREER_OPS_PORTALS: GENERATED });
+  runNode('autopilot-scan.mjs', scanArgs, { CAREER_OPS_PORTALS: GENERATED });
 
   // Queue newly scanned jobs without a second network scan. A dry run does not
   // mutate the autonomous DB at all.

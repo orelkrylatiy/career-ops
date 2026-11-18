@@ -1,0 +1,52 @@
+name: Autonomous CareerOps integration
+
+on:
+  pull_request:
+    paths:
+      - 'autopilot*'
+      - 'captcha-solver.mjs'
+      - 'modes/autopilot.md'
+      - 'tests/autopilot*'
+      - 'tests/captcha-solver.test.mjs'
+      - 'package.json'
+      - '.github/workflows/autopilot-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install without starting real browsers
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Check JavaScript syntax
+        run: |
+          node --check autopilot-scan.mjs
+          node --check autopilot-runner.mjs
+          node --check autopilot-mail.mjs
+          node --check autopilot-diagnostics.mjs
+          node --check autopilot.mjs
+          node --check autopilot-verify.mjs
+          node --check captcha-solver.mjs
+      - name: Test autonomous contracts (no real submissions)
+        run: npm run autopilot:test
+
+  browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: Local fixture only (no external application)
+        run: node tests/autopilot-browser-e2e.mjs

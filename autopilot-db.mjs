@@ -299,7 +299,7 @@ export function listJobs(status) {
 
 /**
  * Atomically lease the highest-priority queued job. Expired leases are
- * returned first, so a crashed worker cannot strand jobs forever.
+ * quarantined for review, because a crashed worker may have submitted.
  */
 export function claimNextJob(owner = 'worker-0', leaseMinutes = 120) {
   const db = openDb();
@@ -311,9 +311,12 @@ export function claimNextJob(owner = 'worker-0', leaseMinutes = 120) {
   const nowIso = now.toISOString();
   const until = new Date(now.getTime() + minutes * 60_000).toISOString();
   return db.transaction(() => {
+    // A crashed browser worker might have clicked Submit. Requeueing expired
+    // leases would risk duplicate applications; quarantine for review instead.
     db.prepare(
       `UPDATE jobs
-       SET status='queued', claimed_at=NULL, claim_owner=NULL, claim_until=NULL, next_attempt_at=NULL, updated_at=?
+       SET status='failed', note='expired browser lease: submission unknown; review before retry',
+           claimed_at=NULL, claim_owner=NULL, claim_until=NULL, next_attempt_at=NULL, updated_at=?
        WHERE status='claimed' AND claim_until IS NOT NULL AND claim_until < ?`,
     ).run(nowIso, nowIso);
 
