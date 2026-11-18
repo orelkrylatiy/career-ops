@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRunnerArgs, resolveAgent, agentCommand, platformCommand, assertBrowserReady, safeJobId, workerPrompt, workerEnvironment } from '../autopilot-runner.mjs';
+import { parseRunnerArgs, resolveAgent, agentCommand, platformCommand, assertBrowserReady, safeJobId, workerPrompt, workerEnvironment, detectBlockingChallenge } from '../autopilot-runner.mjs';
 
 test('runner defaults to real autonomous mode and accepts bounded options', () => {
   assert.equal(parseRunnerArgs([]).dryRun, false);
@@ -67,4 +67,14 @@ test('agent and verifier share exact Playwright CLI named session', () => {
   assert.equal(env.AUTOPILOT_BROWSER_SESSION, env.PLAYWRIGHT_CLI_SESSION);
   assert.equal(env.AUTOPILOT_WORKER_ID, 'worker-1');
   assert.throws(() => workerEnvironment('worker-1','run-1','../../other'), /invalid browser session/);
+});
+
+test('a pending CAPTCHA is a job-specific blocker, not a global stop', () => {
+  const run = (_bin, _args) => ({status: 0, stdout: JSON.stringify({kind: 'text_image'})});
+  assert.equal(detectBlockingChallenge({session:'career-ops-worker-0', run}), 'text_image');
+  const thirdParty = () => ({status: 0, stdout: JSON.stringify({kind: 'third_party'})});
+  assert.equal(detectBlockingChallenge({run:thirdParty}), 'third_party');
+  const missing = () => ({status: 0, stdout: JSON.stringify({kind: 'none'})});
+  assert.equal(detectBlockingChallenge({run:missing}), null);
+  assert.equal(detectBlockingChallenge({run: () => ({status: 1})}), null);
 });

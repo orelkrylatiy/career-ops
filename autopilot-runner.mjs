@@ -201,6 +201,22 @@ export function safeJobId(job) {
   return createHash('sha256').update(String(job.url_key || job.url)).digest('hex').slice(0, 16);
 }
 
+/**
+ * The worker may exit before it can record a CAPTCHA result. Inspect the same
+ * persisted browser session once so a site-specific challenge remains a
+ * job-level outcome, not a global worker failure.
+ */
+export function detectBlockingChallenge({ session = BROWSER_SESSION, run = spawnSync } = {}) {
+  try {
+    const result = run(process.execPath,
+      [path.join(ROOT, 'captcha-solver.mjs'), 'detect', '--session', session, '--json'],
+      { cwd: ROOT, encoding: 'utf8', shell: false, windowsHide: true, timeout: 35_000 });
+    if (result.error || result.status !== 0) return null;
+    const verdict = JSON.parse(result.stdout || '{}');
+    return ['text_image', 'third_party'].includes(verdict.kind) ? verdict.kind : null;
+  } catch { return null; }
+}
+
 export async function main(argv = process.argv.slice(2)) {
   const opts = parseRunnerArgs(argv);
   const runId = process.env.AUTOPILOT_RUN_ID || randomUUID();
@@ -268,9 +284,17 @@ export async function main(argv = process.argv.slice(2)) {
       const actual = getJob(job.url_key);
       if (actual?.status === 'claimed' && actual.claim_owner === owner) {
         // Never auto-retry an ambiguous run: Submit could already have happened.
-        counters.no_outcome++;
+        // If the browser still shows a CAPTCHA, it is job-specific and must
+        // not count toward the agent-outage circuit breaker.
+        const challenge = detectBlockingChallenge();
         try {
-          await cmdReport(job.url, 'failed', 'worker exited without verified outcome; review before retry', 'browser', { owner });
+          if (challenge) {
+            await cmdReport(job.url, 'captcha', 'challenge remains (' + challenge + '); continuing queue without resubmission', 'browser', { owner });
+            counters.captcha++;
+          } else {
+            counters.no_outcome++;
+            await cmdReport(job.url, 'failed', 'worker exited without verified outcome; review before retry', 'browser', { owner });
+          }
         } catch (e) {
           auditLog('worker_report_error', { job_id: jid, error_code: 'REPORT_FAILED' }, { level: 'error' });
           throw e;
@@ -283,10 +307,11 @@ export async function main(argv = process.argv.slice(2)) {
         counters.no_outcome++;
       }
       auditLog('worker_finish', {
-        job_id: jid, agent, outcome: actual?.status || 'unknown',
+        job_id: jid, agent, outcome: getJob(job.url_key)?.status || 'unknown',
         agent_exit: result.code ?? -1, timed_out: result.timedOut, ok: result.ok,
       }, { level: result.ok ? 'info' : 'warn' });
-      if (!result.ok && !['captcha', 'skipped', 'validation_failed'].includes(actual?.status)) {
+      const reportedChallenge = !result.ok && getJob(job.url_key)?.status === 'captcha';
+      if (!result.ok && !reportedChallenge && !['captcha', 'skipped', 'validation_failed'].includes(actual?.status)) {
         // One failed job must not stop unrelated applications. An agent outage
         // is different: break after three consecutive worker failures.
         consecutiveWorkerFailures++;
