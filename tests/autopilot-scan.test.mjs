@@ -21,6 +21,7 @@ test('wide config removes fit filters but keeps trust and blacklist settings', (
 test('HeadHunter remains excluded, unrelated hosts remain allowed', () => {
   assert.equal(isExcludedTransport({url:'https://hh.ru/vacancy/1'}), true);
   assert.equal(isExcludedTransport({url:'https://jobs.hh.ru/vacancy/1'}), true);
+  assert.equal(isExcludedTransport({url:'https://t.me/jobs'}), true);
   assert.equal(isExcludedTransport({url:'https://not-hh.ru/jobs'}), false);
   assert.equal(isExcludedTransport({url:'https://example.org/jobs'}), false);
 });

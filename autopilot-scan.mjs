@@ -33,6 +33,7 @@ export function isExcludedTransport(item) {
     try {
       const host = new URL(value.includes('://') ? value : 'https://' + value).hostname.toLowerCase();
       if (/(^|\.)hh\.(ru|kz|uz)$/.test(host)) return true;
+      if (host === 't.me' || host === 'telegram.me' || host === 'telegram.org') return true;
     } catch { /* non-URL string, not an exclusion match */ }
   }
   return false;

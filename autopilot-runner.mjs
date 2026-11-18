@@ -139,7 +139,7 @@ export function workerPrompt(job, owner) {
     'For sign-in/registration using candidate email, use existing authorized browser accounts first.',
     'If a site sends an email verification code, invoke node autopilot-mail.mjs wait --domain <sender-domain> --url-host <site-host> --since <unix-seconds>.',
     'Only use codes from freshly requested messages with independently verified sender domains; do not echo secrets in reports.',
-    'If a text-image CAPTCHA is shown, run node captcha-solver.mjs solve --session ' + BROWSER_SESSION + ' --flow apply --attempts ' + Math.min(10, Math.max(1, Number(process.env.AUTOPILOT_CAPTCHA_ATTEMPTS) || 5)) + '; retry normal form validation when solved.',
+    'If a challenge is present, run node captcha-solver.mjs detect --session ' + BROWSER_SESSION + ' and, when a text-image CAPTCHA is detected, run node captcha-solver.mjs solve --session ' + BROWSER_SESSION + ' --flow apply --attempts ' + Math.min(10, Math.max(1, Number(process.env.AUTOPILOT_CAPTCHA_ATTEMPTS) || 5)) + '; retry normal form validation when solved.',
     'CAPTCHA must not stop this run or trigger a human prompt. When the allowed local challenge attempts fail or a third-party anti-bot challenge remains, report captcha for this one job and return; the orchestrator continues to the next job.',
     'If registration requires a new password, SMS, MFA or non-routine consent, do not guess or bypass it: record the blocker for this job; the orchestrator continues the queue.',
     'Use node autopilot-verify.mjs begin before clicking real Submit, finish immediately after, and report through node autopilot.mjs report with the matching evidence receipt.',
@@ -231,9 +231,21 @@ export async function main(argv = process.argv.slice(2)) {
     // A Playwright --help check also does not prove Chromium can launch.
     assertBrowserReady();
     if (!opts.noScan) {
-      // Includes Russian providers + resolved company ATS boards; never includes HH.
+      // Start with configured employer sources, then widen to the upstream ATS
+      // directories by default. Discovery never uses HH or Telegram transport.
       runStep('autopilot-scan.mjs', []);
-      if (opts.refresh) runStep('autopilot-scan.mjs', ['--ats-full', '--since', '14', '--include-undated']);
+      const deepMode = process.env.AUTOPILOT_DISCOVERY !== 'configured' || opts.refresh;
+      if (deepMode) {
+        const days = Math.min(30, Math.max(1, Math.trunc(Number(process.env.AUTOPILOT_ATS_SINCE_DAYS) || 14)));
+        try {
+          runStep('autopilot-scan.mjs', ['--ats-full', '--since', String(days), '--include-undated']);
+        } catch (error) {
+          // A partial/network-failed deep scan must not prevent already found
+          // jobs from being applied to. Keep each failure visible in the log.
+          auditLog('deep_scan_error', { error_code: 'DEEP_SCAN_FAILED' }, { level: 'warn' });
+          console.error('[autopilot] deep discovery unavailable; proceeding with configured sources: ' + error.message);
+        }
+      }
     }
     await cmdRun({ noScan: true });
     while (counters.claimed < opts.maxJobs) {
