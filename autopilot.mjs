@@ -711,8 +711,9 @@ function writeTrackerAdditionTsv(job, note) {
   if (reserved.status !== 0) {
     throw new Error(`reserve-report-num failed: ${reserved.stderr?.trim() || reserved.status}`);
   }
-  const num = (reserved.stdout.match(/\d{1,3}/) || [])[0];
-  if (!num) throw new Error(`could not parse report number from: ${reserved.stdout}`);
+  const reservedNum = String(reserved.stdout || '').trim().match(/^(\d+)$/);
+  const num = reservedNum?.[1] || null;
+  if (!num) throw new Error('could not parse reserved report number');
 
   const date = localDateStr();
   const slug = String(job.company || 'company')

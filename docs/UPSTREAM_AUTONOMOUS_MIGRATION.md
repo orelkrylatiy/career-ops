@@ -57,3 +57,64 @@ outage. CAPTCHA failures with recorded job-specific status do not trip it.
 
 The connector migration cannot run a persistent authenticated Chromium profile
 or submit a live application. Those runtime checks must occur on the user's host.
+
+## Russian job sites and source activation
+
+The fork has first-party source adapters for Habr Career, GeekJob and
+SuperJob; Armenia and Uzbekistan providers are included as separately
+scoped sources. Their presence in `providers/` is not enough to activate
+discovery: the runner now exports the `source-registry.mjs` Russian catalog
+and scans its generated portals file in addition to the user's configured
+employers and upstream ATS feeds. The initial regional export uses the
+published catalog; refreshing/verification of the company directories
+requires separately running the registry `full` workflow.
+
+- `AUTOPILOT_REGIONAL=off`: skip the curated RU catalog (opt out).
+- `AUTOPILOT_DISCOVERY=configured`: skip the broad ATS-directory scan, but
+  continue configured and regional scans.
+- `AUTOPILOT_ATS_SINCE_DAYS=14`: default lookback for reverse ATS scanning.
+- The app avoids HeadHunter and Telegram in the autonomous scan adapter, but
+  dormant upstream provider modules remain present in the imported codebase.
+
+**No live-provider guarantee:** the individual Russian sites can change HTML,
+restrict APIs, require authentication, or implement anti-bot challenges. A
+module and a source entry are not evidence of live successful submissions.
+
+## CAPTCHA: capabilities and configuration
+
+The included `captcha-solver.mjs` supports image-to-text CAPTCHA in a
+Playwright CLI session. It detects a matching image and input, captures the
+challenge image, calls the already-configured OpenCode vision model (or an
+explicit `CAPTCHA_OPENCODE_MODEL`), falls back to an OpenAI-compatible
+`OPENAI_API_KEY` / `CAPTCHA_VISION_MODEL`, types the recognized text and
+checks the normal page response. Five attempts is the default, clamped to
+eight by the solver. `AUTOPILOT_CAPTCHA_ATTEMPTS` controls the worker's
+requested attempt count.
+
+No module or service named **MGS** is installed: this is a vision OCR
+approach, not a hidden third-party CAPTCHA-solving service. It does not
+automatically defeat SmartCaptcha, reCAPTCHA, hCaptcha, Turnstile, device
+attestation or second-factor checks. Where an acceptable local method
+cannot complete the form, the worker records a job-level CAPTCHA outcome
+and continues with other jobs instead of waiting for a human.
+
+For an unattended local job run, Gmail verification is optional and
+requires valid GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET and GMAIL_REFRESH_TOKEN.
+That is a separate provider from the normal CareerOps Gmail plugin. Missing
+credentials mean email OTP/registration flows cannot be completed
+autonomously on sites that require them.
+
+## Manual test order before release
+
+1. Configure a real local candidate profile (candidate email, truthful CV,
+   prepared resume PDF path/variants), local portals.yml and a browser profile.
+2. Install Node and native SQLite dependencies; verify selected coding agent.
+3. Run `npm run autopilot:test` and `npm run autopilot:dry-run`.
+4. Run a fixture-only browser smoke test with Playwright.
+5. On the actual workstation, verify the RU source registry export, inspect
+   sample search results, complete a pre-authorized one-job test.
+6. Review pending, applied, CAPTCHA-blocked and unconfirmed statuses and
+   confirm that the same vacancy was never submitted twice.
+
+The integration branch has not been runtime-tested on the user's workstation,
+and an unverified site submission must never be described as successful.

@@ -1,0 +1,7 @@
+# Local profile registry example (no Telegram or HeadHunter)
+profiles:
+  - id: candidate
+    name: Candidate
+    directions:
+      - id: developer
+        name: Developer

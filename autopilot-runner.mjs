@@ -252,6 +252,22 @@ export async function main(argv = process.argv.slice(2)) {
       // Start with configured employer sources, then widen to the upstream ATS
       // directories by default. Discovery never uses HH or Telegram transport.
       runStep('autopilot-scan.mjs', []);
+      // A provider module is not an enabled source by itself. Export the RU
+      // catalog into a temporary-looking runtime portals file, then scan it.
+      // This activates Habr Career, GeekJob and SuperJob without touching the
+      // user's configured portals.yml, and leaves HH/Telegram excluded by the
+      // adapter regardless of what appears in the source registry.
+      if (process.env.AUTOPILOT_REGIONAL !== 'off') {
+        try {
+          runStep('source-registry.mjs', ['export', '--country', 'RU']);
+          const regionalPortals = process.env.CAREER_OPS_EXPANDED_PORTALS
+            || path.join(DATA_ROOT, 'data', 'portals-regional.generated.yml');
+          runStep('autopilot-scan.mjs', [], { CAREER_OPS_PORTALS: regionalPortals });
+        } catch (error) {
+          auditLog('regional_scan_error', { error_code: 'REGIONAL_SCAN_FAILED' }, { level: 'warn' });
+          console.error('[autopilot] regional source scan unavailable; continuing other sources: ' + error.message);
+        }
+      }
       const deepMode = process.env.AUTOPILOT_DISCOVERY !== 'configured' || opts.refresh;
       if (deepMode) {
         const days = Math.min(30, Math.max(1, Math.trunc(Number(process.env.AUTOPILOT_ATS_SINCE_DAYS) || 14)));

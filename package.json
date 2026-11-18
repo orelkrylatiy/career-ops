@@ -93,9 +93,10 @@
     "autopilot:preflight": "node autopilot.mjs preflight",
     "autopilot:captcha:detect": "node captcha-solver.mjs detect",
     "autopilot:captcha:solve": "node captcha-solver.mjs solve",
-    "autopilot:test": "node --test tests/autopilot-scan.test.mjs tests/autopilot-runner.test.mjs tests/autopilot-verifier.test.mjs tests/autopilot-url-policy.test.mjs tests/autopilot-ranking.test.mjs",
+    "autopilot:test": "node --test tests/autopilot-scan.test.mjs tests/autopilot-runner.test.mjs tests/autopilot-verifier.test.mjs tests/autopilot-url-policy.test.mjs tests/autopilot-ranking.test.mjs tests/captcha-solver.test.mjs tests/autopilot-mail.test.mjs tests/autopilot-resume.test.mjs tests/autopilot-db-migration.test.mjs tests/autopilot-report-contract.test.mjs tests/source-registry.test.mjs tests/profile-registry.test.mjs",
     "autopilot:wide-scan": "node autopilot-scan.mjs",
-    "autopilot:full-scan": "node autopilot-scan.mjs --ats-full --since 14 --include-undated"
+    "autopilot:full-scan": "node autopilot-scan.mjs --ats-full --since 14 --include-undated",
+    "profile": "node profile.mjs"
   },
   "keywords": [
     "ai",
