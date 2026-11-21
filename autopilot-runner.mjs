@@ -11,6 +11,8 @@ import { cmdNext, cmdPreflight, cmdReport, cmdRun } from './autopilot.mjs';
 import { getJob, statusCounts } from './autopilot-db.mjs';
 import { auditLog } from './autopilot-log.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
+import { loadProfiles, profileStoreRoot } from './lib/profile-registry.mjs';
+import { assertIsolatedAutopilotContext } from './lib/profile-isolation.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -244,7 +246,10 @@ export async function main(argv = process.argv.slice(2)) {
       return;
     }
     if (process.env.AUTOPILOT_LIVE !== '1') throw new Error('campaign paused: live application requires AUTOPILOT_LIVE=1; use npm run autopilot for a safe dry-run');
-    if (!process.env.CAREER_OPS_ROOT && !process.env.CAREER_OPS_DATA_DIR) throw new Error('select explicit CAREER_OPS_ROOT for the active React/Next.js/Vue direction (node profile.mjs env)');
+    assertIsolatedAutopilotContext({
+      env: process.env, dataRoot: DATA_ROOT, storeRoot: profileStoreRoot(),
+      registry: loadProfiles(), codeRoot: ROOT,
+    });
     if (!cmdPreflight()) throw new Error('preflight failed');
     agent = resolveAgent(opts.agent);
     // --version does not prove the coding CLI is authenticated or has model

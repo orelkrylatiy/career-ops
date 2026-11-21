@@ -91,3 +91,20 @@ application history before any second submission.
 
 The live campaign remains paused; dry-run and profile commands do not send
 applications.
+
+## Live worker and mailbox identity checks
+
+Live autonomous runs require an explicit `AUTOPILOT_BROWSER_SESSION` and
+`AUTOPILOT_WORKER_ID`, supplied together by `node profile.mjs env`.
+The runner validates that both belong to the exact candidate/direction
+registered under `CAREER_OPS_PROFILE_STORE_ROOT`. It rejects profile,
+portals, tracker, SQLite and browser overrides that point outside that
+direction's root. A missing shared registry is an error for managed
+`data/profiles/<person>/<direction>` paths, not a reason to guess the identity.
+
+The Gmail OTP helper validates the OAuth Gmail mailbox address against the
+active `config/profile.yml` candidate email **before reading verification
+messages**. An OAuth token for Alice cannot silently read Bob's login codes.
+Each person must configure their own authorized mailbox credentials in their
+own process environment. Gmail aliases and forwarded addresses need
+deliberate configuration rather than an implicit identity bypass.
