@@ -104,6 +104,15 @@ test('env and launch print the isolation recipe: root, worker, session, browser 
     const values = JSON.parse(selected.stdout).env;
     assert.equal(values.PLAYWRIGHT_MCP_EXECUTABLE_PATH, fakeBrowser);
     assert.equal(values.AUTOPILOT_BROWSER_PROFILE, join(dir, 'data', 'profiles', 'maxim', 'analyst', 'browser-state'));
+    assert.equal(values.CAREER_OPS_PROFILE_BASE_ROOT, dir);
+    assert.equal(values.CAREER_OPS_PROFILES, join(dir, 'profiles.yml'));
+
+    // Applying the exports must not move the registry or nest data/profiles twice.
+    const secondLaunch = runCli(['launch', 'maxim', 'analyst', '--json'], { ...selectedEnv, ...values });
+    assert.equal(secondLaunch.status, 0, secondLaunch.stderr);
+    const roundTrip = JSON.parse(secondLaunch.stdout);
+    assert.ok(roundTrip.command.includes(join(dir, 'data', 'profiles', 'maxim', 'analyst', 'browser-state')));
+    assert.ok(!roundTrip.command.includes('analyst/data/profiles/maxim/analyst'));
     const customLaunch = runCli(['launch', 'maxim', 'analyst'], selectedEnv);
     assert.equal(customLaunch.status, 0, customLaunch.stderr);
     assert.ok(customLaunch.stdout.includes(fakeBrowser));

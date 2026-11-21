@@ -45,7 +45,10 @@ node profile.mjs launch candidate developer        # prints exact command
 fallback. `PLAYWRIGHT_MCP_EXECUTABLE_PATH` is forwarded to Playwright CLI so it
 uses that actual executable. `AUTOPILOT_BROWSER_PROFILE` is a distinct
 user-data directory; if relative, it resolves against the selected direction's
-data root. All fork components use the same settings. Reuse the selected
+data root. `profile.mjs env` also exports fixed `CAREER_OPS_PROFILE_BASE_ROOT` and
+`CAREER_OPS_PROFILES` values, so running `profile.mjs launch` after applying
+those exports resolves the same original registry and direction, without
+nesting data roots. All fork components use the same settings. Reuse the selected
 Playwright CLI session, but close it before changing executable/profile. Do not
 point this at an everyday Chrome profile that is already running. When changing
 directions, clear an inherited `AUTOPILOT_BROWSER_PROFILE` unless it is an

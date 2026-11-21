@@ -45,6 +45,8 @@ on the upstream browser-launch helper used for other flows. The upstream
 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` is accepted as fallback. If a specified
 binary is unavailable, do not fall back to another. A login saved in the
 persistent Playwright profile is reused in the same direction/session.
+`profile.mjs env` pins the parent registry and base root so subsequent
+`profile.mjs launch` commands do not accidentally nest direction paths.
 Close/restart a named session after changing profile or browser binary; do not
 reuse a currently open personal Chrome profile. Linux/bash only in this fork's
 autonomous/profile-manager tools. The original upstream `apply` flow remains

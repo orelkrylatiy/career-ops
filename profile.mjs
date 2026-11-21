@@ -24,18 +24,30 @@ import { validateFlags, flagValue } from './lib/cli-flags.mjs';
 import {
   existsSync, mkdirSync, copyFileSync, writeFileSync, readFileSync, rmSync,
 } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, resolve } from 'path';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 import { assertLinux, linuxBrowserSettings, browserCliEnvironment } from './lib/autopilot-browser.mjs';
 import { fileURLToPath } from 'url';
 import { spawnSync } from 'child_process';
 import { isMainModule } from './lib/is-main-module.mjs';
 import {
-  loadProfiles, saveProfiles, findProfile, findDirection, isValidId,
-  directionRoot, directionRootRelative, profileRoot, workerIdFor, sessionNameFor,
+  loadProfiles, saveProfiles, findProfile, findDirection, isValidId, resolveRegistryPath,
+  directionRoot as registryDirectionRoot, directionRootRelative as registryDirectionRootRelative,
+  profileRoot as registryProfileRoot, workerIdFor, sessionNameFor,
 } from './lib/profile-registry.mjs';
 import { computeDirectionStats, aggregateProfileStats } from './lib/profile-stats.mjs';
 
 const CODE_ROOT = dirname(fileURLToPath(import.meta.url));
+// The profile registry and parent data root must stay stable after selecting
+// a direction via CAREER_OPS_ROOT; otherwise subsequent calls nest direction paths.
+const PROFILE_BASE_ROOT = process.env.CAREER_OPS_PROFILE_BASE_ROOT
+  ? resolve(CODE_ROOT, process.env.CAREER_OPS_PROFILE_BASE_ROOT)
+  : getCareerOpsRoot();
+const profileRoot = (profileId) => registryProfileRoot(profileId, { dataRoot: PROFILE_BASE_ROOT });
+const directionRoot = (profileId, directionId) =>
+  registryDirectionRoot(profileId, directionId, { dataRoot: PROFILE_BASE_ROOT });
+const directionRootRelative = (profileId, directionId) =>
+  registryDirectionRootRelative(profileId, directionId, { dataRoot: PROFILE_BASE_ROOT });
 
 const VALUE_FLAGS = ['--name'];
 const KNOWN_FLAGS = [...VALUE_FLAGS, '--purge', '--run', '--json', '--summary', '--help', '-h'];
@@ -128,6 +140,8 @@ function envPairs(profileId, directionId) {
   const browser = selectedBrowser(profileId, directionId);
   const session = sessionNameFor(profileId, directionId);
   return [
+    ['CAREER_OPS_PROFILE_BASE_ROOT', PROFILE_BASE_ROOT],
+    ['CAREER_OPS_PROFILES', resolveRegistryPath()],
     ['CAREER_OPS_ROOT', directionRootRelative(profileId, directionId)],
     ['AUTOPILOT_WORKER_ID', workerIdFor(profileId, directionId)],
     ['AUTOPILOT_BROWSER_SESSION', session],
