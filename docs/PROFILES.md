@@ -110,3 +110,57 @@ own process environment. Gmail aliases and forwarded addresses need
 deliberate configuration rather than an implicit identity bypass.
 
 The optional legacy `gmail-api.mjs` transport also defaults its OAuth files to the selected direction's `data/gmail/` directory. When migrating an older shared local Gmail store, set `CAREER_OPS_GMAIL_DIR` to a candidate-specific directory inside the selected direction only. The API checks the connected Gmail identity before reading or sending; no hard-coded machine-specific mailbox path is used.
+
+## Persistent browser profiles and custom storage paths
+
+Playwright CLI normally keeps the login only in memory. Career Ops always
+opens a **persistent** Playwright profile by passing `--profile=<absolute path>`.
+This saves login cookies and browser site storage across restarts. The named
+`-s=<name>` session identifies which currently running browser to control,
+but is not itself a durable on-disk account.
+
+Default location for Alice's React direction:
+`<PROFILE_STORE>/data/profiles/alice/react/data/browser-profile`.
+
+You may instead provide a custom browser storage directory on another disk.
+Set **one dedicated browser store root outside the repository**; Career Ops
+appends `<candidate>/<direction>` and will not reuse another person's folder:
+
+```bash
+export CAREER_OPS_BROWSER_STORE_ROOT="/mnt/private/career-ops-browsers"
+eval "$(node profile.mjs env alice react)"
+# AUTOPILOT_BROWSER_PROFILE=/mnt/private/career-ops-browsers/alice/react
+# AUTOPILOT_BROWSER_SESSION=career-ops-alice-react
+# PLAYWRIGHT_CLI_SESSION=career-ops-alice-react
+node profile.mjs launch alice react
+# To actually open the visible browser for manual sign-in:
+node profile.mjs launch alice react --run
+```
+
+Windows PowerShell:
+
+```powershell
+$env:CAREER_OPS_BROWSER_STORE_ROOT="D:\\PrivateBrowsers\\CareerOps"
+node profile.mjs env alice react --shell powershell
+# Apply the printed $env: assignments, then:
+node profile.mjs launch alice react --run
+```
+
+The following now derive the **same absolute profile folder**:
+`profile.mjs env`, `profile.mjs launch`, `profile.mjs launch --run`,
+the autonomous runner's browser preflight, and verifier/CAPTCHA modules.
+For one direction you may manually override `AUTOPILOT_BROWSER_PROFILE`
+with a path **inside its own data root**. External paths must be generated
+through `CAREER_OPS_BROWSER_STORE_ROOT` and the candidate/direction IDs.
+
+Cookies, IndexedDB and localStorage are confidential credentials.
+Do **not** use the regular Chrome or Edge user-data directory for Playwright:
+use a dedicated browser profile, and never launch two Chromium processes
+against one user-data directory concurrently. Back up this private folder
+only while its browser is closed. Existing Chrome windows can sometimes
+be attached through CDP or a browser extension, but this fork's autonomous
+runner does **not** implement that as its normal execution mode.
+
+Reusing the same browser profile normally preserves login until the site
+expires or revokes the session. A separate, approved login may still be
+necessary after that; persistence does not bypass site protections.

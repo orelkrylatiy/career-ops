@@ -14,7 +14,8 @@ function context(person, direction, extra = {}) {
   return {
     dataRoot: root, storeRoot: base, registry, codeRoot: base,
     env: { CAREER_OPS_ROOT: root, AUTOPILOT_WORKER_ID: person + '-' + direction,
-      AUTOPILOT_BROWSER_SESSION: 'career-ops-' + person + '-' + direction, ...extra },
+      AUTOPILOT_BROWSER_SESSION: 'career-ops-' + person + '-' + direction,
+      AUTOPILOT_BROWSER_PROFILE: path.join(root, 'data', 'browser-profile'), ...extra },
   };
 }
 
@@ -54,4 +55,26 @@ test('missing profile registry cannot silently treat a registered direction as l
   const c = context('alice', 'react');
   c.registry = null;
   assert.throws(() => assertIsolatedAutopilotContext(c), /registry unavailable/);
+});
+
+test('external browser store is accepted only for the selected candidate and direction', () => {
+  const browserStore = path.resolve('/virtual', 'browser-store');
+  for (const person of ['alice', 'bob']) {
+    const opts = context(person, 'react', {
+      CAREER_OPS_BROWSER_STORE_ROOT: browserStore,
+      AUTOPILOT_BROWSER_PROFILE: path.join(browserStore, person, 'react'),
+    });
+    assert.equal(assertIsolatedAutopilotContext(opts).person, person);
+  }
+  const unsafe = context('alice', 'react', {
+    CAREER_OPS_BROWSER_STORE_ROOT: browserStore,
+    AUTOPILOT_BROWSER_PROFILE: path.join(browserStore, 'bob', 'react'),
+  });
+  assert.throws(() => assertIsolatedAutopilotContext(unsafe), /AUTOPILOT_BROWSER_PROFILE/);
+});
+
+test('managed direction fails closed when the persistent browser path is missing', () => {
+  const selected = context('alice', 'react');
+  delete selected.env.AUTOPILOT_BROWSER_PROFILE;
+  assert.throws(() => assertIsolatedAutopilotContext(selected), /AUTOPILOT_BROWSER_PROFILE missing/);
 });
