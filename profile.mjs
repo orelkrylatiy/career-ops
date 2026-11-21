@@ -24,13 +24,15 @@ import { validateFlags, flagValue } from './lib/cli-flags.mjs';
 import {
   existsSync, mkdirSync, copyFileSync, writeFileSync, readFileSync, rmSync,
 } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, resolve, relative, sep, isAbsolute } from 'path';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 import { fileURLToPath } from 'url';
 import { spawnSync } from 'child_process';
 import { isMainModule } from './lib/is-main-module.mjs';
 import {
   loadProfiles, saveProfiles, findProfile, findDirection, isValidId,
   directionRoot, directionRootRelative, profileRoot, browserProfileDir, workerIdFor, sessionNameFor,
+  profileStoreRoot, resolveRegistryPath,
 } from './lib/profile-registry.mjs';
 import { computeDirectionStats, aggregateProfileStats } from './lib/profile-stats.mjs';
 
@@ -122,21 +124,48 @@ function createDirectionSkeleton(root, directionName) {
 
 function envLines(profileId, directionId, shell) {
   const rootRel = directionRootRelative(profileId, directionId);
+  const selectedRoot = directionRoot(profileId, directionId);
+  const browserDir = browserProfileDir(selectedRoot, profileId, directionId);
+  const session = sessionNameFor(profileId, directionId);
   const vars = [
+    // Keep the manager registry anchored to the candidate store even after
+    // CAREER_OPS_ROOT switches to one selected direction.
+    ['CAREER_OPS_PROFILE_STORE_ROOT', profileStoreRoot()],
+    ['CAREER_OPS_PROFILES', resolve(CODE_ROOT, resolveRegistryPath())],
     ['CAREER_OPS_ROOT', rootRel],
     ['AUTOPILOT_WORKER_ID', workerIdFor(profileId, directionId)],
-    ['AUTOPILOT_BROWSER_SESSION', sessionNameFor(profileId, directionId)],
+    ['AUTOPILOT_BROWSER_SESSION', session],
+    ['PLAYWRIGHT_CLI_SESSION', session],
+    ['AUTOPILOT_BROWSER_PROFILE', browserDir],
   ];
+  if (process.env.CAREER_OPS_BROWSER_STORE_ROOT?.trim()) {
+    vars.unshift(['CAREER_OPS_BROWSER_STORE_ROOT',
+      resolve(CODE_ROOT, process.env.CAREER_OPS_BROWSER_STORE_ROOT)]);
+  }
   if (shell === 'powershell') return vars.map(([k, v]) => `$env:${k}="${v}"`);
   return vars.map(([k, v]) => `export ${k}="${v}"`);
 }
 
+function resolvedLaunchBrowserPath(profileId, directionId) {
+  const root = directionRoot(profileId, directionId);
+  const expected = browserProfileDir(root, profileId, directionId);
+  // Respect an explicit per-direction override only when this same direction
+  // is already selected. Ignore stale overrides from another candidate.
+  const chosen = process.env.AUTOPILOT_BROWSER_PROFILE?.trim();
+  if (!chosen || resolve(getCareerOpsRoot()) !== resolve(root)) return expected;
+  const location = resolve(CODE_ROOT, chosen);
+  const rel = relative(root, location);
+  const inside = rel === '' || (rel !== '..' && !rel.startsWith('..' + sep) && !isAbsolute(rel));
+  if (!inside && location !== expected) throw new Error('browser profile path belongs to a different direction');
+  return location;
+}
+
 function launchCommand(profileId, directionId) {
-  const profileRel = [directionRootRelative(profileId, directionId), 'data', 'browser-profile'].join('/');
+  const profilePath = resolvedLaunchBrowserPath(profileId, directionId);
   return 'npx playwright cli'
     + ` -s=${sessionNameFor(profileId, directionId)}`
     + ' open "about:blank"'
-    + ` --profile="${profileRel}"`
+    + ` --profile="${profilePath}"`
     + ' --headed';
 }
 
@@ -200,7 +229,7 @@ function cmdStats(registry, args) {
     if (a.funnel) {
       console.log(`  Total directions: ${a.directions} · applications: ${a.funnel.everApplied} · interviews: ${a.funnel.everInterview} · offers: ${a.funnel.everOffer}`);
     } else {
-      console.log(`  Total directions: ${a.directions} ·no data yet`);
+      console.log(`  Total directions: ${a.directions} · no data yet`);
     }
   }
 }
@@ -345,7 +374,7 @@ function cmdLaunch(args) {
 
   if (args.includes('--run')) {
     const result = spawnSync('npx', ['playwright', 'cli', `-s=${sessionNameFor(profileId, directionId)}`, 'open', 'about:blank',
-      `--profile=${join(browserProfileDir(directionRoot(profileId, directionId)))}`, '--headed'],
+      `--profile=${resolvedLaunchBrowserPath(profileId, directionId)}`, '--headed'],
     { shell: process.platform === 'win32', stdio: 'inherit' });
     process.exit(result.status ?? 0);
   }

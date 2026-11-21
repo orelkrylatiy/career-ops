@@ -84,6 +84,9 @@ test('env and launch print the isolation recipe: root, worker, session, browser 
     assert.match(bash.stdout, /export CAREER_OPS_ROOT=".*data\/profiles\/maxim\/analyst"/);
     assert.match(bash.stdout, /export AUTOPILOT_WORKER_ID="maxim-analyst"/);
     assert.match(bash.stdout, /export AUTOPILOT_BROWSER_SESSION="career-ops-maxim-analyst"/);
+    assert.match(bash.stdout, /export PLAYWRIGHT_CLI_SESSION="career-ops-maxim-analyst"/);
+    assert.ok(bash.stdout.includes('AUTOPILOT_BROWSER_PROFILE="'
+      + join(dir, 'data', 'profiles', 'maxim', 'analyst', 'data', 'browser-profile') + '"'));
 
     const ps = runCli(['env', 'maxim', 'analyst', '--shell', 'powershell'], env);
     assert.match(ps.stdout, /\$env:CAREER_OPS_ROOT=".*data\/profiles\/maxim\/analyst"/);
@@ -159,6 +162,78 @@ test('React, Next.js and Vue directions isolate CV, tracker and browser identiti
       sessions.push(output);
     }
     assert.equal(new Set(sessions).size, 3);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('two candidates retain distinct React/Next/Vue data roots when switching active env', () => {
+  const { dir, env } = freshRoot();
+  try {
+    for (const person of ['alice', 'bob']) {
+      assert.equal(runCli(['add-profile', person, '--name', person], env).status, 0);
+      for (const direction of ['react', 'nextjs', 'vue']) {
+        const res = runCli(['add-direction', person, direction, '--name', direction], env);
+        assert.equal(res.status, 0, res.stderr);
+      }
+    }
+
+    const aliceRoot = join(dir, 'data', 'profiles', 'alice', 'react');
+    const bobRoot = join(dir, 'data', 'profiles', 'bob', 'react');
+    writeFileSync(join(aliceRoot, 'cv.md'), '# CV for Alice only\n');
+    writeFileSync(join(bobRoot, 'cv.md'), '# CV for Bob only\n');
+
+    const shell = runCli(['env', 'alice', 'react'], env);
+    assert.equal(shell.status, 0, shell.stderr);
+    const activated = Object.fromEntries(shell.stdout.split('\n')
+      .filter(line => line.startsWith('export '))
+      .map(line => {
+        const match = /^export ([A-Z_]+)="(.*)"$/.exec(line);
+        assert.ok(match, line);
+        return [match[1], match[2]];
+      }));
+    assert.equal(activated.CAREER_OPS_PROFILES, join(dir, 'profiles.yml'));
+    assert.equal(activated.CAREER_OPS_PROFILE_STORE_ROOT, dir);
+    const selectedEnv = { ...env, ...activated };
+
+    // Switching in the same shell must NOT create a nested registry or root.
+    const bob = runCli(['env', 'bob', 'react'], selectedEnv);
+    assert.equal(bob.status, 0, bob.stderr);
+    assert.ok(bob.stdout.includes('career-ops-bob-react'));
+    assert.ok(!bob.stdout.includes('alice/react/data/profiles'));
+    const list = runCli(['list', '--json'], selectedEnv);
+    assert.equal(list.status, 0, list.stderr);
+    const listed = JSON.parse(list.stdout).profiles.map(p => p.profile);
+    assert.deepEqual(listed, ['alice', 'bob']);
+
+    assert.equal(readFileSync(join(aliceRoot, 'cv.md'), 'utf8'), '# CV for Alice only\n');
+    assert.equal(readFileSync(join(bobRoot, 'cv.md'), 'utf8'), '# CV for Bob only\n');
+    assert.equal(existsSync(join(aliceRoot, 'data', 'profiles')), false);
+    assert.equal(existsSync(join(bobRoot, 'data', 'profiles')), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('custom browser store is stable across manual launch and candidate switching', () => {
+  const { dir, env } = freshRoot();
+  const browserStore = dir + '-browsers';
+  try {
+    for (const person of ['alice', 'bob']) {
+      assert.equal(runCli(['add-profile', person, '--name', person], env).status, 0);
+      assert.equal(runCli(['add-direction', person, 'react', '--name', 'React'], env).status, 0);
+    }
+    const configured = { ...env, CAREER_OPS_BROWSER_STORE_ROOT: browserStore };
+    const alice = runCli(['env', 'alice', 'react'], configured);
+    const bob = runCli(['env', 'bob', 'react'], configured);
+    assert.equal(alice.status, 0, alice.stderr);
+    assert.equal(bob.status, 0, bob.stderr);
+    assert.ok(alice.stdout.includes('AUTOPILOT_BROWSER_PROFILE="' + join(browserStore, 'alice', 'react') + '"'));
+    assert.ok(bob.stdout.includes('AUTOPILOT_BROWSER_PROFILE="' + join(browserStore, 'bob', 'react') + '"'));
+    assert.ok(alice.stdout.includes('PLAYWRIGHT_CLI_SESSION="career-ops-alice-react"'));
+    const launch = runCli(['launch', 'alice', 'react'], configured);
+    assert.equal(launch.status, 0, launch.stderr);
+    assert.ok(launch.stdout.includes('--profile="' + join(browserStore, 'alice', 'react') + '"'));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

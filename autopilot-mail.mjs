@@ -3,6 +3,9 @@
 // No inbox dump, no state changes, no persistent verification secrets.
 import 'dotenv/config';
 import { Buffer } from 'node:buffer';
+import { readFileSync } from 'node:fs';
+import * as yaml from 'js-yaml';
+import { getProfilePath } from './path-resolver.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { isAuthenticEmail } from './plugins/gmail/_helpers.mjs';
 
@@ -103,6 +106,29 @@ async function accessToken(env, fetchFn = fetch) {
   return data.access_token;
 }
 
+/** The mailbox must belong to this direction's configured candidate. */
+export function assertCandidateMailbox(candidateEmail, gmailEmail) {
+  const expected = String(candidateEmail || '').trim().toLowerCase();
+  const actual = String(gmailEmail || '').trim().toLowerCase();
+  if (!expected || !actual || expected !== actual) {
+    // Do not include private email addresses or tokens in error/log strings.
+    throw new Error('Gmail OAuth mailbox does not match this candidate profile');
+  }
+  return true;
+}
+
+function configuredCandidateEmail() {
+  let profile;
+  try {
+    profile = yaml.load(readFileSync(getProfilePath(), 'utf8'));
+  } catch {
+    throw new Error('candidate profile is required for Gmail OTP access');
+  }
+  const email = profile?.candidate?.email;
+  if (!email || typeof email !== 'string') throw new Error('candidate email is missing from active profile');
+  return email;
+}
+
 async function gmailJson(token, route, fetchFn) {
   const res = await fetchFn(API + route, { headers: { Authorization: 'Bearer ' + token } });
   if (!res.ok) throw new Error('Gmail request failed: HTTP ' + res.status);
@@ -128,10 +154,10 @@ export async function findVerification({ token, domain, urlHost = null, since, f
 export async function main(argv = process.argv.slice(2), env = process.env) {
   const opts = parseMailArgs(argv);
   const token = await accessToken(env);
+  const mailbox = await gmailJson(token, '/profile', fetch);
+  assertCandidateMailbox(configuredCandidateEmail(), mailbox.emailAddress);
   if (opts.command === 'doctor') {
-    const profile = await gmailJson(token, '/profile', fetch);
-    if (!profile.emailAddress) throw new Error('Gmail profile lacks an email address');
-    console.log('Gmail OAuth ready for inbox reads. Mailbox identity verified.');
+    console.log('Gmail OAuth ready for this candidate. Mailbox identity verified.');
     return;
   }
   const deadline = Date.now() + opts.timeout * 1000;

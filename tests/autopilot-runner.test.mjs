@@ -45,14 +45,26 @@ test('worker instruction requires evidence and never uses HH Ops', () => {
 
 test('browser must open a real named session and snapshot BEFORE processing jobs', () => {
   const calls = [];
-  const mockedRun = (_binary, args) => { calls.push(args); return { status: 0 }; };
+  const mockedRun = (_binary, args) => {
+    calls.push(args);
+    return { status: calls.length === 1 ? 1 : 0 }; // no existing browser
+  };
   const info = assertBrowserReady({ headless: true, run: mockedRun });
   assert.equal(info.session, 'career-ops-worker-0');
-  assert.equal(calls.length, 2);
-  assert.ok(calls[0].includes('open'));
-  assert.ok(calls[0].includes('about:blank'));
-  assert.ok(calls[0].some(s => String(s).startsWith('--profile=')));
-  assert.equal(calls[1].at(-1), 'snapshot');
+  assert.equal(info.reused, false);
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0].at(-1), 'snapshot');
+  assert.ok(calls[1].includes('open'));
+  assert.ok(calls[1].includes('about:blank'));
+  assert.ok(calls[1].some(s => String(s).startsWith('--profile=')));
+  assert.equal(calls[2].at(-1), 'snapshot');
+  const reattach = [];
+  const reopened = assertBrowserReady({ run: (_binary, args) => {
+    reattach.push(args); return { status: 0 }; // signed-in session still open
+  } });
+  assert.equal(reopened.reused, true);
+  assert.equal(reattach.length, 1);
+  assert.equal(reattach[0].at(-1), 'snapshot');
   assert.throws(() => assertBrowserReady({ headless: true, run: () => ({status: 1}) }), /browser startup\/snapshot failed/);
 });
 
@@ -95,7 +107,7 @@ test('unattended browser defaults to headless Chromium without a display', () =>
     delete process.env.AUTOPILOT_BROWSER_HEADED;
     delete process.env.AUTOPILOT_BROWSER_HEADLESS;
     const calls = [];
-    const run = (_bin, args) => { calls.push(args); return { status: 0 }; };
+    const run = (_bin, args) => { calls.push(args); return { status: args.at(-1) === 'snapshot' && calls.length % 3 === 1 ? 1 : 0 }; };
     const result = assertBrowserReady({ run });
     assert.equal(result.headless, true);
     assert.ok(!calls.flat().includes('--headed'));

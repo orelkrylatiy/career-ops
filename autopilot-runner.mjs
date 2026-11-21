@@ -11,6 +11,8 @@ import { cmdNext, cmdPreflight, cmdReport, cmdRun } from './autopilot.mjs';
 import { getJob, statusCounts } from './autopilot-db.mjs';
 import { auditLog } from './autopilot-log.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
+import { loadProfiles, profileStoreRoot } from './lib/profile-registry.mjs';
+import { assertIsolatedAutopilotContext } from './lib/profile-isolation.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -112,20 +114,21 @@ export function assertBrowserReady({ headless = process.env.AUTOPILOT_BROWSER_HE
   if (!/^[a-z0-9_.-]{1,80}$/i.test(session)) throw new Error('invalid browser session identifier');
   const profile = process.env.AUTOPILOT_BROWSER_PROFILE || path.join(DATA_ROOT, 'data', 'browser-profile');
   mkdirSync(path.dirname(profile), { recursive: true });
-  const call = (args) => {
-    const res = run(process.execPath, [binary, 'cli', '-s=' + session, ...args], {
-      cwd: ROOT, encoding: 'utf8', shell: false, windowsHide: true,
-      timeout: 60_000, maxBuffer: 2 * 1024 * 1024,
-    });
-    if (res.error || res.status !== 0) {
-      const reason = res.error?.code === 'ETIMEDOUT' ? 'TIMEOUT' : 'CLI_FAILED';
-      throw new Error('browser startup/snapshot failed [' + reason + '] (check Chromium display/session/profile)');
-    }
-    return res;
-  };
-  call(['open', 'about:blank', '--profile=' + profile, ...(headless ? [] : ['--headed'])]);
-  call(['snapshot']);
-  return { session, headless };
+  const invoke = (args) => run(process.execPath, [binary, 'cli', '-s=' + session, ...args], {
+    cwd: ROOT, encoding: 'utf8', shell: false, windowsHide: true,
+    timeout: 60_000, maxBuffer: 2 * 1024 * 1024,
+  });
+  const good = (result) => !result.error && result.status === 0;
+  // Reuse an already-open signed-in browser instead of navigating it to
+  // about:blank or starting another process against the locked user-data dir.
+  const existing = invoke(['snapshot']);
+  if (good(existing)) return { session, headless, reused: true };
+  const started = invoke(['open', 'about:blank', '--profile=' + profile,
+    ...(headless ? [] : ['--headed'])]);
+  if (!good(started) || !good(invoke(['snapshot']))) {
+    throw new Error('browser startup/snapshot failed [CLI_FAILED] (check Chromium display/session/profile)');
+  }
+  return { session, headless, reused: false };
 }
 
 export function workerPrompt(job, owner) {
@@ -244,7 +247,10 @@ export async function main(argv = process.argv.slice(2)) {
       return;
     }
     if (process.env.AUTOPILOT_LIVE !== '1') throw new Error('campaign paused: live application requires AUTOPILOT_LIVE=1; use npm run autopilot for a safe dry-run');
-    if (!process.env.CAREER_OPS_ROOT && !process.env.CAREER_OPS_DATA_DIR) throw new Error('select explicit CAREER_OPS_ROOT for the active React/Next.js/Vue direction (node profile.mjs env)');
+    assertIsolatedAutopilotContext({
+      env: process.env, dataRoot: DATA_ROOT, storeRoot: profileStoreRoot(),
+      registry: loadProfiles(), codeRoot: ROOT,
+    });
     if (!cmdPreflight()) throw new Error('preflight failed');
     agent = resolveAgent(opts.agent);
     // --version does not prove the coding CLI is authenticated or has model

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseMailArgs, matchesDomain, decodeMime, extractVerification, findVerification, isVerifiedGmailSender } from '../autopilot-mail.mjs';
+import { parseMailArgs, matchesDomain, decodeMime, extractVerification, findVerification, isVerifiedGmailSender, assertCandidateMailbox } from '../autopilot-mail.mjs';
 
 test('verification mailbox search requires recent time and a validated domain', () => {
   const now = Math.floor(Date.now()/1000);
@@ -49,4 +49,10 @@ test('rejects forged or unaligned Authentication-Results on OTP messages', () =>
   assert.equal(isVerifiedGmailSender(headers, 'example.org'), false);
   headers[1].value = 'mx.google.com; dmarc=pass header.from=example.org';
   assert.equal(isVerifiedGmailSender(headers, 'example.org'), true);
+});
+
+test('OTP reader rejects a mailbox belonging to another candidate', () => {
+  assert.equal(assertCandidateMailbox('alice@example.org', 'ALICE@example.org'), true);
+  assert.throws(() => assertCandidateMailbox('alice@example.org', 'bob@example.org'), /does not match/);
+  assert.throws(() => assertCandidateMailbox('', 'alice@example.org'), /does not match/);
 });

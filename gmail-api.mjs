@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 
 // Local Gmail API transport. OAuth files stay outside the repository.
-// Token storage: ~/.mail (shared local directory, not part of this repo).
+// OAuth storage defaults to the selected candidate direction, never a shared home path.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import * as yaml from 'js-yaml';
+import { getCareerOpsRoot, getProfilePath } from './path-resolver.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const MAIL_DIR = path.resolve(process.env.CAREER_OPS_GMAIL_DIR || 'C:/Users/Maxim/.mail');
+const MAIL_DIR = path.resolve(process.env.CAREER_OPS_GMAIL_DIR || path.join(getCareerOpsRoot(), 'data', 'gmail'));
 const CONFIG_FILE = path.join(MAIL_DIR, 'config.json');
 const CREDENTIALS_FILE = path.join(MAIL_DIR, 'credentials.json');
 const TOKEN_FILE = path.join(MAIL_DIR, 'token.json');
@@ -65,17 +67,24 @@ export async function profileEmail() {
   const configured = String(readJson(CONFIG_FILE).email || '').trim().toLowerCase();
   const profile = await api('GET', '/profile');
   const actual = String(profile.emailAddress || '').trim().toLowerCase();
-  if (!actual || (configured && actual !== configured)) {
-    throw new Error(`Gmail sender mismatch: configured=${configured || '(none)'} actual=${actual || '(none)'}`);
+  let candidate;
+  try { candidate = yaml.load(fs.readFileSync(getProfilePath(), 'utf8'))?.candidate?.email; }
+  catch { throw new Error('active candidate profile is required for Gmail access'); }
+  if (!actual || !candidate || actual !== String(candidate).trim().toLowerCase() || (configured && actual !== configured)) {
+    throw new Error('Gmail mailbox does not match the active candidate identity');
   }
   return actual;
 }
 
 export async function search(query, maxResults = 20) {
+  await profileEmail(); // never read another candidate's inbox
   return api('GET', `/messages?${new URLSearchParams({q: query, maxResults: String(maxResults)})}`);
 }
 
-export async function readMessage(id) { return api('GET', `/messages/${encodeURIComponent(id)}`); }
+export async function readMessage(id) {
+  await profileEmail();
+  return api('GET', `/messages/${encodeURIComponent(id)}`);
+}
 
 export async function send({to, subject, body}) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) throw new Error('Invalid recipient email');
