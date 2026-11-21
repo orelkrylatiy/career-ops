@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRunnerArgs, resolveAgent, agentCommand, platformCommand, assertBrowserReady, safeJobId, workerPrompt, workerEnvironment, detectBlockingChallenge } from '../autopilot-runner.mjs';
+import { parseRunnerArgs, resolveAgent, agentCommand, assertBrowserReady, safeJobId, workerPrompt, workerEnvironment, detectBlockingChallenge } from '../autopilot-runner.mjs';
 
 test('runner defaults to real autonomous mode and accepts bounded options', () => {
   assert.equal(parseRunnerArgs([]).dryRun, false);
@@ -53,21 +53,16 @@ test('browser must open a real named session and snapshot BEFORE processing jobs
   assert.ok(calls[0].includes('about:blank'));
   assert.ok(calls[0].some(s => String(s).startsWith('--profile=')));
   assert.equal(calls[1].at(-1), 'snapshot');
+  assert.ok(info.profile.endsWith('/data/browser-profile'));
+
   assert.throws(() => assertBrowserReady({ headless: true, run: () => ({status: 1}) }), /browser startup\/snapshot failed/);
 });
 
-test('Windows npm CLI shims use encoded argv, never interpolate an untrusted prompt', () => {
-  const prompt = 'Cyrillic: вакансии; & echo ATTACK \"$(touch /tmp/x)\"';
-  const argv = ['-p', prompt, '--permission-mode', 'dontAsk'];
-  const [binary, args] = platformCommand('claude', argv, 'win32');
-  assert.equal(binary, 'powershell.exe');
-  const script = Buffer.from(args.at(-1), 'base64').toString('utf16le');
-  assert.ok(!script.includes(prompt), 'untrusted prompt must not be shell source');
-  const encoded = script.match(/FromBase64String\(\"([^\"]+)\"\)/)?.[1];
-  assert.ok(encoded);
-  assert.deepEqual(JSON.parse(Buffer.from(encoded, 'base64').toString('utf8')), argv);
-  assert.throws(() => platformCommand('not-allowed', [], 'win32'), /unsupported/);
-  assert.deepEqual(platformCommand('claude', argv, 'linux'), ['claude', argv]);
+test('Linux agent execution uses direct argv without a shell', () => {
+  const prompt = 'Cyrillic: вакансии; & echo ATTACK "$(touch /tmp/x)"';
+  const [binary, args] = agentCommand('claude', prompt);
+  assert.equal(binary, 'claude');
+  assert.deepEqual(args, ['-p', prompt, '--permission-mode', 'dontAsk']);
 });
 
 test('agent and verifier share exact Playwright CLI named session', () => {
@@ -75,6 +70,7 @@ test('agent and verifier share exact Playwright CLI named session', () => {
   assert.equal(env.PLAYWRIGHT_CLI_SESSION, 'career-ops-worker-0');
   assert.equal(env.AUTOPILOT_BROWSER_SESSION, env.PLAYWRIGHT_CLI_SESSION);
   assert.equal(env.AUTOPILOT_WORKER_ID, 'worker-1');
+  assert.ok(env.AUTOPILOT_BROWSER_PROFILE.endsWith('/data/browser-profile'));
   assert.throws(() => workerEnvironment('worker-1','run-1','../../other'), /invalid browser session/);
 });
 

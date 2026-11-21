@@ -12,10 +12,9 @@ The worker **does not** run in the ordinary upstream modes. This campaign (30 ne
 
 ## Install and inspect without submissions
 
-Use a compatible Node release (`package.json` requires Node ^22.13.0 or >=23.4.0), Python only if optional Humanizer is configured, and one signed-in agent CLI (Codex, Claude, or OpenCode). Browser interaction uses Playwright CLI and Chromium.
+Use Linux, a compatible Node release (`package.json` requires Node ^22.13.0 or >=23.4.0), Python only if optional Humanizer is configured, and one signed-in agent CLI (Codex, Claude, or OpenCode). Browser interaction uses Playwright CLI and either a selected local browser executable or the CLI default.
 
 ```bash
-git switch rebuild/upstream-2026-11-21
 npm install
 npx playwright install chromium
 npm run lint
@@ -27,6 +26,29 @@ npm run autopilot:dry-run
 ```
 
 Never publish `cv.md`, `config/profile.yml`, browser profiles/cookies, Gmail OAuth tokens, screenshots, or local SQLite files. Do not copy example identity information into real applications.
+
+## Browser binary and saved login (Linux)
+
+```bash
+export AUTOPILOT_BROWSER_EXECUTABLE_PATH=/usr/bin/google-chrome
+# Optional: absolute profile directory, defaults to selected direction's data/browser-profile.
+# export AUTOPILOT_BROWSER_PROFILE=/srv/career-ops/browser-state/react
+eval "$(node profile.mjs env candidate react)"
+node profile.mjs launch candidate react        # prints exact command; no browser started
+# node profile.mjs launch candidate react --run # GUI login only, desktop required
+```
+
+The browser binary and profile directory are **different paths**. The runner
+validates that the configured executable is absolute, exists and is executable.
+It passes `PLAYWRIGHT_MCP_EXECUTABLE_PATH` to Playwright CLI rather than relying
+on the upstream browser-launch helper used for other flows. The upstream
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` is accepted as fallback. If a specified
+binary is unavailable, do not fall back to another. A login saved in the
+persistent Playwright profile is reused in the same direction/session.
+Close/restart a named session after changing profile or browser binary; do not
+reuse a currently open personal Chrome profile. Linux/bash only in this fork's
+autonomous/profile-manager tools. The original upstream `apply` flow remains
+separate and unchanged.
 
 ## Candidate/direction isolation
 

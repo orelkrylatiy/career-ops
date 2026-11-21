@@ -6,7 +6,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -81,17 +81,33 @@ test('env and launch print the isolation recipe: root, worker, session, browser 
     // The root is printed relative to the CODE root (path-resolver resolves
     // relative CAREER_OPS_ROOT values against it) — the temp data root sits
     // elsewhere, so only the tail is stable here.
-    assert.match(bash.stdout, /export CAREER_OPS_ROOT=".*data\/profiles\/maxim\/analyst"/);
-    assert.match(bash.stdout, /export AUTOPILOT_WORKER_ID="maxim-analyst"/);
-    assert.match(bash.stdout, /export AUTOPILOT_BROWSER_SESSION="career-ops-maxim-analyst"/);
-
-    const ps = runCli(['env', 'maxim', 'analyst', '--shell', 'powershell'], env);
-    assert.match(ps.stdout, /\$env:CAREER_OPS_ROOT=".*data\/profiles\/maxim\/analyst"/);
+    assert.match(bash.stdout, /export CAREER_OPS_ROOT='.*data\/profiles\/maxim\/analyst'/);
+    assert.match(bash.stdout, /export AUTOPILOT_WORKER_ID='maxim-analyst'/);
+    assert.match(bash.stdout, /export AUTOPILOT_BROWSER_SESSION='career-ops-maxim-analyst'/);
+    assert.match(bash.stdout, /export PLAYWRIGHT_CLI_SESSION='career-ops-maxim-analyst'/);
+    assert.match(bash.stdout, /export AUTOPILOT_BROWSER_PROFILE='.*data\/profiles\/maxim\/analyst\/data\/browser-profile'/);
+    assert.notEqual(runCli(['env', 'maxim', 'analyst', '--shell', 'powershell'], env).status, 0);
 
     const launch = runCli(['launch', 'maxim', 'analyst'], env);
     assert.equal(launch.status, 0, launch.stderr);
     assert.match(launch.stdout, /npx playwright cli -s=career-ops-maxim-analyst /);
-    assert.match(launch.stdout, /--profile=".*data\/profiles\/maxim\/analyst\/data\/browser-profile"/);
+    assert.match(launch.stdout, /--profile='.*data\/profiles\/maxim\/analyst\/data\/browser-profile'/);
+
+    const fakeBrowser = join(dir, 'fake-chrome');
+    writeFileSync(fakeBrowser, '#!/bin/sh\\nexit 0\\n');
+    chmodSync(fakeBrowser, 0o700);
+    const selectedEnv = { ...env,
+      AUTOPILOT_BROWSER_EXECUTABLE_PATH: fakeBrowser,
+      AUTOPILOT_BROWSER_PROFILE: 'browser-state' };
+    const selected = runCli(['env', 'maxim', 'analyst', '--json'], selectedEnv);
+    assert.equal(selected.status, 0, selected.stderr);
+    const values = JSON.parse(selected.stdout).env;
+    assert.equal(values.PLAYWRIGHT_MCP_EXECUTABLE_PATH, fakeBrowser);
+    assert.equal(values.AUTOPILOT_BROWSER_PROFILE, join(dir, 'data', 'profiles', 'maxim', 'analyst', 'browser-state'));
+    const customLaunch = runCli(['launch', 'maxim', 'analyst'], selectedEnv);
+    assert.equal(customLaunch.status, 0, customLaunch.stderr);
+    assert.ok(customLaunch.stdout.includes(fakeBrowser));
+    assert.match(customLaunch.stdout, /PLAYWRIGHT_MCP_EXECUTABLE_PATH=/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

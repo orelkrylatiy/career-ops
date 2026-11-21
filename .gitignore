@@ -258,8 +258,10 @@ career-dashboard.exe
 package-lock.json
 !web/package-lock.json
 
-# Playwright MCP server run artifacts (ephemeral, machine-local)
+# Playwright MCP and CLI artifacts may contain screenshots and session data.
 .playwright-mcp/
+.playwright-cli/
+**/.playwright-cli/
 test-results/
 playwright-report/
 

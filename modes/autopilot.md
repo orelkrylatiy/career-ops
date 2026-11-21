@@ -67,20 +67,30 @@ SQLite is authoritative for queue/outcomes; Markdown tracker is the user-facing 
 
 Use Playwright CLI, not `autopilot-browser.mjs` and not generated step files.
 
-For a visible debugging session on a **Linux desktop** (not headless VPS):
+For a visible debugging session on a **Linux desktop** (not a headless VPS):
 
 ~~~bash
-export PLAYWRIGHT_CLI_SESSION=career-ops-worker-0
-npx playwright cli -s=career-ops-worker-0 open "about:blank" \
-  --profile="./data/browser-profile" \
-  --headed
+export AUTOPILOT_BROWSER_EXECUTABLE_PATH=/usr/bin/google-chrome
+eval "$(node profile.mjs env candidate react)"
+node profile.mjs launch candidate react        # inspect exact command
+node profile.mjs launch candidate react --run  # explicitly open headed browser
 ~~~
 
 The autonomous runner itself defaults to **headless Chromium**, so a VPS does not need an X display. Set `AUTOPILOT_BROWSER_HEADED=1` only when using an available graphical session. The CLI example above is for manual debugging, not a prerequisite.
 
 On PowerShell, set the environment variable with the normal PowerShell syntax.
 
-The same named session/profile is reused across applications so cookies, login state, localStorage, tabs, and browser state survive between commands and browser restarts. The default is Playwright-managed Chromium, matching `npx playwright install chromium`; using an installed Chrome channel is optional rather than required. Use Playwright's managed Chromium by default; an explicit `--browser=chrome` is optional only when a machine has a Chrome channel you intentionally want to use.
+The same named session/profile is reused across applications so cookies,
+login state and localStorage survive browser restarts. Set
+`AUTOPILOT_BROWSER_EXECUTABLE_PATH` to an absolute executable path (or the
+upstream-compatible `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`). It is checked before
+the CLI opens; `PLAYWRIGHT_MCP_EXECUTABLE_PATH` makes Playwright use that exact
+binary. Without either setting, the CLI default is used. The persistent
+profile is `AUTOPILOT_BROWSER_PROFILE` or
+`<CAREER_OPS_ROOT>/data/browser-profile`; relative paths use that data root.
+Do not choose an already-running everyday Chrome profile or reuse a different
+candidate's profile. Changing browser/profile requires closing the previously
+named Playwright session first.
 
 Normal browser loop:
 

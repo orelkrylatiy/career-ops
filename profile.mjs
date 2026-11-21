@@ -12,7 +12,7 @@ import { validateFlags, flagValue } from './lib/cli-flags.mjs';
  * Run: node profile.mjs list
  *      node profile.mjs add-profile candidate --name Candidate
  *      node profile.mjs add-direction maxim analyst --name "Data Analyst"
- *      node profile.mjs env maxim analyst            # exports (bash|powershell)
+ *      node profile.mjs env maxim analyst            # Linux/bash exports
  *      node profile.mjs launch maxim analyst         # isolated browser command
  *      node profile.mjs stats [maxim [analyst]]      # per-profile/direction stats
  *      node profile.mjs remove-direction maxim analyst [--purge]
@@ -25,18 +25,19 @@ import {
   existsSync, mkdirSync, copyFileSync, writeFileSync, readFileSync, rmSync,
 } from 'fs';
 import { join, dirname } from 'path';
+import { assertLinux, linuxBrowserSettings, browserCliEnvironment } from './lib/autopilot-browser.mjs';
 import { fileURLToPath } from 'url';
 import { spawnSync } from 'child_process';
 import { isMainModule } from './lib/is-main-module.mjs';
 import {
   loadProfiles, saveProfiles, findProfile, findDirection, isValidId,
-  directionRoot, directionRootRelative, profileRoot, browserProfileDir, workerIdFor, sessionNameFor,
+  directionRoot, directionRootRelative, profileRoot, workerIdFor, sessionNameFor,
 } from './lib/profile-registry.mjs';
 import { computeDirectionStats, aggregateProfileStats } from './lib/profile-stats.mjs';
 
 const CODE_ROOT = dirname(fileURLToPath(import.meta.url));
 
-const VALUE_FLAGS = ['--name', '--shell'];
+const VALUE_FLAGS = ['--name'];
 const KNOWN_FLAGS = [...VALUE_FLAGS, '--purge', '--run', '--json', '--summary', '--help', '-h'];
 
 const USAGE = `Usage:
@@ -45,14 +46,13 @@ const USAGE = `Usage:
   node profile.mjs remove-profile <id> [--purge]
   node profile.mjs add-direction <profile> <id> --name <n>
   node profile.mjs remove-direction <profile> <id> [--purge]
-  node profile.mjs env <profile> <direction> [--shell bash|powershell]
+  node profile.mjs env <profile> <direction>
   node profile.mjs launch <profile> <direction> [--run]
   node profile.mjs stats [<profile> [<direction>]] [--json|--summary]
 
 Flags:
   --name <n>      display name (profile or direction)
   --purge         remove-direction/-profile also deletes the data root
-  --shell <s>     env output flavor: bash (default) or powershell
   --run           launch also starts the browser, not just prints the command
   --json          machine-readable output on stdout (errors included)`;
 
@@ -120,23 +120,42 @@ function createDirectionSkeleton(root, directionName) {
 
 // ── env / launch: the isolated worker recipe ───────────────────────
 
-function envLines(profileId, directionId, shell) {
-  const rootRel = directionRootRelative(profileId, directionId);
-  const vars = [
-    ['CAREER_OPS_ROOT', rootRel],
+function selectedBrowser(profileId, directionId) {
+  return linuxBrowserSettings({ dataRoot: directionRoot(profileId, directionId) });
+}
+
+function envPairs(profileId, directionId) {
+  const browser = selectedBrowser(profileId, directionId);
+  const session = sessionNameFor(profileId, directionId);
+  return [
+    ['CAREER_OPS_ROOT', directionRootRelative(profileId, directionId)],
     ['AUTOPILOT_WORKER_ID', workerIdFor(profileId, directionId)],
-    ['AUTOPILOT_BROWSER_SESSION', sessionNameFor(profileId, directionId)],
+    ['AUTOPILOT_BROWSER_SESSION', session],
+    ['PLAYWRIGHT_CLI_SESSION', session],
+    ['AUTOPILOT_BROWSER_PROFILE', browser.profileDir],
+    ...(browser.executablePath
+      ? [['AUTOPILOT_BROWSER_EXECUTABLE_PATH', browser.executablePath],
+        ['PLAYWRIGHT_MCP_EXECUTABLE_PATH', browser.executablePath]]
+      : []),
   ];
-  if (shell === 'powershell') return vars.map(([k, v]) => `$env:${k}="${v}"`);
-  return vars.map(([k, v]) => `export ${k}="${v}"`);
+}
+
+function quoteBash(value) {
+  return "'" + String(value).replace(/'/g, "'\\''") + "'";
+}
+
+function envLines(profileId, directionId) {
+  return envPairs(profileId, directionId).map(([key, value]) => `export ${key}=${quoteBash(value)}`);
 }
 
 function launchCommand(profileId, directionId) {
-  const profileRel = [directionRootRelative(profileId, directionId), 'data', 'browser-profile'].join('/');
-  return 'npx playwright cli'
+  const vars = envPairs(profileId, directionId);
+  const profile = selectedBrowser(profileId, directionId).profileDir;
+  const envPrefix = vars.map(([key, value]) => `${key}=${quoteBash(value)}`).join(' ');
+  return envPrefix + ' npx playwright cli'
     + ` -s=${sessionNameFor(profileId, directionId)}`
-    + ' open "about:blank"'
-    + ` --profile="${profileRel}"`
+    + ' open about:blank'
+    + ` --profile=${quoteBash(profile)}`
     + ' --headed';
 }
 
@@ -273,7 +292,7 @@ function cmdAddDirection(args) {
   console.log(`Skeleton: ${files.join(', ')}`);
   console.log('');
   console.log('Run everything for this direction with its env applied:');
-  console.log(envLines(profileId, id, 'bash').map((l) => `  ${l}`).join('\n'));
+  console.log(envLines(profileId, id).map((l) => `  ${l}`).join('\n'));
   console.log('');
   console.log('Open its isolated browser (own cookies/profile):');
   console.log(`  ${launchCommand(profileId, id)}`);
@@ -308,21 +327,15 @@ function cmdEnv(args) {
   if (!profile) fail(`no profile "${profileId}"`, { json });
   const direction = findDirection(profile, directionId ?? '');
   if (!direction) fail(`no direction "${directionId}" in profile "${profileId}"`, { json });
-  const shell = flagValue(args, '--shell') ?? 'bash';
-  if (!['bash', 'powershell'].includes(shell)) fail(`--shell must be bash or powershell, got "${shell}"`, { json });
-
   if (json) {
     console.log(JSON.stringify({
-      profile: profileId, direction: directionId, shell,
-      env: Object.fromEntries(envLines(profileId, directionId, 'bash').map((l) => {
-        const [, k, v] = l.match(/^export ([A-Z_]+)="(.*)"$/);
-        return [k, v];
-      })),
+      profile: profileId, direction: directionId, shell: 'bash',
+      env: Object.fromEntries(envPairs(profileId, directionId)),
     }, null, 2));
     return;
   }
   console.log(`# direction: ${profileId}/${directionId} (${direction.name})`);
-  for (const line of envLines(profileId, directionId, shell)) console.log(line);
+  for (const line of envLines(profileId, directionId)) console.log(line);
 }
 
 function cmdLaunch(args) {
@@ -335,19 +348,22 @@ function cmdLaunch(args) {
   const command = launchCommand(profileId, directionId);
 
   if (json) {
-    console.log(JSON.stringify({ profile: profileId, direction: directionId, command, env: envLines(profileId, directionId, 'bash') }, null, 2));
+    console.log(JSON.stringify({ profile: profileId, direction: directionId, command, env: envLines(profileId, directionId) }, null, 2));
     return;
   }
   console.log('# Apply the direction env first (verifier + autopilot attach by these):');
-  for (const line of envLines(profileId, directionId, 'bash')) console.log(line);
+  for (const line of envLines(profileId, directionId)) console.log(line);
   console.log('');
   console.log(command);
 
   if (args.includes('--run')) {
+    assertLinux();
+    const vars = Object.fromEntries(envPairs(profileId, directionId));
     const result = spawnSync('npx', ['playwright', 'cli', `-s=${sessionNameFor(profileId, directionId)}`, 'open', 'about:blank',
-      `--profile=${join(browserProfileDir(directionRoot(profileId, directionId)))}`, '--headed'],
-    { shell: process.platform === 'win32', stdio: 'inherit' });
-    process.exit(result.status ?? 0);
+      `--profile=${vars.AUTOPILOT_BROWSER_PROFILE}`, '--headed'],
+    { shell: false, stdio: 'inherit', env: { ...browserCliEnvironment({ dataRoot: directionRoot(profileId, directionId) }), ...vars } });
+    if (result.error) throw result.error;
+    process.exit(result.status ?? 1);
   }
 }
 

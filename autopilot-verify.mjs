@@ -23,12 +23,12 @@ import { normalizeUrlKey } from './autopilot-db.mjs';
 import { auditLog } from './autopilot-log.mjs';
 import { assertPublicApplicationUrl } from './autopilot-url-policy.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
+import { linuxBrowserSettings, browserCliEnvironment } from './lib/autopilot-browser.mjs';
 
 const DATA_ROOT = getCareerOpsRoot();
 export const EVIDENCE_ROOT = path.join(DATA_ROOT, 'data', 'autopilot', 'evidence');
 const DEFAULT_SESSION = process.env.AUTOPILOT_BROWSER_SESSION || 'career-ops-worker-0';
-const DEFAULT_PROFILE = process.env.AUTOPILOT_BROWSER_PROFILE
-  || path.join(DATA_ROOT, 'data', 'browser-profile');
+const DEFAULT_PROFILE = linuxBrowserSettings({ dataRoot: DATA_ROOT }).profileDir;
 const require = createRequire(import.meta.url);
 let playwrightCliPath = null;
 
@@ -104,6 +104,7 @@ function runLocalPlaywright(args, { timeout = 30_000, allowFailure = false } = {
   const res = spawnSync(process.execPath, [cli, ...args], {
     encoding: 'utf8',
     shell: false,
+    env: browserCliEnvironment({ dataRoot: DATA_ROOT }),
     timeout,
     maxBuffer: 8 * 1024 * 1024,
   });

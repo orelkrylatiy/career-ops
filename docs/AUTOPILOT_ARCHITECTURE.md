@@ -163,11 +163,16 @@ One initial worker should use:
 ~~~text
 session: career-ops-worker-0
 profile: data/browser-profile
-browser: Playwright-managed Chromium (default; Chrome channel optional)
+browser: explicit AUTOPILOT_BROWSER_EXECUTABLE_PATH (Linux; CLI default if unset)
 headed: no by default on VPS; AUTOPILOT_BROWSER_HEADED=1 for visible debugging
 ~~~
 
-The profile is user/runtime data and must never be committed.
+The profile is user/runtime data and must never be committed. The Linux-only
+resolver `lib/autopilot-browser.mjs` is shared by `profile.mjs`,
+`autopilot-runner.mjs`, and `autopilot-verify.mjs`. It exports the exact
+executable into `PLAYWRIGHT_MCP_EXECUTABLE_PATH`; invalid explicit paths are
+fatal instead of silently selecting a different browser. The upstream
+`lib/browser-launch.mjs` stays untouched.
 
 The worker processes many jobs in the same browser session. Parallel workers, when added later, must use separate sessions/profiles.
 
