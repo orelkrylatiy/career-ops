@@ -2,28 +2,7 @@
 
 <p align="center">The open-source AI job search agent.</p>
 
-<p align="center">
-  <a href="README.md">English</a> |
-  <a href="README.es.md">Español</a> |
-  <a href="README.de.md">Deutsch</a> |
-  <a href="README.fr.md">Français</a> |
-  <a href="README.pt-BR.md">Português (Brasil)</a> |
-  <a href="README.ko-KR.md">한국어</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.cn.md">简体中文</a> |
-  <a href="README.zh-TW.md">繁體中文</a> |
-  <a href="README.ua.md">Українська</a> |
-  <a href="README.ru.md">Русский</a> |
-  <a href="README.pl.md">Polski</a> |
-  <a href="README.da.md">Dansk</a> |
-  <a href="README.nb.md">Norsk (bokmål)</a> |
-  <a href="README.ta.md">தமிழ்</a> |
-  <a href="README.ar.md">العربية</a> |
-  <a href="README.hi.md">हिन्दी</a> |
-  <a href="README.tr.md">Türkçe</a> |
-  <a href="README.vi.md">Tiếng Việt</a> |
-  <a href="README.id.md">Bahasa Indonesia</a>
-</p>
+
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
 
@@ -41,7 +20,7 @@ I was its first user. I got the&nbsp;job. Then&nbsp;I&nbsp;open-&#8288;sourced&n
 
 <p align="center">
 Paste a job. On your machine, it tells you if it's still&nbsp;open and if it&nbsp;fits.<br>
-It tailors your CV and drafts your&nbsp;answers. <strong>You&nbsp;press&nbsp;Submit.</strong>
+It tailors your CV and drafts your&nbsp;answers. <strong>Review and press Submit, or explicitly enable this fork's autonomous mode.</strong>
 </p>
 
 <p align="center">
@@ -94,6 +73,10 @@ It tailors your CV and drafts your&nbsp;answers. <strong>You&nbsp;press&nbsp;Sub
   &nbsp;&nbsp;&nbsp;&nbsp;
   <a href="https://www.producthunt.com/products/santifer-io?utm_source=badge-featured&utm_medium=badge" rel="noopener noreferrer"><img src="docs/press/producthunt.svg" alt="Featured on Product Hunt" width="206" height="54"></a>
 </p>
+
+## Optional autonomous Career Ops extension
+
+The original Career Ops remains review-first by default. This fork adds opt-in autonomous browser applications, Habr Career / GeekJob / SuperJob discovery, multi-direction profiles, permitted text-CAPTCHA attempts and evidence-backed submission receipts. The active campaign is **paused**: `npm run autopilot` is dry-run only. Live applications require explicit reactivation, an exact `CAREER_OPS_ROOT`, and `AUTOPILOT_LIVE=1`. HeadHunter and Telegram are excluded from the autonomous workflow. See [fork rebuild guide](docs/FORK_REBUILD.md) and [autopilot mode](modes/autopilot.md).
 
 ## Your turn
 
