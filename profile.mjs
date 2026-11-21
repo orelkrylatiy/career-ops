@@ -24,13 +24,14 @@ import { validateFlags, flagValue } from './lib/cli-flags.mjs';
 import {
   existsSync, mkdirSync, copyFileSync, writeFileSync, readFileSync, rmSync,
 } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { spawnSync } from 'child_process';
 import { isMainModule } from './lib/is-main-module.mjs';
 import {
   loadProfiles, saveProfiles, findProfile, findDirection, isValidId,
   directionRoot, directionRootRelative, profileRoot, browserProfileDir, workerIdFor, sessionNameFor,
+  profileStoreRoot, resolveRegistryPath,
 } from './lib/profile-registry.mjs';
 import { computeDirectionStats, aggregateProfileStats } from './lib/profile-stats.mjs';
 
@@ -123,6 +124,10 @@ function createDirectionSkeleton(root, directionName) {
 function envLines(profileId, directionId, shell) {
   const rootRel = directionRootRelative(profileId, directionId);
   const vars = [
+    // Keep the manager registry anchored to the candidate store even after
+    // CAREER_OPS_ROOT switches to one selected direction.
+    ['CAREER_OPS_PROFILE_STORE_ROOT', profileStoreRoot()],
+    ['CAREER_OPS_PROFILES', resolve(CODE_ROOT, resolveRegistryPath())],
     ['CAREER_OPS_ROOT', rootRel],
     ['AUTOPILOT_WORKER_ID', workerIdFor(profileId, directionId)],
     ['AUTOPILOT_BROWSER_SESSION', sessionNameFor(profileId, directionId)],
@@ -200,7 +205,7 @@ function cmdStats(registry, args) {
     if (a.funnel) {
       console.log(`  Total directions: ${a.directions} · applications: ${a.funnel.everApplied} · interviews: ${a.funnel.everInterview} · offers: ${a.funnel.everOffer}`);
     } else {
-      console.log(`  Total directions: ${a.directions} ·no data yet`);
+      console.log(`  Total directions: ${a.directions} · no data yet`);
     }
   }
 }
