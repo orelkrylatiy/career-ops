@@ -91,7 +91,19 @@
     "build:dashboard": "node build-dashboard.mjs",
     "serve:dashboard": "cd dashboard && go run .",
     "postinstall": "node -e \"process.exit(['','0','false'].includes((process.env.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD||'').toLowerCase())?1:0)\" || npx playwright install chromium || npx playwright install chromium || node -e \"console.warn('\\ncareer-ops: could not install Playwright Chromium. Everything else is installed; PDF generation and browser checks need it. Run: npx playwright install chromium')\"",
-    "manifesto": "node manifesto.mjs"
+    "manifesto": "node manifesto.mjs",
+    "autopilot": "node autopilot-runner.mjs --dry-run",
+    "autopilot:live": "node autopilot-runner.mjs --no-scan",
+    "autopilot:scan": "node autopilot.mjs",
+    "autopilot:dry-run": "node autopilot-runner.mjs --dry-run",
+    "autopilot:status": "node autopilot.mjs status",
+    "autopilot:preflight": "node autopilot.mjs preflight",
+    "autopilot:captcha:detect": "node captcha-solver.mjs detect",
+    "autopilot:captcha:solve": "node captcha-solver.mjs solve",
+    "autopilot:wide-scan": "node autopilot-scan.mjs",
+    "autopilot:full-scan": "node autopilot-scan.mjs --ats-full --since 14 --include-undated",
+    "autopilot:test": "node --test tests/autopilot-scan.test.mjs tests/autopilot-runner.test.mjs tests/autopilot-verifier.test.mjs tests/autopilot-url-policy.test.mjs tests/autopilot-ranking.test.mjs tests/captcha-solver.test.mjs tests/autopilot-mail.test.mjs tests/autopilot-resume.test.mjs tests/autopilot-db-migration.test.mjs tests/autopilot-report-contract.test.mjs tests/source-registry.test.mjs tests/profile-registry.test.mjs tests/profile-cli.test.mjs tests/profile-stats-data-root.test.mjs tests/providers/ru-ssr-boards.test.mjs",
+    "profile": "node profile.mjs"
   },
   "keywords": [
     "ai",
@@ -122,6 +134,7 @@
     "dotenv": "^18.0.4",
     "js-yaml": "^5.3.0",
     "playwright": "1.65.0",
-    "undici": "^7.30.1"
+    "undici": "^7.30.1",
+    "better-sqlite3": "^13.0.3"
   }
 }

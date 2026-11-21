@@ -2,7 +2,7 @@ name: Autonomous CareerOps integration
 
 on:
   push:
-    branches: ['feat/upstream-1-40-autonomous-20261118']
+    branches: ['rebuild/upstream-2026-11-21', 'main']
   pull_request:
     paths:
       - 'autopilot*'
@@ -27,10 +27,15 @@ jobs:
         with:
           node-version: '24'
       - name: Install without starting real browsers
-        run: npm install --ignore-scripts --no-audit --no-fund
+        run: npm install --no-audit --no-fund
       - name: Check JavaScript syntax
         run: |
           node --check autopilot-scan.mjs
+          node --check profile.mjs
+          node --check source-registry.mjs
+          node --check providers/habr-career.mjs
+          node --check providers/geekjob.mjs
+          node --check providers/superjob.mjs
           node --check autopilot-runner.mjs
           node --check autopilot-mail.mjs
           node --check autopilot-diagnostics.mjs
@@ -48,7 +53,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: npm install --ignore-scripts --no-audit --no-fund
+      - run: npm install --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
       - name: Local fixture only (no external application)
         run: node tests/autopilot-browser-e2e.mjs

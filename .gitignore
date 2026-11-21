@@ -316,3 +316,17 @@ web/out/
 # Regenerate with `npm run harvest:buildlist`.
 buildlist-*.yml
 buildlist-*.yml.progress.json
+
+# Autonomous fork: private multi-profile data, session credentials and generated CVs
+/profiles.yml
+/data/profiles/
+/data/browser-profile/
+/data/autopilot/
+/data/autopilot.db*
+/data/source-registry.db*
+/batch/cv-payloads/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db-shm
+*.db-wal
