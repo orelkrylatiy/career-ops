@@ -143,9 +143,9 @@ function launchCommand(profileId, directionId) {
 // ── stats ──────────────────────────────────────────────────────────
 
 function directionOneLiner(directionId, stats) {
-  if (!stats?.tracker) return `${directionId.padEnd(10)} — нет данных`;
+  if (!stats?.tracker) return `${directionId.padEnd(10)} — no data`;
   const f = stats.funnel ?? {};
-  return `${directionId.padEnd(10)} ${String(stats.tracker.total).padStart(4)} записей · ${f.everApplied ?? 0} откликов · ${f.everInterview ?? 0} интервью · ${f.everOffer ?? 0} офферов`;
+  return `${directionId.padEnd(10)} ${String(stats.tracker.total).padStart(4)} records · ${f.everApplied ?? 0} applications · ${f.everInterview ?? 0} interviews · ${f.everOffer ?? 0} offers`;
 }
 
 function cmdStats(registry, args) {
@@ -161,14 +161,14 @@ function cmdStats(registry, args) {
     if (json) {
       console.log(JSON.stringify({ profile: profileId, direction: directionId, stats }, null, 2));
     } else if (!stats) {
-      console.log(`${profileId}/${directionId}: нет данных (трекер пуст)`);
+      console.log(`${profileId}/${directionId}: no data (empty tracker)`);
     } else {
       const t = stats.tracker;
       const f = stats.funnel;
       console.log(`${profileId}/${directionId} — ${direction.name}`);
-      console.log(`  Записей: ${t.total} · в работе: ${t.activeApps} · ср. скоринг: ${t.avgScore ?? '—'}`);
-      console.log(`  Отклики: ${f.everApplied} · ответы: ${f.everResponded} (${f.responseRate}%) · интервью: ${f.everInterview} (${f.interviewRate}%) · офферы: ${f.everOffer}`);
-      if (stats.runs) console.log(`  Сканы: ${stats.runs.totalRuns} прогонов · найдено/прогон: ${stats.runs.avgFoundPerRun}`);
+      console.log(`  Records: ${t.total} · active: ${t.activeApps} · average score: ${t.avgScore ?? '—'}`);
+      console.log(`  Applications: ${f.everApplied} · responses: ${f.everResponded} (${f.responseRate}%) · interviews: ${f.everInterview} (${f.interviewRate}%) · offers: ${f.everOffer}`);
+      if (stats.runs) console.log(`  Scans: ${stats.runs.totalRuns} runs · average found/run: ${stats.runs.avgFoundPerRun}`);
     }
     return;
   }
@@ -198,9 +198,9 @@ function cmdStats(registry, args) {
     p.directions.forEach((d, i) => console.log(`  ${directionOneLiner(d.id, { tracker: { total: d.total }, funnel: { everApplied: d.applied } })}`));
     const a = p.aggregate;
     if (a.funnel) {
-      console.log(`  Σ направлений: ${a.directions} · откликов: ${a.funnel.everApplied} · интервью: ${a.funnel.everInterview} · офферов: ${a.funnel.everOffer}`);
+      console.log(`  Total directions: ${a.directions} · applications: ${a.funnel.everApplied} · interviews: ${a.funnel.everInterview} · offers: ${a.funnel.everOffer}`);
     } else {
-      console.log(`  Σ направлений: ${a.directions} · данных пока нет`);
+      console.log(`  Total directions: ${a.directions} ·no data yet`);
     }
   }
 }
