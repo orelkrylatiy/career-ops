@@ -123,6 +123,9 @@ function createDirectionSkeleton(root, directionName) {
 
 function envLines(profileId, directionId, shell) {
   const rootRel = directionRootRelative(profileId, directionId);
+  const selectedRoot = directionRoot(profileId, directionId);
+  const browserDir = browserProfileDir(selectedRoot, profileId, directionId);
+  const session = sessionNameFor(profileId, directionId);
   const vars = [
     // Keep the manager registry anchored to the candidate store even after
     // CAREER_OPS_ROOT switches to one selected direction.
@@ -130,18 +133,24 @@ function envLines(profileId, directionId, shell) {
     ['CAREER_OPS_PROFILES', resolve(CODE_ROOT, resolveRegistryPath())],
     ['CAREER_OPS_ROOT', rootRel],
     ['AUTOPILOT_WORKER_ID', workerIdFor(profileId, directionId)],
-    ['AUTOPILOT_BROWSER_SESSION', sessionNameFor(profileId, directionId)],
+    ['AUTOPILOT_BROWSER_SESSION', session],
+    ['PLAYWRIGHT_CLI_SESSION', session],
+    ['AUTOPILOT_BROWSER_PROFILE', browserDir],
   ];
+  if (process.env.CAREER_OPS_BROWSER_STORE_ROOT?.trim()) {
+    vars.unshift(['CAREER_OPS_BROWSER_STORE_ROOT',
+      resolve(CODE_ROOT, process.env.CAREER_OPS_BROWSER_STORE_ROOT)]);
+  }
   if (shell === 'powershell') return vars.map(([k, v]) => `$env:${k}="${v}"`);
   return vars.map(([k, v]) => `export ${k}="${v}"`);
 }
 
 function launchCommand(profileId, directionId) {
-  const profileRel = [directionRootRelative(profileId, directionId), 'data', 'browser-profile'].join('/');
+  const profilePath = browserProfileDir(directionRoot(profileId, directionId), profileId, directionId);
   return 'npx playwright cli'
     + ` -s=${sessionNameFor(profileId, directionId)}`
     + ' open "about:blank"'
-    + ` --profile="${profileRel}"`
+    + ` --profile="${profilePath}"`
     + ' --headed';
 }
 
@@ -350,7 +359,7 @@ function cmdLaunch(args) {
 
   if (args.includes('--run')) {
     const result = spawnSync('npx', ['playwright', 'cli', `-s=${sessionNameFor(profileId, directionId)}`, 'open', 'about:blank',
-      `--profile=${join(browserProfileDir(directionRoot(profileId, directionId)))}`, '--headed'],
+      `--profile=${browserProfileDir(directionRoot(profileId, directionId), profileId, directionId)}`, '--headed'],
     { shell: process.platform === 'win32', stdio: 'inherit' });
     process.exit(result.status ?? 0);
   }
