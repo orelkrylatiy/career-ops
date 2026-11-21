@@ -38,7 +38,8 @@ test('worker instruction requires evidence and never uses HH Ops', () => {
   assert.match(instruction, /autopilot-verify.mjs begin/);
   assert.match(instruction, /humanizer-bridge.py/);
   assert.match(instruction, /autopilot-mail.mjs/);
-  assert.match(instruction, /never HeadHunter/);
+  assert.match(instruction, /No HeadHunter or Telegram/);
+  assert.match(instruction, /Never read, run or modify tg-ops, hh-ops/);
   assert.equal(safeJobId(job).length, 16);
 });
 

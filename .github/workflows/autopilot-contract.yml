@@ -44,6 +44,10 @@ jobs:
           node --check captcha-solver.mjs
       - name: Test autonomous contracts (no real submissions)
         run: npm run autopilot:test
+      - name: Validate original Career Ops source syntax
+        run: npm run lint
+      - name: Run upstream quick compatibility suite
+        run: node test-all.mjs --quick
 
   browser-smoke:
     runs-on: ubuntu-latest

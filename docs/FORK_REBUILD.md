@@ -48,3 +48,5 @@ The source list is not an evidence of a working application path. Habr, GeekJob 
 English operator documentation: [Autopilot](./AUTOPILOT.md), [CAPTCHA](./CAPTCHA.md), [Regional sources](./REGIONAL_SOURCES.md), and [Profiles](./PROFILES.md).
 
 Review hardening: paused-campaign gate now also protects direct queue claiming/reporting; the browser agent receives writable access specifically to the active data-root, not a sibling repository. The full contract-test script enumerates all fork-specific test modules; its success is not assumed until executed by CI or on the target machine.
+
+Comprehensive integration review: refreshed the English README and operator guides, added direct live-mode guards, and corrected the worker instruction contract to reject HH/Telegram explicitly. The Actions workflow now also calls the original upstream lint and quick tests; no green CI result is available until GitHub Actions actually runs.
