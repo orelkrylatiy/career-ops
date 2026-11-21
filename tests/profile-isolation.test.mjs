@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import { mkdtempSync, mkdirSync, symlinkSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { assertIsolatedAutopilotContext } from '../lib/profile-isolation.mjs';
 
 const base = path.resolve('/virtual', 'candidate-store');
@@ -77,4 +79,29 @@ test('managed direction fails closed when the persistent browser path is missing
   const selected = context('alice', 'react');
   delete selected.env.AUTOPILOT_BROWSER_PROFILE;
   assert.throws(() => assertIsolatedAutopilotContext(selected), /AUTOPILOT_BROWSER_PROFILE missing/);
+});
+
+test('browser profile symlink cannot redirect Alice to Bob cookies', { skip: process.platform === 'win32' }, () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'career-ops-browser-owner-'));
+  try {
+    const alice = path.join(dir, 'data', 'profiles', 'alice', 'react');
+    const bobBrowser = path.join(dir, 'data', 'profiles', 'bob', 'react', 'data', 'browser-profile');
+    const aliceBrowser = path.join(alice, 'data', 'browser-profile');
+    mkdirSync(path.dirname(aliceBrowser), { recursive: true });
+    mkdirSync(bobBrowser, { recursive: true });
+    symlinkSync(bobBrowser, aliceBrowser, 'dir');
+    const candidate = {
+      storeRoot: dir, dataRoot: alice, codeRoot: dir,
+      registry: { profiles: [{ id: 'alice', directions: [{ id: 'react' }] }, { id: 'bob', directions: [{ id: 'react' }] }] },
+      env: {
+        CAREER_OPS_ROOT: alice,
+        AUTOPILOT_WORKER_ID: 'alice-react',
+        AUTOPILOT_BROWSER_SESSION: 'career-ops-alice-react',
+        AUTOPILOT_BROWSER_PROFILE: aliceBrowser,
+      },
+    };
+    assert.throws(() => assertIsolatedAutopilotContext(candidate), /symlink escapes/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import { mkdtempSync, mkdirSync, symlinkSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { browserProfilePath } from '../lib/browser-profile.mjs';
 
 const checkout = path.resolve('/virtual', 'career-ops');
@@ -26,4 +28,21 @@ test('external browser storage inside repo or with invalid identity is rejected'
     env: { CAREER_OPS_BROWSER_STORE_ROOT: path.join(checkout, 'browsers') }, codeRoot: checkout }), /outside the source checkout/);
   assert.throws(() => browserProfilePath({ directionRoot, person: 'alice', direction: '../bob',
     env: { CAREER_OPS_BROWSER_STORE_ROOT: '/virtual/browsers' }, codeRoot: checkout }), /valid candidate\/direction/);
+});
+
+test('browser-store symlink cannot point into checkout through an absent child folder', { skip: process.platform === 'win32' }, () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'career-ops-browser-symlink-'));
+  try {
+    const repo = path.join(dir, 'checkout');
+    mkdirSync(repo);
+    const alias = path.join(dir, 'external-alias');
+    symlinkSync(repo, alias, 'dir');
+    assert.throws(() => browserProfilePath({
+      directionRoot: path.join(repo, 'data', 'profiles', 'alice', 'react'),
+      person: 'alice', direction: 'react', codeRoot: repo,
+      env: { CAREER_OPS_BROWSER_STORE_ROOT: path.join(alias, 'new-browser-store') },
+    }), /outside the source checkout/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
