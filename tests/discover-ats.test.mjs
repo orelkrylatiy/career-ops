@@ -121,6 +121,11 @@ eq('GH careers_url', b1.candidates[0].careers_url, 'https://job-boards.greenhous
 eq('Ashby careers_url', b1.candidates[1].careers_url, 'https://jobs.ashbyhq.com/adyen');
 eq('Lever careers_url', b1.candidates[2].careers_url, 'https://jobs.lever.co/adyen');
 
+const ambiguousName = buildCandidateUrls({ name: '1С-Профиль' });
+eq('ambiguous name-derived slug probes no ATS', ambiguousName.candidates.length, 0);
+ok('ambiguous name-derived slug is reported for review', ambiguousName.unsupported.includes('ambiguous-derived-slug'));
+eq('explicit slug permits numeric company name', buildCandidateUrls({ name: '1С-Профиль', slug: '1c-profile' }).candidates.length > 0, true);
+
 const b2 = buildCandidateUrls({ name: 'X', slug: 'bad/slug' });
 eq('unsafe slug builds NO candidate URLs (SSRF guard)', b2.candidates.length, 0);
 eq('unsafe slug records every vendor as skipped', b2.skipped.length, b1.candidates.length);

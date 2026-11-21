@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -34,6 +35,18 @@ ASSISTANT_ROLES = {"assistant", "me", "bot", "seller", "agent", "я", "бот"}
 MESSAGE_TYPES = ["outreach", "application", "chat_reply", "follow_up", "scheduling", "objection"]
 
 ROOT = Path(__file__).resolve().parent
+
+
+def _default_voice_path() -> Path:
+    configured_root = os.environ.get("CAREER_OPS_ROOT")
+    if configured_root:
+        root = Path(configured_root)
+        if not root.is_absolute():
+            root = ROOT / root
+        profile_voice = root / "voice-dna.md"
+        if profile_voice.is_file():
+            return profile_voice
+    return ROOT / "voice-dna.md"
 
 
 def _emit(payload: dict) -> None:
@@ -195,7 +208,7 @@ def main() -> None:
             pass
 
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--voice-md", default=str(ROOT / "voice-dna.md"))
+    common.add_argument("--voice-md", default=str(_default_voice_path()))
 
     parser = argparse.ArgumentParser(description=__doc__, parents=[common])
     sub = parser.add_subparsers(dest="command", required=True)

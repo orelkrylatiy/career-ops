@@ -9,8 +9,6 @@ import { compileKeyword, compilePositiveKeyword } from './title-keywords.mjs';
 
 const REMOTE_RE = /\b(remote|worldwide|anywhere|distributed|work from home|wfh|удал[её]н|дистанц)\b/i;
 const ONSITE_RE = /\b(hybrid|onsite|on-site|office[- ]based|in office|гибрид|офис)\b/i;
-const RUSSIA_LOCATION_RE = /\b(russia|russian federation|росси(?:я|и|йская|йской)|москва|moscow|санкт[- ]?петербург|saint petersburg|st\.? petersburg)\b/i;
-const RUSSIA_JOB_BOARD_HOSTS = new Set(['career.habr.com']);
 
 function strings(value) {
   return (Array.isArray(value) ? value : [])
@@ -55,8 +53,8 @@ export function scoreJob(job, { titleFilter = {}, profile = {}, nowMs = Date.now
     priority += boost;
     reasons.push(`title_match:+${boost}:${positiveHits.slice(0, 3).join(',')}`);
   } else if (positive.length) {
-    priority -= 5;
-    reasons.push('title_no_match:-5');
+    priority -= 20;
+    reasons.push('title_no_match:-20');
   }
 
   if (negativeHits.length) {
@@ -103,21 +101,12 @@ export function scoreJob(job, { titleFilter = {}, profile = {}, nowMs = Date.now
 
   const host = hostname(job?.url);
 
-  // Product policy for this fork: Russia is the first market, but never an
-  // eligibility gate. An equivalent Russian posting is drained earlier while
-  // every worldwide posting remains queued.
-  const russianMarket = host.endsWith('.ru')
-    || RUSSIA_JOB_BOARD_HOSTS.has(host)
-    || RUSSIA_LOCATION_RE.test(location);
-  if (russianMarket) {
-    priority += 12;
-    reasons.push('russia_market:+12');
-  }
-
   const prioritySources = strings(ap.priority_sources)
     .map((v) => v.toLowerCase().replace(/^\.+|\.+$/g, ''))
     .filter((token) => token && (host === token || host.endsWith(`.${token}`)));
-  if (prioritySources.length) {
+  // A source preference should prioritize relevant roles from that board,
+  // not every unrelated posting it publishes.
+  if (prioritySources.length && positiveHits.length) {
     priority += 15;
     reasons.push(`priority_source:+15:${prioritySources[0]}`);
   }

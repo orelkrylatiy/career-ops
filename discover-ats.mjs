@@ -253,6 +253,16 @@ export function buildCandidateUrls(company, vendors = VENDOR_ORDER) {
   const candidates = [];
   const skipped = [];
   const unsupported = [];
+  // A name-only guess that collapses to a digit or a tiny token is not a
+  // meaningful ATS slug. Probing it can match unrelated demo boards (for
+  // example, Russian names such as "1С-Профиль" collapse to "1", and
+  // Greenhouse's public `/1` demo board contains test postings). Keep the
+  // company unresolved until an official website or an explicit slug is
+  // available instead of treating any jobs on that guessed board as proof.
+  if (!company.slug && slug.replace(/[^a-z]/gi, '').length < 2) {
+    unsupported.push('ambiguous-derived-slug');
+    return { candidates, skipped, unsupported };
+  }
   for (const vendor of vendors) {
     const cfg = VENDORS[vendor];
     if (!cfg) continue;
@@ -742,7 +752,9 @@ export async function resolveCompany(company, { vendors = VENDOR_ORDER, ctx, inc
             // Nothing was probeable: every vendor's own contract rejected this
             // slug's shape, so no board was ruled out — say that, rather than
             // implying we looked and found nothing.
-            : (!candidates.length && unsupported.length)
+              : (unsupported.includes('ambiguous-derived-slug'))
+                ? 'derived ATS slug is too ambiguous for a name-only company record — add an official website or explicit slug'
+              : (!candidates.length && unsupported.length)
               ? `slug "${company.slug || deriveSlug(company.name)}" is not a valid board slug for any probed vendor `
                 + `(${unsupported.join(', ')}) — nothing was probed; fix the \`slug\` field and re-run.`
               // VENDOR_ORDER covers eleven vendors now, so name none of them here.

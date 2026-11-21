@@ -1,3 +1,9 @@
+## Application workflow preferences
+
+- Each run should strive to send as many relevant, verified applications as practical, up to the user's requested total and platform limits. Continue after individual successes or blockers; prioritize actual submissions over lengthy reports or unnecessary resume rewrites. Never inflate counts or retry an ambiguous submission.
+- Include suitable adjacent roles and domains, not only exact job-title matches. Read the full description and select the most relevant existing, factually supported resume for that role. Tailor only when necessary; an exact title, stack, or industry match is not required. Do not mix different candidates' identities or unsupported career facts.
+- Preserve source/company blacklists (including hh.ru), truthful answers, authorization requirements, deduplication, platform limits, and submission verification.
+
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/wordmark-dark.svg"><img src="docs/wordmark-light.svg" alt="career-ops" width="250" height="56"></picture></p>
 
 
