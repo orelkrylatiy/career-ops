@@ -44,3 +44,5 @@ The source list is not an evidence of a working application path. Habr, GeekJob 
 - A worker prompt and safe CLI defaults do NOT constitute a complete filesystem sandbox. For production, run the worker in a restricted OS account/container with only this checkout and the selected data root mounted, no sibling projects.
 - Run GitHub Actions tests and the local fake-form E2E; then verify live site compatibility and saved login state separately before switching main or allowing real applications.
 - Check historical tracked resume payloads for personally identifiable information before public redistribution. Deleting them from a later branch does not erase their earlier Git history.
+
+English operator documentation: [Autopilot](./AUTOPILOT.md), [CAPTCHA](./CAPTCHA.md), [Regional sources](./REGIONAL_SOURCES.md), and [Profiles](./PROFILES.md).

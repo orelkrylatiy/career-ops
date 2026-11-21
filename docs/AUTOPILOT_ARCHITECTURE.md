@@ -2,7 +2,7 @@
 
 > Detailed source/API/browser research: [WEB_AUTOPILOT_RESEARCH.md](./WEB_AUTOPILOT_RESEARCH.md).
 >
-> **Operator documentation (RU):** [AUTOPILOT_RU.md](./AUTOPILOT_RU.md) · [CAPTCHA_RU.md](./CAPTCHA_RU.md) · [RU_SOURCES.md](./RU_SOURCES.md).
+> **Operator documentation:** [Autopilot](./AUTOPILOT.md) · [CAPTCHA](./CAPTCHA.md) · [Regional sources](./REGIONAL_SOURCES.md).
 
 This document describes the fork-specific autonomous web application layer.
 

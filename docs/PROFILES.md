@@ -1,6 +1,6 @@
 # Local profiles and career directions
 
-> Начальное руководство: [AUTOPILOT_RU.md](./AUTOPILOT_RU.md). Этот менеджер не требует Telegram и предназначен для изоляции локальных аккаунтов.
+> Start here: [Autopilot operator guide](./AUTOPILOT.md). This manager isolates local candidate accounts without requiring Telegram.
 
 CareerOps can isolate several candidates or specialization tracks on one
 machine, without Telegram or HeadHunter.
@@ -21,8 +21,12 @@ Apply the emitted environment variables **in the same shell** before running
 eval "$(node profile.mjs env candidate developer)"
 
 npm run autopilot:preflight
-npm run autopilot -- --agent codex --max-jobs 1
-~~~ Each direction receives its own CareerOps data root,
+npm run autopilot:dry-run  # no submissions
+# For an explicitly reactivated campaign only:
+# AUTOPILOT_LIVE=1 npm run autopilot:live -- --agent codex --max-jobs 1
+~~~
+
+Each direction receives its own CareerOps data root,
 profile.yml, portals.yml, SQLite queue, tracker, reports and Playwright browser
 session. Configure the candidate's actual email and truthful CV in that
 direction before running preflight; nothing copies secret credentials from

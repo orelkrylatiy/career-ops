@@ -1,6 +1,6 @@
 # Mode: autopilot — Autonomous Web Applications
 
-> Руководство оператора: [AUTOPILOT_RU.md](../docs/AUTOPILOT_RU.md) · [CAPTCHA_RU.md](../docs/CAPTCHA_RU.md) · [RU_SOURCES.md](../docs/RU_SOURCES.md). This file is the **agent execution contract**, not a beginner setup guide.
+> Operator guides: [Autopilot](../docs/AUTOPILOT.md) · [CAPTCHA](../docs/CAPTCHA.md) · [Regional sources](../docs/REGIONAL_SOURCES.md). This file is the **agent execution contract**, not a beginner setup guide.
 
 This fork-specific mode is an autonomous web job applier. Its job is to keep the funnel wide, claim work from SQLite, and complete real application forms with a coding agent driving **Playwright CLI directly**.
 
