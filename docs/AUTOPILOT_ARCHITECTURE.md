@@ -53,7 +53,7 @@ They should use structured network surfaces first because one request can enumer
 
 **Autopilot state/ranking** answers: what should the worker attempt next?
 
-It does not decide that a weak match is forbidden. Preferences are priority signals.
+Ranking orders candidates; explicit market and eligibility constraints and already submitted applications remain hard gates before the browser worker.
 
 **The LLM/coding agent** answers: how should this candidate apply to this particular job?
 
