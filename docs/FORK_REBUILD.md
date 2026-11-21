@@ -46,3 +46,5 @@ The source list is not an evidence of a working application path. Habr, GeekJob 
 - Check historical tracked resume payloads for personally identifiable information before public redistribution. Deleting them from a later branch does not erase their earlier Git history.
 
 English operator documentation: [Autopilot](./AUTOPILOT.md), [CAPTCHA](./CAPTCHA.md), [Regional sources](./REGIONAL_SOURCES.md), and [Profiles](./PROFILES.md).
+
+Review hardening: paused-campaign gate now also protects direct queue claiming/reporting; the browser agent receives writable access specifically to the active data-root, not a sibling repository. The full contract-test script enumerates all fork-specific test modules; its success is not assumed until executed by CI or on the target machine.

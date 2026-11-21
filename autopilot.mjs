@@ -641,6 +641,11 @@ export function cmdNext({
   leaseMinutes = 120,
   json = false,
 } = {}) {
+  // Also block direct CLI/programmatic claims when the runner is not involved.
+  // Scans/status/preflight remain available during a paused campaign.
+  if (process.env.AUTOPILOT_LIVE !== '1') {
+    throw new Error('campaign paused: claiming applications requires AUTOPILOT_LIVE=1');
+  }
   // Suppress stale queue items immediately before dispatch, not only while scanning.
   const tracker = loadTrackerUrlIndex();
   const profile = loadYamlIfExists(PROFILE_PATH);
@@ -779,6 +784,9 @@ function writeTrackerAdditionTsv(job, note) {
 }
 
 export async function cmdReport(target, outcome, note, channel, metadata = {}) {
+  if (process.env.AUTOPILOT_LIVE !== '1') {
+    throw new Error('campaign paused: application reporting requires AUTOPILOT_LIVE=1');
+  }
   if (!OUTCOMES.includes(outcome)) {
     throw new Error(
       `invalid outcome "${outcome}" — must be one of: ${OUTCOMES.join(' | ')}`,

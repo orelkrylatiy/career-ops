@@ -81,7 +81,14 @@ export function agentCommand(agent, prompt) {
   // Noninteractive CLI sessions are intentionally authorized to operate a
   // dedicated browser profile. Run on a trusted, isolated machine/account.
   if (agent === 'claude') return ['claude', ['-p', prompt, '--permission-mode', 'dontAsk']];
-  if (agent === 'codex') return ['codex', ['--ask-for-approval', 'never', 'exec', '--sandbox', 'workspace-write', prompt]];
+  // Workspace-write blocks broad edits; --add-dir grants access only to the
+  // explicitly selected candidate direction, including its SQLite and browser data.
+  // Browser automation needs outbound network; leaving it disabled would prevent
+  // actual job portals from loading even though the model CLI itself is online.
+  if (agent === 'codex') return ['codex', [
+    '--ask-for-approval', 'never', 'exec', '--sandbox', 'workspace-write',
+    '--add-dir', DATA_ROOT, '--config', 'sandbox_workspace_write.network_access=true', prompt,
+  ]];
   if (agent === 'opencode') return ['opencode', ['run', '--auto', prompt]];
   throw new Error('unsupported agent');
 }

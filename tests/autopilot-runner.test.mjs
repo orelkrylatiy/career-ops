@@ -26,6 +26,9 @@ test('Codex global approval option precedes exec (CLI parsing regression)', () =
   assert.ok(args.indexOf('--sandbox') > args.indexOf('exec'));
   assert.ok(args.includes('workspace-write'));
   assert.ok(!args.includes('danger-full-access'));
+  const dirAt = args.indexOf('--add-dir');
+  assert.ok(dirAt >= 0 && args[dirAt + 1], 'selected profile dir must be writable');
+  assert.ok(args.includes('sandbox_workspace_write.network_access=true'), 'portal access must be explicit');
   assert.equal(args.at(-1), 'apply to an example job');
 });
 
