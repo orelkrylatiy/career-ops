@@ -82,6 +82,11 @@ export function inspectApplicationUrl(raw, {
 
   const host = normalizeHost(url.hostname);
   if (!host) return { ok: false, reason: 'missing_host', url: null };
+  // Hard source exclusions apply even when tests enable private URLs.
+  if (/(^|\.)hh\.(ru|kz|uz)$/.test(host)) return { ok: false, reason: 'headhunter_excluded', url: null };
+  if (['t.me', 'telegram.me', 'telegram.org'].includes(host) || host.endsWith('.telegram.org')) {
+    return { ok: false, reason: 'telegram_excluded', url: null };
+  }
   if (allowPrivate) return { ok: true, reason: null, url: url.href };
 
   if (

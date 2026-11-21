@@ -408,6 +408,20 @@ export async function cmdRun(flags = {}) {
 
       const existingJob = db ? getJob(urlKey) : null;
       const inTracker = tracker.rawSet.has(entry.url) || tracker.keySet.has(urlKey);
+      // Canonical tracker wins even when a previously queued DB row has stale status.
+      if (inTracker) {
+        if (existingJob?.status === 'queued' && !flags.dryRun) {
+          reportOutcome(urlKey, 'skipped', 'already in applications tracker; do not resubmit', null);
+        }
+        decisions.push(`DUP: already submitted in applications tracker | ${label}`);
+        counts.dupTracker++;
+        continue;
+      }
+      if (!matchesStrictMarket(entry, profile)) {
+        decisions.push(`SKIPPED hard: explicit strict_market constraint | ${label}`);
+        counts.hardSkipped++;
+        continue;
+      }
       const blacklistedCompany = blacklist.get(normalizeTextKey(entry.company || '')) || null;
       const host = hostOf(entry.url);
       const blacklistedSource = excludedHosts.find((t) => hostMatchesToken(host, t));
@@ -435,11 +449,6 @@ export async function cmdRun(flags = {}) {
         }
         continue;
       }
-      if (inTracker) {
-        decisions.push(`DUP: URL already submitted in applications tracker | ${label}`);
-        counts.dupTracker++;
-        continue;
-      }
       if (blacklistedCompany) {
         decisions.push(`SKIPPED hard: explicit company blacklist (${blacklistedCompany}) | ${label}`);
         counts.hardSkipped++;
@@ -450,7 +459,7 @@ export async function cmdRun(flags = {}) {
         counts.hardSkipped++;
         continue;
       }
-      // Location and market fit are soft ranking signals in autonomous mode.
+      // Location and market normally rank softly; explicit strict_market is enforced above.
 
       const rank = scoreJob(entry, { titleFilter, profile });
       decisions.push(`QUEUED P${rank.priority} | ${label}`);
@@ -632,7 +641,24 @@ export function cmdNext({
   leaseMinutes = 120,
   json = false,
 } = {}) {
-  const job = claimNextJob(owner, leaseMinutes);
+  // Suppress stale queue items immediately before dispatch, not only while scanning.
+  const tracker = loadTrackerUrlIndex();
+  const profile = loadYamlIfExists(PROFILE_PATH);
+  const excluded = excludedHostTokens(profile);
+  let job = claimNextJob(owner, leaseMinutes);
+  while (job) {
+    const host = hostOf(job.url);
+    const alreadyApplied = tracker.rawSet.has(job.url) || tracker.keySet.has(job.url_key);
+    const destination = inspectApplicationUrl(job.url);
+    const forbiddenSource = excluded.some((token) => hostMatchesToken(host, token));
+    const marketMismatch = !matchesStrictMarket(job, profile);
+    if (!alreadyApplied && destination.ok && !forbiddenSource && !marketMismatch) break;
+    const reason = alreadyApplied ? 'already in applications tracker' :
+      !destination.ok ? `forbidden destination (${destination.reason})` :
+      forbiddenSource ? 'excluded source' : 'strict market mismatch';
+    reportOutcome(job.url_key, 'skipped', reason + '; suppressed before browser worker', null, { claimOwner: owner });
+    job = claimNextJob(owner, leaseMinutes);
+  }
   regenerateQueue();
 
   if (!job) {
