@@ -108,3 +108,5 @@ messages**. An OAuth token for Alice cannot silently read Bob's login codes.
 Each person must configure their own authorized mailbox credentials in their
 own process environment. Gmail aliases and forwarded addresses need
 deliberate configuration rather than an implicit identity bypass.
+
+The optional legacy `gmail-api.mjs` transport also defaults its OAuth files to the selected direction's `data/gmail/` directory. When migrating an older shared local Gmail store, set `CAREER_OPS_GMAIL_DIR` to a candidate-specific directory inside the selected direction only. The API checks the connected Gmail identity before reading or sending; no hard-coded machine-specific mailbox path is used.
