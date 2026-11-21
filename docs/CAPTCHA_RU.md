@@ -93,7 +93,8 @@ export CAPTCHA_VISION_MODEL="<ID модели, поддерживающей из
 
 ~~~bash
 export AUTOPILOT_CAPTCHA_ATTEMPTS=5
-npm run autopilot -- --agent codex --max-jobs 3
+# Только после отдельного возобновления кампании и выбора CAREER_OPS_ROOT
+AUTOPILOT_LIVE=1 npm run autopilot:live -- --agent codex --max-jobs 3
 ~~~
 
 Прямое использование на **уже открытой** сессии Playwright:

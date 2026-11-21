@@ -8,7 +8,7 @@ There is no Telegram transport, no HeadHunter source, and no custom browser-step
 
 ## Main entrypoint and no-HH boundary
 
-The user starts **`npm run autopilot`**. `autopilot-runner.mjs` calls the upstream scanner adapter, refreshes SQLite, claims a job, invokes a coding agent, reconciles the outcome and continues. An individual agent launched by this runner follows the per-job steps below **without spawning another runner or claiming another job**.
+The user first runs **`npm run autopilot` for a safe dry-run**. After a separate explicit restart of the paused campaign, the user may run `AUTOPILOT_LIVE=1 npm run autopilot:live` with a selected `CAREER_OPS_ROOT`; this uses the existing queue first, claims a job, invokes a coding agent, verifies the outcome and continues. An individual agent launched by this runner follows the per-job steps below **without spawning another runner or claiming another job**.
 
 **Never browse or apply through HeadHunter/hh.ru or hh-ops in this project.** They are a separate product. The browser profile must not be reused between unrelated agents/accounts. The historical `apply`/web preview remains outside this autonomous execution path.
 
@@ -34,7 +34,7 @@ This mode ingests live job descriptions, company pages, application forms, ATS r
 
 ## Core principle
 
-Prefer an extra application over silently deleting a potentially useful job.
+Prefer suitable, current, evidence-verified applications over hitting a quota. Do not submit incompatible jobs merely because the queue is wide.
 
 Hard queue stops are intentionally narrow:
 
@@ -44,13 +44,13 @@ Hard queue stops are intentionally narrow:
 - explicit user company blacklist;
 - explicit user source blacklist.
 
-Title, stack, seniority, location, salary, remote/onsite preference, sponsorship uncertainty, and years-of-experience mismatch are **ranking signals**, not admission gates.
+Title, stack, seniority, location, salary, remote/onsite preference, sponsorship uncertainty and experience influence ranking by default. Explicit candidate/market constraints, work eligibility, already-sent applications and clearly incompatible roles prevent actual submission. Never override these just to reach a numerical goal.
 
 ## One autonomous run versus per-job worker
 
-**Entry from the human/scheduler:** `npm run autopilot`, optionally `--max-jobs 3` or `--refresh-registry`. The runner handles preflight, configured + Russian regional + broad ATS scans, SQLite queue refresh, leasing jobs, choosing a CLI, timeouts and JSON reports. Do **not** launch `node autopilot.mjs` alone and expect submissions: that program maintains the queue.
+**Entry from the user/scheduler:** `npm run autopilot` means dry-run only. For a separately reactivated campaign select one profile with `node profile.mjs env ...` and run `AUTOPILOT_LIVE=1 npm run autopilot:live -- --max-jobs 3`. The runner defaults to processing the existing SQLite/pipeline queue without an expensive scan; pass `--scan` for configured/RU sources and `AUTOPILOT_DISCOVERY=full` for additional ATS discovery. Do **not** launch `node autopilot.mjs` alone and expect submissions.
 
-**If the user entered `/career-ops autopilot` inside an already running coding agent:** do not call `npm run autopilot` (which could nest a second coding CLI). Instead follow the former single-agent orchestration: `node autopilot.mjs preflight`, `node autopilot-scan.mjs`, `node autopilot.mjs --no-scan`, then repeat `node autopilot.mjs next --json` and the per-job browser/verification/report steps below until empty. No HeadHunter. The agent is then both orchestrator and worker.
+**If the user entered `/career-ops autopilot` inside another coding agent:** do not start any direct `next`/Submit loop or switch to another project. Run only safe preflight/status/dry-run until the campaign is explicitly reactivated. When authorized, use the dedicated runner (not an ad-hoc nested browser operator) so its safeguards, user-selected direction and verified outcome accounting remain in force.
 
 **Inside a worker spawned by the runner:** the job is **already claimed** by `AUTOPILOT_WORKER_ID`. Do not invoke `npm run autopilot`, do not run discovery, and do not claim another job. Only:
 1. Read the supplied job URL and verify its live JD/company and blacklist. **Never use HH.**
