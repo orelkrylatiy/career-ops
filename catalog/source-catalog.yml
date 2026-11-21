@@ -1,0 +1,300 @@
+version: 1
+verified_at: "2026-09-18"
+policy:
+  # "top 200" is a seed floor, never a funnel ceiling. Directory-backed countries
+  # may yield thousands of companies and the registry keeps all of them.
+  minimum_company_seed_per_country: 200
+  application_cap: null
+  discovery_cap: null
+  language_strategy: page-first
+regions:
+  RU:
+    name: Russia
+    locales: [ru, en]
+    default_locale: ru
+  KZ:
+    name: Kazakhstan
+    locales: [ru, kk, en]
+    default_locale: ru
+  AM:
+    name: Armenia
+    locales: [en, hy, ru]
+    default_locale: en
+  UZ:
+    name: Uzbekistan
+    locales: [uz, ru, en]
+    default_locale: ru
+
+company_directories:
+  - id: ru-cnews500-2025
+    country: RU
+    name: CNews500 2025
+    url: https://www.cnews.ru/reviews/rynok_it_itogi_2025/review_table/1b09b9e5d91b5fec50d07da70048a51301067b34
+    parser: cnews500
+    order: ranking
+    status: live
+    notes: "Current 2025-revenue ranking published 2026-07-28. Keep all 500; first 200 are the priority seed."
+  - id: kz-astanahub-participants
+    country: KZ
+    name: Astana Hub registered participants
+    url: https://astanahub.com/ru/service/techpark/
+    parser: astanahub-participants
+    order: registry
+    status: live
+    active_statuses: ["Активно", "Active", "Белсенді"]
+    notes: "Official participant register. Keep every active participant; 200 is only a minimum seed."
+  - id: kz-astanahub-companies
+    country: KZ
+    name: Astana Hub company directory
+    url: https://astanahub.com/account/company/
+    parser: astanahub-companies
+    order: directory
+    status: live
+    notes: "Broad ecosystem directory (11k+ entries observed); useful beyond formal participants."
+  - id: am-eif-it-guide
+    country: AM
+    name: EIF Guide to Armenian IT Companies
+    url: https://itguide.eif.am/?id=-3
+    parser: eif-it-guide
+    order: directory
+    status: live
+    notes: "EIF directory currently exposes 299 IT companies; ingest all."
+  - id: uz-itpark-residents
+    country: UZ
+    name: IT Park Uzbekistan unified resident register
+    url: https://www.it-park.uz/ru/itpark/residents/itpark-residents/
+    parser: itpark-residents
+    order: registry
+    status: live
+    notes: "Official unified register. Residency changes over time; refresh rather than treating the list as permanent."
+
+job_sources:
+  # Russia
+  - id: ru-habr-career
+    country: RU
+    kind: aggregator
+    name: Хабр Карьера
+    url: https://career.habr.com/vacancies
+    provider: habr-career
+    access: public-ssr-state
+    status: live
+    locales: [ru]
+    search_queries:
+      - frontend
+      - frontend разработчик
+      - react
+      - backend
+      - fullstack
+      - nodejs
+      - ai
+      - llm
+      - machine learning
+      - data engineer
+      - devops
+      - разработчик
+      - программист
+    notes: "Official API is OAuth-gated, but the SSR search page embeds its full state (vacancies.list: id/title/remote/company/date) in an application/json script blob. Verified live 2026-10-21; ?page=N pagination. Discovery only — applying still needs an OAuth session."
+  - id: ru-geekjob
+    country: RU
+    kind: aggregator
+    name: GeekJob
+    url: https://geekjob.ru/json/find/vacancy
+    provider: geekjob
+    access: public-api
+    status: live
+    locales: [ru]
+    search_queries:
+      - разработчик
+      - программист
+      - software
+      - backend
+      - frontend
+      - fullstack
+      - devops
+      - sre
+      - data engineer
+      - data scientist
+      - аналитик
+      - тестировщик
+      - qa
+      - machine learning
+      - искусственный интеллект
+      - информационная безопасность
+      - кибербезопасность
+      - системный администратор
+      - архитектор
+      - product manager
+      - project manager
+      - tech lead
+      - руководитель разработки
+    notes: "Public JSON search API (verified live 2026-10-21): 1-based `page` param, 100 records/page, `pagecount` in the response. Rows carry salary/format flags but no posting body; vacancies resolve to /vacancy/<id>."
+  - id: ru-getmatch
+    country: RU
+    kind: aggregator
+    name: getmatch
+    url: https://getmatch.ru/vacancies
+    access: browser
+    status: live
+    locales: [ru, en]
+  - id: ru-superjob
+    country: RU
+    kind: aggregator
+    name: SuperJob
+    url: https://www.superjob.ru/vacancy/search/
+    provider: superjob
+    access: public-ssr-html
+    status: live
+    locales: [ru]
+    search_queries:
+      - frontend
+      - react
+      - backend
+      - fullstack
+      - nodejs
+      - ai
+      - llm
+      - machine learning
+      - data engineer
+      - devops
+      - разработчик
+    notes: "API requires X-Api-App-Id and window.APP_STATE holds no vacancy entities, but each search page ships a schema.org ItemList of canonical vacancy URLs (~40/page). Provider derives slug titles; no salary/company/date at list level — discovery + title ranking only. Verified live 2026-10-21."
+  # Kazakhstan
+  - id: kz-enbek
+    country: KZ
+    kind: aggregator
+    name: Enbek.kz
+    url: https://www.enbek.kz/ru/search/vacancy
+    access: browser-or-public-html
+    status: live
+    locales: [ru, kk]
+    notes: "Official electronic labour exchange; 130k+ active jobs observed in September 2026."
+  - id: kz-hh
+    country: KZ
+    kind: aggregator
+    name: HeadHunter Kazakhstan
+    url: https://hh.kz/search/vacancy
+    access: oauth-api-or-browser
+    status: live
+    locales: [ru, kk]
+    notes: "Use live /areas lookup; host=hh.kz does not itself constrain vacancies to Kazakhstan."
+  - id: kz-astanahub-vacancies
+    country: KZ
+    kind: ecosystem-board
+    name: Astana Hub Vacancies
+    url: https://astanahub.com/vacancy/
+    access: public-html
+    status: live
+    locales: [ru, kk, en]
+
+  # Armenia
+  - id: am-staff
+    country: AM
+    kind: aggregator
+    name: staff.am
+    url: https://staff.am/jobs/software-development
+    provider: staffam
+    access: public-html
+    status: live
+    locales: [en, hy, ru]
+    paths:
+      - /jobs/software-development
+      - /jobs/data-science
+      - /jobs/information-technologies
+      - /jobs/product-project-management
+    notes: "Market leader; multiple technical categories are scanned and deduplicated."
+  - id: am-careercenter
+    country: AM
+    kind: aggregator
+    name: CareerCenter.am
+    url: https://careercenter.am/en/jobs
+    provider: careercenter-am
+    access: public-html
+    status: live
+    locales: [en, hy, ru]
+
+  # Uzbekistan
+  - id: uz-ishkop
+    country: UZ
+    kind: aggregator
+    name: Ishkop.uz
+    url: https://ishkop.uz/it
+    access: browser
+    status: live
+    locales: [ru, uz]
+    notes: "Wide meta-aggregator. Listing is public, but click-through uses a JS redirect wrapper; keep as browser/search channel rather than emitting unstable application URLs."
+  - id: uz-ish
+    country: UZ
+    kind: aggregator
+    name: ish.uz
+    url: https://ish.uz/ru/jobs
+    provider: ishuz
+    access: public-html
+    status: live
+    locales: [uz, ru]
+  - id: uz-uzjobs
+    country: UZ
+    kind: aggregator
+    name: UzJobs
+    url: https://uzjobs.uz/
+    access: public-html-rss
+    status: live
+    locales: [ru, en]
+  - id: uz-hh
+    country: UZ
+    kind: aggregator
+    name: HeadHunter Uzbekistan
+    url: https://hh.uz/search/vacancy
+    access: oauth-api-or-browser
+    status: live
+    locales: [ru, uz]
+    notes: "Use authorized HH API/browser session and live area IDs; anonymous API search hits CAPTCHA."
+
+global_sources:
+  - id: global-himalayas
+    name: Himalayas
+    provider: himalayas
+    status: live
+  - id: global-jobicy
+    name: Jobicy
+    provider: jobicy
+    status: live
+  - id: global-arbeitnow
+    name: Arbeitnow
+    provider: arbeitnow
+    status: live
+  - id: global-4dayweek
+    name: 4 Day Week
+    provider: 4dayweek
+    status: live
+  - id: global-hn
+    name: Hacker News Who is hiring
+    provider: hackernews
+    status: live
+  - id: global-crypto
+    name: CryptocurrencyJobs
+    provider: cryptocurrencyjobs
+    status: live
+  - id: global-remotive
+    name: Remotive
+    provider: remotive
+    status: live
+  - id: global-remoteok
+    name: RemoteOK
+    provider: remoteok
+    status: live
+  - id: global-workingnomads
+    name: Working Nomads
+    provider: workingnomads
+    status: live
+  - id: global-weworkremotely
+    name: We Work Remotely
+    provider: weworkremotely
+    status: live
+  - id: global-nodesk
+    name: NoDesk
+    provider: nodesk
+    status: live
+  - id: global-jobspresso
+    name: Jobspresso
+    provider: jobspresso
+    status: live
