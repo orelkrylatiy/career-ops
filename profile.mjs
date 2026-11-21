@@ -24,7 +24,8 @@ import { validateFlags, flagValue } from './lib/cli-flags.mjs';
 import {
   existsSync, mkdirSync, copyFileSync, writeFileSync, readFileSync, rmSync,
 } from 'fs';
-import { join, dirname, resolve } from 'path';
+import { join, dirname, resolve, relative, sep, isAbsolute } from 'path';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 import { fileURLToPath } from 'url';
 import { spawnSync } from 'child_process';
 import { isMainModule } from './lib/is-main-module.mjs';
@@ -145,8 +146,22 @@ function envLines(profileId, directionId, shell) {
   return vars.map(([k, v]) => `export ${k}="${v}"`);
 }
 
+function resolvedLaunchBrowserPath(profileId, directionId) {
+  const root = directionRoot(profileId, directionId);
+  const expected = browserProfileDir(root, profileId, directionId);
+  // Respect an explicit per-direction override only when this same direction
+  // is already selected. Ignore stale overrides from another candidate.
+  const chosen = process.env.AUTOPILOT_BROWSER_PROFILE?.trim();
+  if (!chosen || resolve(getCareerOpsRoot()) !== resolve(root)) return expected;
+  const location = resolve(CODE_ROOT, chosen);
+  const rel = relative(root, location);
+  const inside = rel === '' || (rel !== '..' && !rel.startsWith('..' + sep) && !isAbsolute(rel));
+  if (!inside && location !== expected) throw new Error('browser profile path belongs to a different direction');
+  return location;
+}
+
 function launchCommand(profileId, directionId) {
-  const profilePath = browserProfileDir(directionRoot(profileId, directionId), profileId, directionId);
+  const profilePath = resolvedLaunchBrowserPath(profileId, directionId);
   return 'npx playwright cli'
     + ` -s=${sessionNameFor(profileId, directionId)}`
     + ' open "about:blank"'
@@ -359,7 +374,7 @@ function cmdLaunch(args) {
 
   if (args.includes('--run')) {
     const result = spawnSync('npx', ['playwright', 'cli', `-s=${sessionNameFor(profileId, directionId)}`, 'open', 'about:blank',
-      `--profile=${browserProfileDir(directionRoot(profileId, directionId), profileId, directionId)}`, '--headed'],
+      `--profile=${resolvedLaunchBrowserPath(profileId, directionId)}`, '--headed'],
     { shell: process.platform === 'win32', stdio: 'inherit' });
     process.exit(result.status ?? 0);
   }

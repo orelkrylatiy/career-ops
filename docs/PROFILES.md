@@ -164,3 +164,5 @@ runner does **not** implement that as its normal execution mode.
 Reusing the same browser profile normally preserves login until the site
 expires or revokes the session. A separate, approved login may still be
 necessary after that; persistence does not bypass site protections.
+
+When an authorized browser session is already open, the runner checks its snapshot and reuses it rather than opening a second Chromium process or resetting the current page. If it is closed, it opens the configured persistent directory. **Before changing CAREER_OPS_BROWSER_STORE_ROOT or moving profile folders, close that named browser session, update the environment, and relaunch.** Otherwise an already-open session can still reference the old location; do not move an active Chrome profile.

@@ -114,20 +114,21 @@ export function assertBrowserReady({ headless = process.env.AUTOPILOT_BROWSER_HE
   if (!/^[a-z0-9_.-]{1,80}$/i.test(session)) throw new Error('invalid browser session identifier');
   const profile = process.env.AUTOPILOT_BROWSER_PROFILE || path.join(DATA_ROOT, 'data', 'browser-profile');
   mkdirSync(path.dirname(profile), { recursive: true });
-  const call = (args) => {
-    const res = run(process.execPath, [binary, 'cli', '-s=' + session, ...args], {
-      cwd: ROOT, encoding: 'utf8', shell: false, windowsHide: true,
-      timeout: 60_000, maxBuffer: 2 * 1024 * 1024,
-    });
-    if (res.error || res.status !== 0) {
-      const reason = res.error?.code === 'ETIMEDOUT' ? 'TIMEOUT' : 'CLI_FAILED';
-      throw new Error('browser startup/snapshot failed [' + reason + '] (check Chromium display/session/profile)');
-    }
-    return res;
-  };
-  call(['open', 'about:blank', '--profile=' + profile, ...(headless ? [] : ['--headed'])]);
-  call(['snapshot']);
-  return { session, headless };
+  const invoke = (args) => run(process.execPath, [binary, 'cli', '-s=' + session, ...args], {
+    cwd: ROOT, encoding: 'utf8', shell: false, windowsHide: true,
+    timeout: 60_000, maxBuffer: 2 * 1024 * 1024,
+  });
+  const good = (result) => !result.error && result.status === 0;
+  // Reuse an already-open signed-in browser instead of navigating it to
+  // about:blank or starting another process against the locked user-data dir.
+  const existing = invoke(['snapshot']);
+  if (good(existing)) return { session, headless, reused: true };
+  const started = invoke(['open', 'about:blank', '--profile=' + profile,
+    ...(headless ? [] : ['--headed'])]);
+  if (!good(started) || !good(invoke(['snapshot']))) {
+    throw new Error('browser startup/snapshot failed [CLI_FAILED] (check Chromium display/session/profile)');
+  }
+  return { session, headless, reused: false };
 }
 
 export function workerPrompt(job, owner) {
