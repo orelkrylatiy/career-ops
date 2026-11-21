@@ -2,9 +2,9 @@
 
 ## Prerequisites
 
-- An AI coding CLI — [Claude Code](https://claude.ai/code), Gemini CLI, Codex, Qwen Code, OpenCode, GitHub Copilot CLI, Antigravity CLI, or Grok Build CLI (see [Supported CLIs](SUPPORTED_CLIS.md))
-- [Node.js](https://nodejs.org) 18+ and `git` (`npx` ships with Node — the installer refuses to run without them) — note: the Gemini CLI integration requires Node.js 20+
-- (Optional) Go 1.21+ (for the dashboard TUI)
+- An AI coding CLI — [Claude Code](https://claude.ai/code), Codex, Qwen Code, OpenCode, Pi, Oh My Pi, GitHub Copilot CLI, Antigravity CLI, Grok Build CLI, or Hermes Agent (see [Supported CLIs](SUPPORTED_CLIS.md))
+- [Node.js](https://nodejs.org) 22.13+ and `git` (`npx` ships with Node — the installer refuses to run without them). 22.13 is the first release where `node:sqlite`, used by the tracker index (see [tracker](SCRIPTS.md#tracker)), needs no flag
+- (Optional) Go 1.26+ (for the dashboard TUI)
 
 ## Quick Start
 
@@ -17,7 +17,7 @@ isolated cloud VM; it does not have your machine's files or local configuration.
 
 1. Put career-ops in a **private GitHub repository** that your account can
    access. You can use [GitHub Importer](https://docs.github.com/en/migrations/importing-source-code/using-github-importer/importing-a-repository-with-github-importer)
-   with `https://github.com/orelkrylatiy/career-ops.git` as the source. A normal
+   with `https://github.com/career-ops-hq/career-ops.git` as the source. A normal
    fork of this public repository is public, so do not use one for personal
    career data.
 2. Open [claude.ai/code](https://claude.ai/code), connect GitHub, and select the
@@ -44,22 +44,20 @@ browser storage:
 That also means a normal web-session branch push does **not** persist them to
 GitHub: a new cloud session starts from the repository again, without the
 ignored files from the previous VM. Keep a personal workflow in one session
-and move any output you need to secure storage before its environment expires.
-Never force-add these paths. For a durable workspace shared across many
+and move any output you need to secure storage before its environment expires
+([backup patterns](BACKUP_STRATEGIES.md)). Never force-add these paths. For a durable workspace shared across many
 sessions, use the local quick start below.
 
-### Recommended — clone this autonomous fork
+### Recommended — one command
 
 ```bash
-git clone https://github.com/orelkrylatiy/career-ops.git
-cd career-ops
-npm install
-npx playwright install chromium
+npx @santifer/career-ops init
 ```
 
-The public `@santifer/career-ops` npm package installs the upstream project, not this autonomous fork. For this fork, clone the repository directly, then open your AI CLI:
+`npx` ships with Node.js — it runs the installer once without installing anything globally. This clones the latest release into `./career-ops` and installs dependencies. Then move into the workspace and open your AI CLI:
 
 ```bash
+cd career-ops
 claude   # or codex / qwen / opencode / agy / grok
 ```
 
@@ -93,7 +91,7 @@ codex exec "Run career-ops tracker mode and summarize the current statuses."
 <summary>Prefer to clone the repo yourself?</summary>
 
 ```bash
-git clone https://github.com/orelkrylatiy/career-ops.git
+git clone https://github.com/career-ops-hq/career-ops.git
 cd career-ops
 npm install
 ```
@@ -112,7 +110,7 @@ The basic workflow is:
 2. Make one focused change and keep personal data such as `cv.md`, `profile.yml`, applications, and reports out of the commit.
 3. Run the relevant checks; for a broad validation, use `node test-all.mjs --quick`.
 4. Commit and push your branch to your fork.
-5. Open a pull request against `orelkrylatiy/career-ops` and explain what changed and why.
+5. Open a pull request against `career-ops-hq/career-ops` and explain what changed and why.
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for the full contribution guidelines and examples of good first contributions.
 
@@ -123,6 +121,26 @@ PDFs are rendered with a headless Chromium. Install it once per machine:
 ```bash
 npx playwright install chromium
 ```
+
+On NixOS, skip this step: the browsers it downloads can't run there. Use the flake dev shell instead, as described in [NIXOS.md](NIXOS.md).
+
+On macOS releases where Playwright fails to install or launch bundled Chromium (e.g. macOS 12 Monterey), point Playwright to your system Google Chrome installation:
+
+```bash
+export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+```
+
+The same setting applies to every command that launches a browser (scan, liveness checks, `doctor` and the PDF step), and it can go in your shell or in the `.env` of your data root. To let career-ops find an installed browser instead of naming one, set `CAREER_OPS_BROWSER_AUTODETECT=true`: it uses the first browser it finds at its standard install location, in this order: Brave, Chrome, Edge, Chromium on macOS; Brave, Chrome, Chromium, Edge on Linux; Brave, Chrome, Edge on Windows (it does not look for Chromium there, so name it with `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`). Auto-detect is off by default, so a machine where the bundled Chromium works keeps using it, and `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` wins when both are set.
+
+Pages career-ops does not control (job boards, ATS pages, application forms) open in your installed Google Chrome when no browser is configured, because Google patches it faster than Playwright ships Chromium builds, and always with Chromium's sandbox on where it can start. On Linux the sandbox needs either the setuid `chrome-sandbox` helper that Google's Chrome package installs, or unprivileged user namespaces, and it never runs as root; where neither is available, career-ops launches without it and `doctor` warns. If a launch fails with "No usable sandbox", set `CAREER_OPS_BROWSER_SANDBOX=off` in your shell or the data-root `.env` to launch without it, as Playwright does by default; `doctor` warns while it is set.
+
+### Scanning through an outbound proxy
+
+Node's ordinary `fetch()` may ignore `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY` in a proxy-only sandbox. Provider requests can use those variables with `CAREER_OPS_TRUST_PROXY_EGRESS=1 node scan.mjs`. This uses a request-scoped proxy dispatcher; unrelated requests are unaffected, and `NO_PROXY` destinations still use the local private-address guard.
+
+Set this flag **only when the configured proxy itself blocks connections to private, loopback and metadata addresses**. When a proxy resolves the destination remotely, career-ops cannot verify that final address locally; the proxy must enforce that part of the SSRF boundary. Without this explicit trust setting, provider requests keep their normal direct transport and a DNS failure names the proxy setup needed. Proxy URLs containing credentials must use HTTPS, except a loopback proxy (`localhost`, `127.*` or `::1`), where the credentials never leave the machine; credential-free HTTP proxies remain supported. Existing installations keep direct transport after a system update; proxy environment variables alone do not enable it. Before enabling the flag, run `npm install` in the career-ops directory to install the added `undici` dependency. It is loaded only for an opted-in request with a configured proxy, so direct scanning continues to work even before that dependency is installed.
+
+The browser that the scanners, liveness checks and the dashboard's apply session start is different: all of its traffic goes through a local egress filter that refuses private, loopback and cloud-metadata addresses on every connection, redirects and DNS answers included. When `HTTPS_PROXY`, `HTTP_PROXY` or `ALL_PROXY` is set, the filter opens the browser's connections through that proxy, with or without `CAREER_OPS_TRUST_PROXY_EGRESS`, as Chromium does with those variables on Linux. A literal private address is still refused. A name is still checked when it resolves locally; a name that only the proxy can resolve is left to it. `NO_PROXY` destinations connect directly and are fully checked. The filter only chains through `http://` and `https://` proxies, not SOCKS, and the same credentials rule applies.
 
 ## Available Commands
 

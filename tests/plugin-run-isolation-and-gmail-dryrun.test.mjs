@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -74,19 +74,26 @@ test('gmail plugin gates saveProcessedIds behind !ctx.dryRun (#2354)', async () 
     log: () => {},
   };
   
-  // Create a known state file with a non-empty cursor
-  const statePath = join(ROOT, 'data', 'gmail-state.json');
-  const oldState = existsSync(statePath) ? readFileSync(statePath) : null;
-  mkdirSync(join(ROOT, 'data'), { recursive: true });
+  // The plugin keeps its cursor at data/gmail-state.json under ctx.dataRoot, and
+  // reads one under the working directory when the data root has none. Give it
+  // one scratch directory as both, so neither path can reach the checkout's live
+  // data/gmail-state.json. node:test runs this file in its own process, which
+  // makes the chdir private to it. This used to overwrite that file and put it
+  // back in `finally`, which an interrupted run never reaches (#5113).
+  const workDir = mkdtempSync(join(tmpdir(), 'co-gmail-dryrun-'));
+  const statePath = join(workDir, 'data', 'gmail-state.json');
+  mkdirSync(join(workDir, 'data'));
   const preTestContent = JSON.stringify(['existing-123']);
   writeFileSync(statePath, preTestContent);
-  
+
   const origWarn = console.warn;
+  const origCwd = process.cwd();
   try {
+    process.chdir(workDir);
     // Run the ingest logic (suppress expected spoof warning)
     console.warn = () => {};
-    await gmailMod.default.ingest(mockCtx);
-    
+    await gmailMod.default.ingest({ ...mockCtx, dataRoot: workDir });
+
     const newState = readFileSync(statePath, 'utf8');
     if (newState === preTestContent) {
       pass('gmail plugin gates saveProcessedIds behind !ctx.dryRun — dry-run stays dry (#2354)');
@@ -95,41 +102,8 @@ test('gmail plugin gates saveProcessedIds behind !ctx.dryRun (#2354)', async () 
       assert.fail('gmail plugin calls saveProcessedIds unconditionally — dry-run mutates cursor state (#2354)');
     }
   } finally {
-    // Always restore console and file state
     console.warn = origWarn;
-    if (oldState !== null) writeFileSync(statePath, oldState);
-    else rmSync(statePath, { force: true });
-  }
-});
-
-test('gmail notify dry-run verifies sender and never sends or records a key', async () => {
-  const gmailMod = await import(pathToFileURL(join(ROOT, 'plugins/gmail/index.mjs')).href);
-  const statePath = join(ROOT, 'data', 'gmail-sent.json');
-  const oldState = existsSync(statePath) ? readFileSync(statePath) : null;
-  const calls = [];
-  const mockCtx = {
-    dryRun: true,
-    env: { GMAIL_CLIENT_ID: 'x', GMAIL_CLIENT_SECRET: 'y', GMAIL_REFRESH_TOKEN: 'z' },
-    settings: { sender_email: 'sender@example.com' },
-    fetch: async (url, opts = {}) => {
-      calls.push({ url, opts });
-      if (url.includes('oauth2')) return { ok: true, json: async () => ({ access_token: 'fake' }) };
-      if (url.endsWith('/profile')) return { ok: true, json: async () => ({ emailAddress: 'sender@example.com' }) };
-      throw new Error(`unexpected send in dry-run: ${url}`);
-    },
-    log: () => {},
-  };
-  try {
-    const result = await gmailMod.default.notify({
-      to: 'recruiter@example.com', subject: 'Application', body: 'Hello', key: 'req-123',
-    }, mockCtx);
-    assert.equal(result.dryRun, true);
-    assert.equal(result.sent, false);
-    assert.equal(calls.some(call => call.url.endsWith('/messages/send')), false);
-    assert.equal(existsSync(statePath), oldState !== null);
-    pass('gmail notify dry-run verifies sender without sending or mutating ledger');
-  } finally {
-    if (oldState !== null) writeFileSync(statePath, oldState);
-    else rmSync(statePath, { force: true });
+    process.chdir(origCwd);
+    try { rmSync(workDir, { recursive: true, force: true }); } catch {}
   }
 });

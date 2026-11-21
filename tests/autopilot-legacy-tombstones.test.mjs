@@ -1,17 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { sendTelegram } from '../notify-tg.mjs';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 
-test('legacy Telegram shim performs no send', async () => {
-  const out = await sendTelegram('must not leave this process');
-  assert.deepEqual(out, { sent: false, reason: 'removed_from_autopilot_core' });
+const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+
+test('legacy Telegram transport and old browser scripts are not included in the rebuilt fork', () => {
+  for (const file of [
+    'notify-tg.mjs',
+    'tg-bot.mjs',
+    'lib/tg-bot-core.mjs',
+    'autopilot-browser.mjs',
+    'extract-contacts.mjs',
+  ]) {
+    assert.equal(existsSync(path.join(root, file)), false,
+      file + ' must not be available to an autonomous Career Ops worker');
+  }
 });
-
-for (const file of ['autopilot-browser.mjs', 'extract-contacts.mjs']) {
-  test(`${file} is a non-operational tombstone`, () => {
-    const res = spawnSync(process.execPath, [file], { encoding: 'utf8' });
-    assert.equal(res.status, 2);
-    assert.match(res.stderr, /retired/);
-  });
-}

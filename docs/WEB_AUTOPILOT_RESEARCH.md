@@ -1,6 +1,6 @@
 # Web Autopilot Research and Target Architecture
 
-Status: implemented baseline + continuing source expansion  
+Status: historical design research; for current runtime use docs/AUTOPILOT.md  
 Verified: 2026-09-21  
 Scope: autonomous web job discovery and applications. Telegram/SMS/calendar/notification workflows are intentionally out of scope.
 

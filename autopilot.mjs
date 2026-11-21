@@ -45,8 +45,8 @@ const PIPELINE_PATH = process.env.CAREER_OPS_PIPELINE || path.join(DATA_ROOT, 'd
 const TRACKER_PATH = resolveTrackerPath(DATA_ROOT);
 const BLACKLIST_PATH = path.join(DATA_ROOT, 'data', 'blacklist.md');
 export const QUEUE_PATH = path.join(DATA_ROOT, 'data', 'autopilot-queue.md');
-const SCAN_PATH = path.join(CODE_ROOT, 'scan.mjs');
-const ATS_FULL_PATH = path.join(CODE_ROOT, 'scan-ats-full.mjs');
+const SCAN_PATH = path.join(CODE_ROOT, 'autopilot-scan.mjs');
+const ATS_FULL_PATH = path.join(CODE_ROOT, 'autopilot-scan.mjs');
 const SOURCE_REGISTRY_PATH = path.join(CODE_ROOT, 'source-registry.mjs');
 const REGIONAL_PORTALS_PATH = process.env.CAREER_OPS_EXPANDED_PORTALS
   || path.join(DATA_ROOT, 'data', 'portals-regional.generated.yml');
@@ -282,7 +282,7 @@ function runNodeDiscoveryStep(label, script, args, extraEnv = {}) {
 
 function runScanStep({ deep = false, refreshRegistry = false } = {}) {
   const results = [
-    runNodeDiscoveryStep('configured', SCAN_PATH, ['--wide']),
+    runNodeDiscoveryStep('configured', SCAN_PATH, []),
   ];
 
   if (!deep) return results.join(' ');
@@ -302,7 +302,7 @@ function runScanStep({ deep = false, refreshRegistry = false } = {}) {
     results.push(runNodeDiscoveryStep(
       'regional',
       SCAN_PATH,
-      ['--wide'],
+      [],
       { CAREER_OPS_PORTALS: REGIONAL_PORTALS_PATH },
     ));
   }
@@ -314,7 +314,7 @@ function runScanStep({ deep = false, refreshRegistry = false } = {}) {
     'ats-full',
     ATS_FULL_PATH,
     [
-      '--wide',
+      '--ats-full',
       '--since', '7',
       '--include-undated',
       '--ats', 'greenhouse,lever,ashby,workday,icims',
@@ -362,6 +362,10 @@ export async function cmdRun(flags = {}) {
       scanResult = 'dry-run:no-network-scan';
     }
 
+    if (/(?:^|\s)[^\s:]+:(?:failed|spawn-failed)(?:\s|$)/.test(scanResult)) {
+      throw new Error('discovery failed (' + scanResult + '); refusing to use a stale queue');
+    }
+
     const entries = parsePipelinePending(readTextIfExists(PIPELINE_PATH));
     counts.pending = entries.length;
 
@@ -385,6 +389,14 @@ export async function cmdRun(flags = {}) {
         continue;
       }
 
+      // HeadHunter is a separate product; never queue HH URLs in Career Ops.
+      const sourceHost = hostOf(entry.url);
+      if (/^(?:[a-z0-9-]+\.)*hh\.(?:ru|kz|uz)$/.test(sourceHost)) {
+        decisions.push('SKIPPED hard: HeadHunter excluded from Career Ops');
+        counts.hardSkipped++;
+        continue;
+      }
+
       const destination = inspectApplicationUrl(entry.url);
       if (!destination.ok) {
         decisions.push(
@@ -396,6 +408,20 @@ export async function cmdRun(flags = {}) {
 
       const existingJob = db ? getJob(urlKey) : null;
       const inTracker = tracker.rawSet.has(entry.url) || tracker.keySet.has(urlKey);
+      // Canonical tracker wins even when a previously queued DB row has stale status.
+      if (inTracker) {
+        if (existingJob?.status === 'queued' && !flags.dryRun) {
+          reportOutcome(urlKey, 'skipped', 'already in applications tracker; do not resubmit', null);
+        }
+        decisions.push(`DUP: already submitted in applications tracker | ${label}`);
+        counts.dupTracker++;
+        continue;
+      }
+      if (!matchesStrictMarket(entry, profile)) {
+        decisions.push(`SKIPPED hard: explicit strict_market constraint | ${label}`);
+        counts.hardSkipped++;
+        continue;
+      }
       const blacklistedCompany = blacklist.get(normalizeTextKey(entry.company || '')) || null;
       const host = hostOf(entry.url);
       const blacklistedSource = excludedHosts.find((t) => hostMatchesToken(host, t));
@@ -423,11 +449,6 @@ export async function cmdRun(flags = {}) {
         }
         continue;
       }
-      if (inTracker) {
-        decisions.push(`DUP: URL already submitted in applications tracker | ${label}`);
-        counts.dupTracker++;
-        continue;
-      }
       if (blacklistedCompany) {
         decisions.push(`SKIPPED hard: explicit company blacklist (${blacklistedCompany}) | ${label}`);
         counts.hardSkipped++;
@@ -438,11 +459,7 @@ export async function cmdRun(flags = {}) {
         counts.hardSkipped++;
         continue;
       }
-      if (!matchesStrictMarket(entry, profile)) {
-        decisions.push(`SKIPPED hard: outside strict Russia market | ${label}`);
-        counts.hardSkipped++;
-        continue;
-      }
+      // Location and market normally rank softly; explicit strict_market is enforced above.
 
       const rank = scoreJob(entry, { titleFilter, profile });
       decisions.push(`QUEUED P${rank.priority} | ${label}`);
@@ -624,7 +641,29 @@ export function cmdNext({
   leaseMinutes = 120,
   json = false,
 } = {}) {
-  const job = claimNextJob(owner, leaseMinutes);
+  // Also block direct CLI/programmatic claims when the runner is not involved.
+  // Scans/status/preflight remain available during a paused campaign.
+  if (process.env.AUTOPILOT_LIVE !== '1') {
+    throw new Error('campaign paused: claiming applications requires AUTOPILOT_LIVE=1');
+  }
+  // Suppress stale queue items immediately before dispatch, not only while scanning.
+  const tracker = loadTrackerUrlIndex();
+  const profile = loadYamlIfExists(PROFILE_PATH);
+  const excluded = excludedHostTokens(profile);
+  let job = claimNextJob(owner, leaseMinutes);
+  while (job) {
+    const host = hostOf(job.url);
+    const alreadyApplied = tracker.rawSet.has(job.url) || tracker.keySet.has(job.url_key);
+    const destination = inspectApplicationUrl(job.url);
+    const forbiddenSource = excluded.some((token) => hostMatchesToken(host, token));
+    const marketMismatch = !matchesStrictMarket(job, profile);
+    if (!alreadyApplied && destination.ok && !forbiddenSource && !marketMismatch) break;
+    const reason = alreadyApplied ? 'already in applications tracker' :
+      !destination.ok ? `forbidden destination (${destination.reason})` :
+      forbiddenSource ? 'excluded source' : 'strict market mismatch';
+    reportOutcome(job.url_key, 'skipped', reason + '; suppressed before browser worker', null, { claimOwner: owner });
+    job = claimNextJob(owner, leaseMinutes);
+  }
   regenerateQueue();
 
   if (!job) {
@@ -703,8 +742,9 @@ function writeTrackerAdditionTsv(job, note) {
   if (reserved.status !== 0) {
     throw new Error(`reserve-report-num failed: ${reserved.stderr?.trim() || reserved.status}`);
   }
-  const num = (reserved.stdout.match(/\d{1,3}/) || [])[0];
-  if (!num) throw new Error(`could not parse report number from: ${reserved.stdout}`);
+  const reservedNum = String(reserved.stdout || '').trim().match(/^(\d+)$/);
+  const num = reservedNum?.[1] || null;
+  if (!num) throw new Error('could not parse reserved report number');
 
   const date = localDateStr();
   const slug = String(job.company || 'company')
@@ -744,6 +784,9 @@ function writeTrackerAdditionTsv(job, note) {
 }
 
 export async function cmdReport(target, outcome, note, channel, metadata = {}) {
+  if (process.env.AUTOPILOT_LIVE !== '1') {
+    throw new Error('campaign paused: application reporting requires AUTOPILOT_LIVE=1');
+  }
   if (!OUTCOMES.includes(outcome)) {
     throw new Error(
       `invalid outcome "${outcome}" — must be one of: ${OUTCOMES.join(' | ')}`,

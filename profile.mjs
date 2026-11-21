@@ -3,15 +3,14 @@ import { validateFlags, flagValue } from './lib/cli-flags.mjs';
 /**
  * profile.mjs — multi-account manager: profiles → directions.
  *
- * A profile is one person's account (mapped to Telegram user ids for the
- * bot); a direction is a specialization inside it (analyst, designer, react,
+ * A profile is a locally managed candidate account (no Telegram); a direction is a specialization inside it (analyst, designer, react,
  * vue…). Each direction gets its own FULL career-ops data root at
  * data/profiles/<profile>/<direction>/ plus its own browser profile, session
  * and autopilot worker id — this command provisions all of that and prints
  * the exact commands to run a direction in its isolated browser.
  *
  * Run: node profile.mjs list
- *      node profile.mjs add-profile maxim --name Maxim --tg 123456789 --admin
+ *      node profile.mjs add-profile candidate --name Candidate
  *      node profile.mjs add-direction maxim analyst --name "Data Analyst"
  *      node profile.mjs env maxim analyst            # exports (bash|powershell)
  *      node profile.mjs launch maxim analyst         # isolated browser command
@@ -37,12 +36,12 @@ import { computeDirectionStats, aggregateProfileStats } from './lib/profile-stat
 
 const CODE_ROOT = dirname(fileURLToPath(import.meta.url));
 
-const VALUE_FLAGS = ['--name', '--tg', '--tg-name', '--shell'];
-const KNOWN_FLAGS = [...VALUE_FLAGS, '--admin', '--purge', '--run', '--json', '--summary', '--help', '-h'];
+const VALUE_FLAGS = ['--name', '--shell'];
+const KNOWN_FLAGS = [...VALUE_FLAGS, '--purge', '--run', '--json', '--summary', '--help', '-h'];
 
 const USAGE = `Usage:
   node profile.mjs list [--json]
-  node profile.mjs add-profile <id> --name <n> --tg <uid> [--tg-name <n>] [--admin]
+  node profile.mjs add-profile <id> --name <n>
   node profile.mjs remove-profile <id> [--purge]
   node profile.mjs add-direction <profile> <id> --name <n>
   node profile.mjs remove-direction <profile> <id> [--purge]
@@ -52,9 +51,6 @@ const USAGE = `Usage:
 
 Flags:
   --name <n>      display name (profile or direction)
-  --tg <uid>      Telegram user id (write to @userinfobot to get yours)
-  --tg-name <n>   label for that Telegram user (defaults to --name)
-  --admin         this Telegram user also sees every profile in the bot
   --purge         remove-direction/-profile also deletes the data root
   --shell <s>     env output flavor: bash (default) or powershell
   --run           launch also starts the browser, not just prints the command
@@ -141,15 +137,15 @@ function launchCommand(profileId, directionId) {
     + ` -s=${sessionNameFor(profileId, directionId)}`
     + ' open "about:blank"'
     + ` --profile="${profileRel}"`
-    + ' --headed --browser=chrome';
+    + ' --headed';
 }
 
 // ── stats ──────────────────────────────────────────────────────────
 
 function directionOneLiner(directionId, stats) {
-  if (!stats?.tracker) return `${directionId.padEnd(10)} — нет данных`;
+  if (!stats?.tracker) return `${directionId.padEnd(10)} — no data`;
   const f = stats.funnel ?? {};
-  return `${directionId.padEnd(10)} ${String(stats.tracker.total).padStart(4)} записей · ${f.everApplied ?? 0} откликов · ${f.everInterview ?? 0} интервью · ${f.everOffer ?? 0} офферов`;
+  return `${directionId.padEnd(10)} ${String(stats.tracker.total).padStart(4)} records · ${f.everApplied ?? 0} applications · ${f.everInterview ?? 0} interviews · ${f.everOffer ?? 0} offers`;
 }
 
 function cmdStats(registry, args) {
@@ -165,14 +161,14 @@ function cmdStats(registry, args) {
     if (json) {
       console.log(JSON.stringify({ profile: profileId, direction: directionId, stats }, null, 2));
     } else if (!stats) {
-      console.log(`${profileId}/${directionId}: нет данных (трекер пуст)`);
+      console.log(`${profileId}/${directionId}: no data (empty tracker)`);
     } else {
       const t = stats.tracker;
       const f = stats.funnel;
       console.log(`${profileId}/${directionId} — ${direction.name}`);
-      console.log(`  Записей: ${t.total} · в работе: ${t.activeApps} · ср. скоринг: ${t.avgScore ?? '—'}`);
-      console.log(`  Отклики: ${f.everApplied} · ответы: ${f.everResponded} (${f.responseRate}%) · интервью: ${f.everInterview} (${f.interviewRate}%) · офферы: ${f.everOffer}`);
-      if (stats.runs) console.log(`  Сканы: ${stats.runs.totalRuns} прогонов · найдено/прогон: ${stats.runs.avgFoundPerRun}`);
+      console.log(`  Records: ${t.total} · active: ${t.activeApps} · average score: ${t.avgScore ?? '—'}`);
+      console.log(`  Applications: ${f.everApplied} · responses: ${f.everResponded} (${f.responseRate}%) · interviews: ${f.everInterview} (${f.interviewRate}%) · offers: ${f.everOffer}`);
+      if (stats.runs) console.log(`  Scans: ${stats.runs.totalRuns} runs · average found/run: ${stats.runs.avgFoundPerRun}`);
     }
     return;
   }
@@ -202,9 +198,9 @@ function cmdStats(registry, args) {
     p.directions.forEach((d, i) => console.log(`  ${directionOneLiner(d.id, { tracker: { total: d.total }, funnel: { everApplied: d.applied } })}`));
     const a = p.aggregate;
     if (a.funnel) {
-      console.log(`  Σ направлений: ${a.directions} · откликов: ${a.funnel.everApplied} · интервью: ${a.funnel.everInterview} · офферов: ${a.funnel.everOffer}`);
+      console.log(`  Total directions: ${a.directions} · applications: ${a.funnel.everApplied} · interviews: ${a.funnel.everInterview} · offers: ${a.funnel.everOffer}`);
     } else {
-      console.log(`  Σ направлений: ${a.directions} · данных пока нет`);
+      console.log(`  Total directions: ${a.directions} ·no data yet`);
     }
   }
 }
@@ -216,9 +212,6 @@ function cmdAddProfile(args) {
   const [id] = positionalArgs(args);
   if (!id) fail('add-profile requires an id (slug, e.g. maxim)', { json });
   const name = flagValue(args, '--name') ?? id;
-  const tg = flagValue(args, '--tg');
-  if (!tg) fail('add-profile requires --tg <telegram user id> (write to @userinfobot to get yours)', { json });
-  if (!/^\d{1,20}$/.test(tg)) fail(`--tg must be a numeric Telegram user id, got "${tg}"`, { json });
   if (!isValidId(id)) fail(`profile id "${id}" must be a slug: lowercase letters/digits/hyphens, e.g. maxim, react-dev`, { json });
 
   const { registry } = loadOrInit();
@@ -226,11 +219,11 @@ function cmdAddProfile(args) {
   registry.profiles.push({
     id,
     name,
-    telegram: [{ user_id: tg, name: flagValue(args, '--tg-name') ?? name, admin: args.includes('--admin') }],
+    telegram: [], // backwards-compatible registry shape; no Telegram dependency
     directions: [],
   });
   const file = saveProfiles(registry);
-  const out = { profile: id, name, telegram: [{ user_id: tg, admin: args.includes('--admin') }], registry: file };
+  const out = { profile: id, name, registry: file };
   if (json) console.log(JSON.stringify(out, null, 2));
   else {
     console.log(`Profile "${id}" (${name}) saved to ${file}`);
@@ -352,7 +345,7 @@ function cmdLaunch(args) {
 
   if (args.includes('--run')) {
     const result = spawnSync('npx', ['playwright', 'cli', `-s=${sessionNameFor(profileId, directionId)}`, 'open', 'about:blank',
-      `--profile=${join(browserProfileDir(directionRoot(profileId, directionId)))}`, '--headed', '--browser=chrome'],
+      `--profile=${join(browserProfileDir(directionRoot(profileId, directionId)))}`, '--headed'],
     { shell: process.platform === 'win32', stdio: 'inherit' });
     process.exit(result.status ?? 0);
   }
@@ -364,7 +357,7 @@ function cmdList(args) {
   if (fresh) {
     if (json) { console.log(JSON.stringify({ profiles: [], hint: 'no profiles.yml yet — node profile.mjs add-profile …' })); return; }
     console.log('No profiles.yml yet. Create the first account:');
-    console.log('  node profile.mjs add-profile maxim --name Maxim --tg <your-telegram-id> --admin');
+    console.log('  node profile.mjs add-profile candidate --name Candidate');
     return;
   }
   cmdStats(registry, [...args]);
