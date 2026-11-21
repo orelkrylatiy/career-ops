@@ -38,7 +38,7 @@
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import {
-  existsSync, mkdirSync, readFileSync, statSync, writeFileSync,
+  existsSync, mkdirSync, readFileSync, statSync, writeFileSync, accessSync, constants,
 } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -447,37 +447,23 @@ const OCR_PROMPT = [
 ].join(' ');
 
 function resolveExecutable(name) {
-  const exts = process.platform === 'win32'
-    ? ['', ...(process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM').split(';')]
-    : [''];
-  const dirs = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
-  for (const dir of dirs) {
-    for (const ext of exts) {
-      const candidate = path.join(dir, `${name}${ext.toLowerCase()}`);
-      try {
-        if (statSync(candidate).isFile()) return candidate;
-      } catch { /* not here */ }
-    }
+  const candidates = path.isAbsolute(name)
+    ? [name]
+    : (process.env.PATH || '').split(path.delimiter).filter(Boolean)
+        .map((dir) => path.join(dir, name));
+  for (const candidate of candidates) {
+    try {
+      if (statSync(candidate).isFile()) {
+        accessSync(candidate, constants.X_OK);
+        return candidate;
+      }
+    } catch { /* not an executable Linux file */ }
   }
   return null;
 }
 
 function spawnCli(executable, args, { timeout } = {}) {
-  const needsShell = process.platform === 'win32' && /\.(cmd|bat)$/i.test(executable);
-  if (!needsShell) {
-    return spawnSync(executable, args, { encoding: 'utf8', shell: false, timeout });
-  }
-  // Node refuses to spawn .cmd/.bat without a shell (CVE-2024-27980), and
-  // `shell: true` does no argument quoting on Windows — quote each argument
-  // ourselves. None of our arguments (model id, artifact path, OCR prompt)
-  // contain double quotes, so this is safe for the CLI parsers in practice.
-  const quoted = args.map((a) => `"${String(a).replace(/"/g, '\\"')}"`).join(' ');
-  return spawnSync(`"${executable}" ${quoted}`, {
-    encoding: 'utf8',
-    shell: true,
-    timeout,
-    windowsHide: true,
-  });
+  return spawnSync(executable, args, { encoding: 'utf8', shell: false, timeout });
 }
 
 export function ocrWithOpencode(imagePath, { timeoutMs } = {}) {

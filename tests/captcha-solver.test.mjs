@@ -65,7 +65,7 @@ test('capture code waits for the real image payload before screenshotting', () =
   const code = buildCaptureCode({
     frameUrl: 'https://example.com/captcha',
     imageSelector: 'img[data-qa="captcha-picture"]',
-    artifactPath: String.raw`C:\tmp\captcha.png`,
+    artifactPath: '/tmp/captcha.png',
   });
   assert.match(code, /naturalWidth > 0/);
   assert.match(code, /screenshot\(\{ path:/);
