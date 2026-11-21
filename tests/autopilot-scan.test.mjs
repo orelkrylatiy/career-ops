@@ -47,6 +47,6 @@ test('Russian catalog providers remain configured and are not HH/Telegram', asyn
 test('runner actively exports and scans the Russian regional catalog', async () => {
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../autopilot-runner.mjs', import.meta.url), 'utf8');
-  assert.match(src, /runStep\('source-registry\.mjs', \['export', '--country', 'RU'\]\)/);
+  assert.match(src, /runStep\('source-registry\.mjs', \[opts\.refresh \? 'full' : 'export', '--country', 'RU'\]\)/);
   assert.match(src, /CAREER_OPS_PORTALS: regionalPortals/);
 });

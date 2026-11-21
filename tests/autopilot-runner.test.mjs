@@ -4,6 +4,9 @@ import { parseRunnerArgs, resolveAgent, agentCommand, platformCommand, assertBro
 
 test('runner defaults to real autonomous mode and accepts bounded options', () => {
   assert.equal(parseRunnerArgs([]).dryRun, false);
+  assert.equal(parseRunnerArgs([]).maxJobs, 5);
+  assert.equal(parseRunnerArgs([]).noScan, true);
+  assert.equal(parseRunnerArgs(['--scan']).noScan, false);
   assert.equal(parseRunnerArgs(['--agent','codex','--max-jobs','3','--timeout-minutes','12']).maxJobs, 3);
   assert.throws(() => parseRunnerArgs(['--no-scan', '--refresh-registry']), /conflicts/);
   assert.throws(() => parseRunnerArgs(['--max-jobs','0']), /positive/);
@@ -21,6 +24,8 @@ test('Codex global approval option precedes exec (CLI parsing regression)', () =
   assert.equal(binary, 'codex');
   assert.deepEqual(args.slice(0, 3), ['--ask-for-approval', 'never', 'exec']);
   assert.ok(args.indexOf('--sandbox') > args.indexOf('exec'));
+  assert.ok(args.includes('workspace-write'));
+  assert.ok(!args.includes('danger-full-access'));
   assert.equal(args.at(-1), 'apply to an example job');
 });
 
@@ -49,7 +54,7 @@ test('browser must open a real named session and snapshot BEFORE processing jobs
 
 test('Windows npm CLI shims use encoded argv, never interpolate an untrusted prompt', () => {
   const prompt = 'Cyrillic: вакансии; & echo ATTACK \"$(touch /tmp/x)\"';
-  const argv = ['-p', prompt, '--permission-mode', 'bypassPermissions'];
+  const argv = ['-p', prompt, '--permission-mode', 'dontAsk'];
   const [binary, args] = platformCommand('claude', argv, 'win32');
   assert.equal(binary, 'powershell.exe');
   const script = Buffer.from(args.at(-1), 'base64').toString('utf16le');

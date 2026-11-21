@@ -28,19 +28,18 @@ function freshRoot() {
   return { dir, env: { CAREER_OPS_ROOT: dir, CAREER_OPS_PROFILES: join(dir, 'profiles.yml') } };
 }
 
-test('add-profile creates the registry with the telegram mapping', () => {
+test('add-profile creates local candidate without Telegram', () => {
   const { dir, env } = freshRoot();
   try {
-    const res = runCli(['add-profile', 'maxim', '--name', 'Maxim', '--tg', '4242', '--admin', '--json'], env);
+    const res = runCli(['add-profile', 'maxim', '--name', 'Maxim', '--json'], env);
     assert.equal(res.status, 0, res.stderr);
     const reg = yaml.load(readFileSync(join(dir, 'profiles.yml'), 'utf-8'));
     assert.equal(reg.profiles[0].id, 'maxim');
-    assert.equal(reg.profiles[0].telegram[0].user_id, '4242');
-    assert.equal(reg.profiles[0].telegram[0].admin, true);
+    assert.deepEqual(reg.profiles[0].telegram, []);
 
-    assert.notEqual(runCli(['add-profile', 'maxim', '--name', 'X', '--tg', '1'], env).status, 0); // dup
-    assert.notEqual(runCli(['add-profile', 'Bad Slug', '--name', 'X', '--tg', '1'], env).status, 0); // bad id
-    assert.notEqual(runCli(['add-profile', 'ok2', '--name', 'X'], env).status, 0); // --tg required
+    assert.notEqual(runCli(['add-profile', 'maxim', '--name', 'X'], env).status, 0); // dup
+    assert.notEqual(runCli(['add-profile', 'Bad Slug', '--name', 'X'], env).status, 0); // bad id
+    assert.equal(runCli(['add-profile', 'ok2', '--name', 'X'], env).status, 0); // no Telegram required
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -49,7 +48,7 @@ test('add-profile creates the registry with the telegram mapping', () => {
 test('add-direction creates the isolated data-root skeleton and registers it', () => {
   const { dir, env } = freshRoot();
   try {
-    assert.equal(runCli(['add-profile', 'maxim', '--name', 'Maxim', '--tg', '4242'], env).status, 0);
+    assert.equal(runCli(['add-profile', 'maxim', '--name', 'Maxim'], env).status, 0);
     const res = runCli(['add-direction', 'maxim', 'analyst', '--name', 'Data Analyst', '--json'], env);
     assert.equal(res.status, 0, res.stderr);
     const payload = JSON.parse(res.stdout);
@@ -74,7 +73,7 @@ test('add-direction creates the isolated data-root skeleton and registers it', (
 test('env and launch print the isolation recipe: root, worker, session, browser profile', () => {
   const { dir, env } = freshRoot();
   try {
-    runCli(['add-profile', 'maxim', '--name', 'Maxim', '--tg', '4242'], env);
+    runCli(['add-profile', 'maxim', '--name', 'Maxim'], env);
     runCli(['add-direction', 'maxim', 'analyst', '--name', 'Data Analyst'], env);
 
     const bash = runCli(['env', 'maxim', 'analyst'], env);
@@ -101,7 +100,7 @@ test('env and launch print the isolation recipe: root, worker, session, browser 
 test('stats reads a direction tracker under its own data root', () => {
   const { dir, env } = freshRoot();
   try {
-    runCli(['add-profile', 'maxim', '--name', 'Maxim', '--tg', '4242'], env);
+    runCli(['add-profile', 'maxim', '--name', 'Maxim'], env);
     runCli(['add-direction', 'maxim', 'analyst', '--name', 'Data Analyst'], env);
     const tracker = join(dir, 'data', 'profiles', 'maxim', 'analyst', 'data', 'applications.md');
     writeFileSync(tracker, readFileSync(tracker, 'utf-8')
@@ -125,7 +124,7 @@ test('stats reads a direction tracker under its own data root', () => {
 test('remove-direction keeps data by default, deletes it with --purge', () => {
   const { dir, env } = freshRoot();
   try {
-    runCli(['add-profile', 'maxim', '--name', 'Maxim', '--tg', '4242'], env);
+    runCli(['add-profile', 'maxim', '--name', 'Maxim'], env);
     runCli(['add-direction', 'maxim', 'analyst', '--name', 'Data Analyst'], env);
     runCli(['add-direction', 'maxim', 'react', '--name', 'React Dev'], env);
     const analystRoot = join(dir, 'data', 'profiles', 'maxim', 'analyst');
@@ -138,6 +137,28 @@ test('remove-direction keeps data by default, deletes it with --purge', () => {
 
     const reg = yaml.load(readFileSync(join(dir, 'profiles.yml'), 'utf-8'));
     assert.equal(reg.profiles[0].directions.length, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('React, Next.js and Vue directions isolate CV, tracker and browser identities', () => {
+  const { dir, env } = freshRoot();
+  try {
+    assert.equal(runCli(['add-profile', 'candidate', '--name', 'Candidate'], env).status, 0);
+    const sessions = [];
+    for (const name of ['react', 'nextjs', 'vue']) {
+      const add = runCli(['add-direction', 'candidate', name, '--name', name], env);
+      assert.equal(add.status, 0, add.stderr);
+      const root = join(dir, 'data', 'profiles', 'candidate', name);
+      for (const path of ['cv.md', 'config/profile.yml', 'portals.yml', 'data/applications.md']) {
+        assert.ok(existsSync(join(root, path)), path + ' missing for ' + name);
+      }
+      const output = runCli(['env', 'candidate', name], env).stdout;
+      assert.ok(output.includes('career-ops-candidate-' + name));
+      sessions.push(output);
+    }
+    assert.equal(new Set(sessions).size, 3);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
