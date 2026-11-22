@@ -62,7 +62,7 @@ Each direction has a different `portals.yml`, `config/profile.yml`, resume selec
 
 Provider adapters are for finding jobs, **not** evidence that a particular site can submit a form. Available fork-specific boards include Habr Career, GeekJob and SuperJob. Full upstream international ATS and board adapters remain present.
 
-By default, a live runner **processes an existing queue**, without performing a new scan. Explicit discovery steps:
+By default, a live runner **processes an existing queue**, without performing a new scan. A requested scan keeps upstream's filters; only explicit wide-scan commands remove soft preferences. Explicit discovery steps:
 
 ```bash
 # Run only after choosing the correct profile/root.
