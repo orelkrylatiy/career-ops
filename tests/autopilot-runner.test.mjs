@@ -11,6 +11,13 @@ test('runner defaults to real autonomous mode and accepts bounded options', () =
   assert.throws(() => parseRunnerArgs(['--no-scan', '--refresh-registry']), /conflicts/);
   assert.throws(() => parseRunnerArgs(['--max-jobs','0']), /positive/);
   assert.throws(() => parseRunnerArgs(['--agent','fake']), /unsupported/);
+  const campaign = parseRunnerArgs(['--target-applied','20','--max-jobs','60','--scan-on-empty']);
+  assert.equal(campaign.targetApplied, 20);
+  assert.equal(campaign.maxJobs, 60);
+  assert.equal(campaign.scanOnEmpty, true);
+  assert.equal(campaign.noScan, true, 'initial run must drain existing queue first');
+  assert.throws(() => parseRunnerArgs(['--target-applied','0']), /positive integer/);
+  assert.throws(() => parseRunnerArgs(['--target-applied','NaN']), /positive integer/);
 });
 test('agent detection and invocation are deterministic, without shell interpolation', () => {
   assert.equal(resolveAgent('auto', name => name === 'opencode'), 'opencode');
