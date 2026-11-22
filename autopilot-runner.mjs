@@ -248,7 +248,14 @@ export async function main(argv = process.argv.slice(2)) {
     if (!opts.noScan) {
       // Start with configured employer sources, then widen to the upstream ATS
       // directories by default. Discovery never uses HH or Telegram transport.
-      runStep('autopilot-scan.mjs', []);
+      try {
+        runStep('autopilot-scan.mjs', []);
+      } catch (error) {
+        // A down provider never discards existing SQLite jobs or partial
+        // discoveries from other sources. Continue to queue processing.
+        auditLog('configured_scan_error', { error_code: 'CONFIGURED_SCAN_FAILED' }, { level: 'warn' });
+        console.error('[autopilot] configured scan failed; continuing existing queue: ' + error.message);
+      }
       // A provider module is not an enabled source by itself. Export the RU
       // catalog into a temporary-looking runtime portals file, then scan it.
       // This activates Habr Career, GeekJob and SuperJob without touching the
