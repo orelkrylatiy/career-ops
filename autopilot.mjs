@@ -216,17 +216,24 @@ function hostOf(url) {
 
 export function regenerateQueue() {
   const queued = listJobs('queued');
+  // Only the inspectable Markdown view is bounded; SQLite retains ALL jobs.
+  // A 20k+ historical queue must not flood an agent's context on every claim.
+  const requested = Number(process.env.AUTOPILOT_QUEUE_VIEW_LIMIT);
+  const viewLimit = Number.isSafeInteger(requested) && requested > 0
+    ? Math.min(requested, 1000) : 200;
+  const visible = queued.slice(0, viewLimit);
   const counts = statusCounts();
   const lines = [
     '# Autopilot Queue',
     '',
     `Generated: ${new Date().toISOString()}`,
     `Queued: ${queued.length} job(s), ordered by priority then freshness.`,
+    `Showing: ${visible.length} of ${queued.length} (full queue is in SQLite; use autopilot.mjs next to claim).`,
     `Job status counts: ${JOB_STATUSES.map((s) => `${s}=${counts[s] ?? 0}`).join(' ')}`,
     '',
   ];
 
-  for (const job of queued) {
+  for (const job of visible) {
     let reasons = [];
     try { reasons = JSON.parse(job.rank_reasons_json || '[]'); } catch {}
     lines.push(`## [P${job.priority ?? 50}] ${job.company || '?'} — ${job.title || '?'}`);
@@ -363,7 +370,10 @@ export async function cmdRun(flags = {}) {
     }
 
     if (/(?:^|\s)[^\s:]+:(?:failed|spawn-failed)(?:\s|$)/.test(scanResult)) {
-      throw new Error('discovery failed (' + scanResult + '); refusing to use a stale queue');
+      // The existing queue is not invalidated by a partial provider outage.
+      // Every posting is rechecked for liveness by the browser worker before Submit.
+      console.error('[autopilot] discovery partially failed; preserving existing queue and processing available postings');
+      if (!flags.dryRun) addEvent('scan', 'partial discovery failure; existing queue retained', null, 'warn');
     }
 
     const entries = parsePipelinePending(readTextIfExists(PIPELINE_PATH));
@@ -578,14 +588,35 @@ export function cmdAnalytics() {
 }
 
 const PLACEHOLDER_RE = /TODO|example\.(com|org)|@example/i;
+const CONTACT_EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 
-function contactPreflight() {
+// Compare candidate email with the CV and the selected resume when PDF text
+// extraction is available. The model must not silently pick one of two identities.
+export function applicationContactIssues(profile, cvText = '', resumeText = '') {
+  const expected = String(profile?.candidate?.email || '').trim().toLowerCase();
+  if (!expected) return [];
+  const problems = [];
+  const emailsIn = (text) => [...new Set(
+    (String(text).match(CONTACT_EMAIL_RE) || []).map(email => email.toLowerCase())
+  )].filter(email => !PLACEHOLDER_RE.test(email));
+  for (const [label, content] of [['cv.md', cvText], ['prepared resume PDF', resumeText]]) {
+    const emails = emailsIn(content);
+    if (emails.length && (emails.length !== 1 || emails[0] !== expected)) {
+      problems.push(`candidate.email conflicts with ${label} contact email; reconcile the candidate profile and resume before submitting`);
+    }
+  }
+  return problems;
+}
+
+export function contactPreflight() {
   const profile = loadYamlIfExists(PROFILE_PATH) ?? {};
   const candidate = profile.candidate ?? {};
   const problems = [];
-  if (!candidate.email || PLACEHOLDER_RE.test(candidate.email)) {
-    problems.push('candidate.email (real application email)');
+  if (!candidate.email || PLACEHOLDER_RE.test(candidate.email)
+      || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(candidate.email).trim())) {
+    problems.push('candidate.email (valid real application email)');
   }
+  problems.push(...applicationContactIssues(profile, readTextIfExists(path.join(DATA_ROOT, 'cv.md'))));
   if (!candidate.phone || PLACEHOLDER_RE.test(candidate.phone)) {
     problems.push('candidate.phone');
   }
@@ -594,6 +625,14 @@ function contactPreflight() {
     problems.push(
       'autopilot resume (configure an existing prepared fallback/variant or legacy autopilot.cv_pdf)',
     );
+  } else if (String(resume.path || '').toLowerCase().endsWith('.pdf')) {
+    // Optional system utility. Never infer "matching PDF email" from file existence.
+    const extracted = spawnSync('pdftotext', ['-layout', resume.path, '-'], {
+      encoding: 'utf8', timeout: 8_000, maxBuffer: 2 * 1024 * 1024, shell: false,
+    });
+    if (extracted.status === 0) {
+      problems.push(...applicationContactIssues(profile, '', extracted.stdout));
+    }
   }
   return problems;
 }
@@ -636,6 +675,16 @@ export function cmdCap() {
   }, null, 2));
 }
 
+// The collection funnel stays wide; the apply funnel must not waste leases
+// on unrelated titles in a large historical queue. Explicit opt-out permits
+// broader campaigns. This is *not* a substitute for checking the full JD.
+export function applicationTitleEligible(job, titleFilter = {}, profile = {}) {
+  if (profile?.autopilot?.require_title_match_for_apply === false) return true;
+  if (!Array.isArray(titleFilter?.positive) || titleFilter.positive.length === 0) return true;
+  const rank = scoreJob(job, { titleFilter, profile });
+  return rank.positiveHits.length > 0 && rank.negativeHits.length === 0;
+}
+
 export function cmdNext({
   owner = process.env.AUTOPILOT_WORKER_ID || 'worker-0',
   leaseMinutes = 120,
@@ -650,6 +699,7 @@ export function cmdNext({
   const tracker = loadTrackerUrlIndex();
   const profile = loadYamlIfExists(PROFILE_PATH);
   const excluded = excludedHostTokens(profile);
+  const titleFilter = loadTitleFilter();
   let job = claimNextJob(owner, leaseMinutes);
   while (job) {
     const host = hostOf(job.url);
@@ -657,10 +707,12 @@ export function cmdNext({
     const destination = inspectApplicationUrl(job.url);
     const forbiddenSource = excluded.some((token) => hostMatchesToken(host, token));
     const marketMismatch = !matchesStrictMarket(job, profile);
-    if (!alreadyApplied && destination.ok && !forbiddenSource && !marketMismatch) break;
+    const titleMismatch = !applicationTitleEligible(job, titleFilter, profile);
+    if (!alreadyApplied && destination.ok && !forbiddenSource && !marketMismatch && !titleMismatch) break;
     const reason = alreadyApplied ? 'already in applications tracker' :
       !destination.ok ? `forbidden destination (${destination.reason})` :
-      forbiddenSource ? 'excluded source' : 'strict market mismatch';
+      forbiddenSource ? 'excluded source' :
+      marketMismatch ? 'strict market mismatch' : 'application title filter mismatch';
     reportOutcome(job.url_key, 'skipped', reason + '; suppressed before browser worker', null, { claimOwner: owner });
     job = claimNextJob(owner, leaseMinutes);
   }
@@ -939,6 +991,7 @@ function usage() {
 async function main() {
   const argv = process.argv.slice(2);
 
+  if (argv[0] === '--help' || argv[0] === '-h' || argv[0] === 'help') return usage();
   if (argv[0] === 'status') return cmdStatus();
   if (argv[0] === 'logs') return cmdLogs(flagValue(argv, '--limit') || 50);
   if (argv[0] === 'analytics') return cmdAnalytics();
