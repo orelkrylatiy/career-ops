@@ -2,8 +2,8 @@
 /**
  * Autopilot discovery adapter for CareerOps 1.40+.
  * Preserve upstream's unmodified scanner and provider fixes.
- * For autonomous runs only, use a temporary filter-free portals.yml.
- * Fit preferences rank jobs downstream rather than dropping them here.
+ * Use upstream's own configured filters by default (matching normal scan).
+ * Explicit --wide opts into temporary filter-free discovery instead.
  */
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
@@ -39,35 +39,43 @@ export function isExcludedTransport(item) {
   return false;
 }
 
-export function makeWideConfig(raw) {
+export function makeScanConfig(raw, { wide = false } = {}) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw new Error('portals.yml must contain a YAML mapping');
   }
   const config = structuredClone(raw);
-  for (const key of SOFT_FILTERS) delete config[key];
+  if (wide) for (const key of SOFT_FILTERS) delete config[key];
+  // Fork-specific explicit source exclusions apply in either mode.
   for (const field of ['tracked_companies', 'job_boards']) {
     if (Array.isArray(config[field])) config[field] = config[field].filter(item => !isExcludedTransport(item));
   }
   return config;
 }
 
+export function makeWideConfig(raw) {
+  return makeScanConfig(raw, { wide: true });
+}
+
 export function parseScanArgs(argv) {
   const args = [...argv];
-  const atsFull = args[0] === '--ats-full';
-  if (atsFull) args.shift();
-  if (args.includes('--wide')) throw new Error('obsolete --wide: the adapter already constructs a wide configuration');
-  return { atsFull, args };
+  const atsFull = args.includes('--ats-full');
+  const wide = args.includes('--wide');
+  for (const flag of ['--ats-full', '--wide']) {
+    const index = args.indexOf(flag);
+    if (index >= 0) args.splice(index, 1);
+  }
+  return { atsFull, wide, args };
 }
 
 export function main(argv = process.argv.slice(2)) {
-  const { atsFull, args } = parseScanArgs(argv);
+  const { atsFull, wide, args } = parseScanArgs(argv);
   const portals = process.env.CAREER_OPS_PORTALS || path.join(getCareerOpsRoot(), 'portals.yml');
   const base = yaml.load(readFileSync(portals, 'utf8'));
-  const wide = makeWideConfig(base);
-  const tempDir = mkdtempSync(path.join(tmpdir(), 'careerops-wide-'));
+  const config = makeScanConfig(base, { wide });
+  const tempDir = mkdtempSync(path.join(tmpdir(), 'careerops-scan-'));
   const tempConfig = path.join(tempDir, 'portals.yml');
   try {
-    writeFileSync(tempConfig, yaml.dump(wide), { mode: 0o600 });
+    writeFileSync(tempConfig, yaml.dump(config), { mode: 0o600 });
     const target = path.join(CODE_ROOT, atsFull ? 'scan-ats-full.mjs' : 'scan.mjs');
     const result = spawnSync(process.execPath, [target, ...args], {
       cwd: CODE_ROOT, stdio: 'inherit', shell: false,
