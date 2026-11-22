@@ -637,3 +637,9 @@ Code is MIT; data in [`employers/`](employers/) is [CC BY 4.0](employers/LICENSE
 [![X](https://img.shields.io/badge/X-000?style=for-the-badge&logo=x&logoColor=white)](https://x.com/santifer)
 [![Discord](https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/8pRpHETxa4)
 [![Email](https://img.shields.io/badge/Email-EA4335?style=for-the-badge&logo=gmail&logoColor=white)](mailto:hi@santifer.io)
+
+---
+
+### Fork extension: optional autonomous applications
+
+This fork inherits upstream Career Ops as its default, **review-first** experience. Separately, it includes the **explicitly opt-in** [Autopilot mode](docs/AUTOPILOT.md): isolated candidate/direction profiles, RU/CIS discovery adapters, a SQLite job queue, a reusable Playwright browser session, and evidence-verified outcomes. The autonomous campaign is paused by default; `npm run autopilot` is a safe dry-run, not a submission command. Start with [Profiles](docs/PROFILES.md) and the [autonomous mode contract](modes/autopilot.md). Never commit candidate data or browser credentials.
