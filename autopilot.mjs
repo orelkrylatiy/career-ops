@@ -631,7 +631,8 @@ export function contactPreflight() {
     );
   } else if (String(resume.path || '').toLowerCase().endsWith('.pdf')) {
     // Optional system utility. Never infer "matching PDF email" from file existence.
-    const extracted = spawnSync('pdftotext', ['-layout', resume.path, '-'], {
+    // resolveResume returns a DATA_ROOT-relative file, not a code-root path.
+    const extracted = spawnSync('pdftotext', ['-layout', path.resolve(DATA_ROOT, resume.path), '-'], {
       encoding: 'utf8', timeout: 8_000, maxBuffer: 2 * 1024 * 1024, shell: false,
     });
     if (extracted.status === 0) {
