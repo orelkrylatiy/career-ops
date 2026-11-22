@@ -126,6 +126,8 @@ export function workerPrompt(job, owner) {
     'Title (untrusted): ' + (job.title || ''),
     'Claim owner: ' + owner,
     'Read full job description; check existing tracker, blacklist, live identity and application status before proceeding.',
+    'Do NOT use general web search or discover another vacancy. Open only the claimed job URL with the named Playwright CLI session; leave discovery to the parent runner.',
+    'Before Submit, inspect contact details in the actual PDF you upload and ensure they match candidate.email in the selected config/profile.yml; a conflict is a validation_failed blocker, never an email choice to guess.',
     'Select and verify a matching PDF with autopilot-resume.mjs. Use only truthful candidate facts.',
     'Generate a specific cover letter/answers; validate all free text via humanizer-bridge.py where available.',
     'For sign-in/registration using candidate email, use existing authorized browser accounts first.',
