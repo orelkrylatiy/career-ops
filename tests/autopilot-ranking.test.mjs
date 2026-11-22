@@ -75,3 +75,12 @@ test('Cyrillic Moscow/Russia and office locations are recognized without ASCII w
   assert.ok(ru.reasons.includes('russia_market:+12'));
   assert.ok(ru.reasons.includes('remote_preference_conflict:-12'));
 });
+
+
+test('hyphenated Front-End titles match configured frontend application targets', () => {
+  const row = scoreJob({ title: 'Front-End Lead', location: 'Москва, Россия' }, {
+    titleFilter: { positive: ['frontend'], negative: [] },
+  });
+  assert.deepEqual(row.positiveHits, ['frontend']);
+  assert.ok(row.reasons.some(r => r.startsWith('title_match:')));
+});
