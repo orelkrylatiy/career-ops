@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRunnerArgs, resolveAgent, agentCommand, assertBrowserReady, safeJobId, workerPrompt, workerEnvironment, detectBlockingChallenge } from '../autopilot-runner.mjs';
+import { parseRunnerArgs, resolveAgent, agentCommand, assertBrowserReady, safeJobId, runOwnerFor, workerPrompt, workerEnvironment, detectBlockingChallenge } from '../autopilot-runner.mjs';
 
 test('runner defaults to real autonomous mode and accepts bounded options', () => {
   assert.equal(parseRunnerArgs([]).dryRun, false);
@@ -11,6 +11,14 @@ test('runner defaults to real autonomous mode and accepts bounded options', () =
   assert.throws(() => parseRunnerArgs(['--no-scan', '--refresh-registry']), /conflicts/);
   assert.throws(() => parseRunnerArgs(['--max-jobs','0']), /positive/);
   assert.throws(() => parseRunnerArgs(['--agent','fake']), /unsupported/);
+  const campaign = parseRunnerArgs(['--target-applied','20','--max-jobs','60','--scan-on-empty']);
+  assert.equal(campaign.targetApplied, 20);
+  assert.equal(campaign.maxJobs, 60);
+  assert.equal(campaign.scanOnEmpty, true);
+  assert.equal(campaign.noScan, true, 'initial run must drain existing queue first');
+  assert.throws(() => parseRunnerArgs(['--target-applied','0']), /positive integer/);
+  assert.throws(() => parseRunnerArgs(['--target-applied','NaN']), /positive integer/);
+  assert.throws(() => parseRunnerArgs(['--scan','--scan-on-empty']), /cannot be combined/);
 });
 test('agent detection and invocation are deterministic, without shell interpolation', () => {
   assert.equal(resolveAgent('auto', name => name === 'opencode'), 'opencode');
@@ -19,6 +27,13 @@ test('agent detection and invocation are deterministic, without shell interpolat
   assert.equal(command, 'opencode');
   assert.equal(args.at(-1), 'a quote " and ; shell');
 });
+test('run-specific claim owners never resume a previous process lease', () => {
+  assert.equal(runOwnerFor('run-aaa', 'direction'), 'direction-runaaa');
+  assert.equal(runOwnerFor('run-bbb', 'direction'), 'direction-runbbb');
+  assert.notEqual(runOwnerFor('run-aaa', 'direction'), runOwnerFor('run-bbb', 'direction'));
+  assert.throws(() => runOwnerFor('---'), /invalid runId/);
+});
+
 test('Codex global approval option precedes exec (CLI parsing regression)', () => {
   const [binary, args] = agentCommand('codex', 'apply to an example job');
   assert.equal(binary, 'codex');
@@ -39,6 +54,8 @@ test('worker instruction requires evidence and never uses HH Ops', () => {
   assert.match(instruction, /humanizer-bridge.py/);
   assert.match(instruction, /autopilot-mail.mjs/);
   assert.match(instruction, /No HeadHunter or Telegram/);
+  assert.match(instruction, /Do NOT use general web search/);
+  assert.match(instruction, /actual PDF you upload/);
   assert.match(instruction, /Never read, run or modify tg-ops, hh-ops/);
   assert.equal(safeJobId(job).length, 16);
 });

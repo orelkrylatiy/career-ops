@@ -20,6 +20,12 @@ node autopilot-mail.mjs wait --domain company.example --url-host careers.company
 
 The timestamp above is an **example**, not a permanent value. Pass the current Unix time (seconds) from just before requesting the email. The utility only accepts messages less than 15 minutes old, with matching sender domain and DMARC pass. It prints a code/link solely to the local worker; do not write it into reports or logs. The sender domain and destination host must be independently verified against the career site. If the message doesn't arrive or needs SMS/2FA/new password, record a job-specific blocker and move to the next job without interrupting the batch. Do not send unrelated emails.
 
+## No-search execution invariant
+
+An interactive coding-agent invocation is a **dispatcher**, never a substitute for the runner. If the user asks for N real submissions, check the selected direction and call `node autopilot.mjs preflight` first. A failed preflight is a **stop**, not permission to browse web listings until time runs out. Once explicitly authorized, invoke `AUTOPILOT_LIVE=1 npm run autopilot:live -- --agent codex --max-jobs N` and let it claim/verify jobs; never improvise manual `next`/web-search/form loops. The worker must use Playwright on its leased URL, not broad web search. For a specific number of **verified** sends, invoke the runner with `--target-applied N --max-jobs M --scan-on-empty` (M is a bounded attempt budget, typically greater than N); `--max-jobs` is *not* the number of successful submissions. The runner drains queued matching jobs first and runs a single configured/RU provider recovery scan only when eligible work runs out. If still short, return the verified count and concrete blockers; never escalate to open-ended web searches.
+
+If the CV or selected resume disagrees with `config/profile.yml` about the application email, request that the user **reconcile the underlying documents**. Do not choose an email based on a persona selection, do not send with mismatched contacts, and do not repeat the same question within the run.
+
 ## Run activation and scope
 
 - Campaign is **paused** by default; real sends require explicit reactivation, `AUTOPILOT_LIVE=1`, and an exact `CAREER_OPS_ROOT` for a selected direction. `npm run autopilot` is a safe preview; `npm run autopilot:live` requires the live env gate.

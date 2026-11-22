@@ -301,7 +301,7 @@ export function listJobs(status) {
  * Atomically lease the highest-priority queued job. Expired leases are
  * quarantined for review, because a crashed worker may have submitted.
  */
-export function claimNextJob(owner = 'worker-0', leaseMinutes = 120) {
+export function claimNextJob(owner = 'worker-0', leaseMinutes = 120, { accept = null } = {}) {
   const db = openDb();
   const minutes = Number(leaseMinutes);
   if (!Number.isFinite(minutes) || minutes <= 0) {
@@ -331,15 +331,18 @@ export function claimNextJob(owner = 'worker-0', leaseMinutes = 120) {
     ).get(String(owner || 'worker-0'), nowIso);
     if (current) return current;
 
-    const row = db.prepare(
-      `SELECT * FROM jobs
+    // For a targeted campaign, choose the first eligible row without
+    // repeatedly leasing/skipping thousands of unrelated historical listings.
+    // The predicate must be deterministic and side-effect-free.
+    const sql = `SELECT * FROM jobs
        WHERE status='queued'
          AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
        ORDER BY COALESCE(priority, 50) DESC,
                 COALESCE(posted_at, first_seen) DESC,
-                rowid ASC
-       LIMIT 1`,
-    ).get(nowIso);
+                rowid ASC`;
+    const row = typeof accept === 'function'
+      ? db.prepare(sql).all(nowIso).find(accept)
+      : db.prepare(sql + ' LIMIT 1').get(nowIso);
     if (!row) return null;
 
     const changed = db.prepare(

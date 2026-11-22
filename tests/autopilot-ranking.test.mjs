@@ -63,3 +63,24 @@ test('Russia-first is a priority boost, not a global-market filter', () => {
   assert.ok(russian.reasons.includes('russia_market:+12'));
   assert.ok(global.priority >= 0);
 });
+
+
+test('Cyrillic Moscow/Russia and office locations are recognized without ASCII word boundaries', () => {
+  const ru = scoreJob({
+    title: 'Frontend разработчик',
+    location: 'Москва, Россия, офис',
+    url: 'https://team.vk.company/vacancy/54816',
+  }, { profile: { autopilot: { remote_only: true } }, titleFilter: {} });
+
+  assert.ok(ru.reasons.includes('russia_market:+12'));
+  assert.ok(ru.reasons.includes('remote_preference_conflict:-12'));
+});
+
+
+test('hyphenated Front-End titles match configured frontend application targets', () => {
+  const row = scoreJob({ title: 'Front-End Lead', location: 'Москва, Россия' }, {
+    titleFilter: { positive: ['frontend'], negative: [] },
+  });
+  assert.deepEqual(row.positiveHits, ['frontend']);
+  assert.ok(row.reasons.some(r => r.startsWith('title_match:')));
+});

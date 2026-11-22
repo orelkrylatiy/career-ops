@@ -3,7 +3,7 @@ name: career-ops
 description: "Open-source AI job search agent -- evaluate offers, generate CVs, scan portals, track applications. Use when the user pastes a job URL or JD, asks to scan portals, generate a CV/PDF, track applications, prepare for interviews, draft outreach/emails, or run any career-ops mode."
 arguments: mode
 user-invocable: true
-argument-hint: "[scan | discover | deep | pdf | ats | text | latex | latex-tex | cover | email | proposal | add | expand | eu-swe | oferta | ofertas | apply | triage | batch | tracker | agent-inbox | pipeline | contacto | gambit | training | project | interview-prep | interview | master-profile | intake | retro | interview/plan | interview/practice | interview/debrief | interview-redflag | patterns | calibrate | offer-prep | titles | upskill | followup | reply-watch | outcome | update]"
+argument-hint: "[scan | discover | deep | pdf | ats | text | latex | latex-tex | cover | email | proposal | add | expand | eu-swe | oferta | ofertas | apply | triage | batch | tracker | agent-inbox | pipeline | contacto | gambit | training | project | interview-prep | interview | master-profile | intake | retro | interview/plan | interview/practice | interview/debrief | interview-redflag | patterns | calibrate | offer-prep | titles | upskill | followup | reply-watch | outcome | autopilot | update]"
 license: MIT
 ---
 
@@ -147,6 +147,16 @@ Hosts that title sessions automatically name them after the invocation, so every
 
 ---
 
+## Autonomous campaign routing (fork extension)
+
+When the user asks to **send/submit applications**, continue a quota (e.g. "20 applications"), or run autonomous job applications, select `autopilot` — **not** the upstream review-only `apply` mode, `scan` mode, or open-ended web search. This also applies to Codex natural-language requests when there is no slash command. Read `AGENTS.md` and `modes/autopilot.md` before acting.
+
+1. Keep the user's explicitly selected candidate/direction. Resolve it using `node profile.mjs list` and `node profile.mjs env <candidate> <direction>`; the direction environment must be applied to all subprocesses. Never silently fall back to the repository-level DB.
+2. Run `node autopilot.mjs preflight` before discovery. If CV/PDF and profile email conflict, stop, report the **one specific contact blocker once**, and do not search the web to appear busy. Candidate selection does not itself select a conflicting email address.
+3. For a **clearly authorized live campaign only**, invoke the dedicated runner with `AUTOPILOT_LIVE=1 npm run autopilot:live -- --agent codex --target-applied <N> --max-jobs <bounded-attempt-budget> --scan-on-empty` (or the user's supported agent). `--target-applied` counts **confirmed** new submissions; `--max-jobs` limits attempted vacancies and can be higher than the target. The runner starts with the eligible SQLite queue, performs at most one configured/RU discovery pass when empty, and verifies every Submit. Never manually browse/search as an alternative execution loop.
+4. For code-review, testing, or ambiguous instructions, keep live mode disabled and use `npm run autopilot` or `node autopilot.mjs status`. A debugging request is not permission to submit.
+5. For target-based campaigns, `--scan-on-empty` performs at most one bounded provider recovery pass *inside* the runner. Never repeat wide scans or launch broad web search outside it. If the target remains unmet after the attempt budget and optional recovery, report the verified count plus concrete source/eligibility blockers. A direct scan without live authorization never submits.
+
 ## Discovery Mode (no arguments)
 
 If your CLI supports `/career-ops`, show this menu. In Codex, surface the same options in plain text and map the requested mode the same way.
@@ -159,7 +169,7 @@ Concrete equivalents for Codex prompt-driven sessions:
 /career-ops pipeline       ↔ "Run the career-ops pipeline mode for data/pipeline.md."
 /career-ops pdf            ↔ "Run the career-ops pdf mode for the latest evaluated role."
 /career-ops email          ↔ "Run the career-ops email mode for the latest evaluated role."
-/career-ops tracker        ↔ "Run the career-ops tracker mode and summarize the current statuses."
+/career-ops tracker        ↔ "Run the career-ops tracker mode and summarize the current statuses."\n/career-ops autopilot      ↔ "Run the career-ops autonomous application mode using the selected candidate and existing queue."
 ```
 
 Show this menu:
@@ -199,7 +209,7 @@ Available commands:
   /career-ops project   → Evaluate portfolio project idea
   /career-ops tracker   → Application status overview
   /career-ops agent-inbox → Queue/drain requests for the next session (data/agent-inbox.md)
-  /career-ops apply     → Live application assistant (Playwright from this checkout, does not submit)
+  /career-ops apply     → Live application assistant (Playwright from this checkout, does not submit)\n  /career-ops autopilot → Autonomous verified submissions (explicit live opt-in, existing queue first)
   /career-ops scan      → Scan portals and discover new offers
   /career-ops discover  → Resolve a company list to scannable ATS boards + append to portals.yml (zero-token)
   /career-ops triage    → Fast first-pass go/no-go score from modes/_brief.md (writes no files)
@@ -240,7 +250,7 @@ Run `gambit` here, in the interactive session, never in a worker, even though it
 
 Read `modes/_profile.md` (if exists) + `modes/_custom.md` (if exists) + `modes/{mode}.md`
 
-Applies to: `tracker`, `agent-inbox`, `deep`, `interview-prep`, `interview`, `master-profile`, `regional/eu-swe`, `interview/plan`, `interview/practice`, `interview/debrief`, `latex`, `latex-tex`, `training`, `project`, `patterns`, `titles`, `upskill`, `followup`, `reply-watch`, `outcome`, `cover`, `email`, `proposal`, `add`, `offer-prep`, `discover`, `intake`, `ats`, `calibrate`, `retro`, `expand`, `interview-redflag`, `update`
+Applies to: `autopilot`, `tracker`, `agent-inbox`, `deep`, `interview-prep`, `interview`, `master-profile`, `regional/eu-swe`, `interview/plan`, `interview/practice`, `interview/debrief`, `latex`, `latex-tex`, `training`, `project`, `patterns`, `titles`, `upskill`, `followup`, `reply-watch`, `outcome`, `cover`, `email`, `proposal`, `add`, `offer-prep`, `discover`, `intake`, `ats`, `calibrate`, `retro`, `expand`, `interview-redflag`, `update`
 
 ### Modes that load only their mode file
 

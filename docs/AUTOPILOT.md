@@ -8,7 +8,7 @@
 
 The original Career Ops scans ATS systems and job boards, evaluates postings, generates resumes and maintains the Markdown tracker. Our opt-in extension provides a SQLite lease-based queue and a browser worker that uses the same authorized Playwright CLI session, chooses a verified CV, fills a real application, and requires a receipt from `autopilot-verify.mjs` before it can mark a submission verified.
 
-The worker **does not** run in the ordinary upstream modes. This campaign (30 new verified frontend applications, at least 10 in the Russian market) remains **paused** until the user explicitly resumes it. Old, duplicate or uncertain sends are not part of the campaign. The runner has a hard `AUTOPILOT_LIVE=1` activation gate and an explicit `CAREER_OPS_ROOT` requirement.
+The worker **does not** run in the ordinary upstream modes. No previous campaign goal is automatically active. Live submissions remain **paused** until the user explicitly authorizes a selected candidate's application run. Old, duplicate or uncertain sends are not part of the campaign. The runner has a hard `AUTOPILOT_LIVE=1` activation gate and an explicit `CAREER_OPS_ROOT` requirement.
 
 ## Install and inspect without submissions
 
@@ -73,6 +73,14 @@ CAREER_OPS_PORTALS="$CAREER_OPS_ROOT/data/portals-regional.generated.yml" npm ru
 ```
 
 For on-demand discovery within the live runner, pass `--scan`. For deep ATS enumeration, also set `AUTOPILOT_DISCOVERY=full`. Ordinary use needs neither.
+
+## Codex dispatch versus worker execution
+
+In an interactive Codex session, a goal like "submit 20 React applications" must invoke the autonomous mode. Selecting `agafonin-react/frontend-react-ru` identifies the direction but **does not resolve a conflicting application email**. Use `eval "$(node profile.mjs env agafonin-react frontend-react-ru)"` (substitute the user's actual selection), then `node autopilot.mjs preflight`. Reconcile `config/profile.yml`, `cv.md`, and the prepared PDF if preflight flags an identity mismatch; do not perform unrelated searches while blocked.
+
+When the user explicitly authorizes actual applications and preflight passes, start `AUTOPILOT_LIVE=1 npm run autopilot:live -- --agent codex --target-applied 20 --max-jobs 60 --scan-on-empty` (replace 20 with the requested **verified submissions**, and 60 with the chosen bounded number of attempted postings). This drains the eligible SQLite queue first and performs at most one configured/RU provider scan if it runs out of eligible work. `--max-jobs` counts attempted vacancies, **not** successful applications; `--target-applied` stops at N verified new sends. Report the remaining shortfall instead of switching to ad-hoc web searches. The same command is **not** authorized by a request to test, debug or refactor the code.
+
+The `data/autopilot-queue.md` inspection view shows only the highest-priority 200 jobs by default. SQLite `data/autopilot.db` remains the full source of truth, including deferred, skipped and historical postings. Positive `portals.yml:title_filter` values constrain **actual attempts** by default, without narrowing broad discovery; configure `autopilot.require_title_match_for_apply: false` only for deliberately exploratory campaigns.
 
 ## Application workflow and safety
 
