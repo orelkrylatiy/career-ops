@@ -95,7 +95,7 @@ autopilot.mjs
 data/autopilot.db
 ~~~
 
-`autopilot-scan.mjs` is deliberately different from the normal review-first scanner configuration. It bypasses preference/fit filters such as title, tier, location, configured posting age, salary, description/content, country eligibility and visa. Explicit CLI date bounds remain explicit.
+`autopilot-scan.mjs` now keeps the same configured title, location, posting-age, salary, visa and other preference filters as upstream **by default**. Only explicit `--wide` removes those soft filters for broad discovery. The upstream scanner remains unmodified.
 
 It still keeps source safety checks, explicit blacklist behavior and canonical URL dedup.
 
