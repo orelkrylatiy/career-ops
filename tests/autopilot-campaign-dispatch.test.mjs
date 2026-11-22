@@ -65,8 +65,9 @@ test('wide discovery retains both jobs, but live dispatch skips an unrelated hig
   assert.equal(queued.length, 2);
   assert.equal(queued[0].company, 'Junk Corp', 'irrelevant job must be the highest-ranked to test dispatch filtering');
   const view = readFileSync(path.join(ROOT, 'data/autopilot-queue.md'), 'utf8');
-  assert.match(view, /Showing: 1 of 2/);
-  assert.doesNotMatch(view, /Good Corp/);
+  assert.match(view, /Showing: 1 of 1 eligible/);
+  assert.match(view, /Good Corp/);
+  assert.doesNotMatch(view, /Junk Corp/);
 
   const previousLive = process.env.AUTOPILOT_LIVE;
   process.env.AUTOPILOT_LIVE = '1';
@@ -74,7 +75,7 @@ test('wide discovery retains both jobs, but live dispatch skips an unrelated hig
     const claimed = autopilot.cmdNext({ owner: 'campaign-fixture' });
     assert.equal(claimed.company, 'Good Corp');
     const jobs = db.listJobs();
-    assert.equal(jobs.find(j => j.company === 'Junk Corp')?.status, 'skipped');
+    assert.equal(jobs.find(j => j.company === 'Junk Corp')?.status, 'queued');
     assert.equal(jobs.find(j => j.company === 'Good Corp')?.status, 'claimed');
   } finally {
     if (previousLive == null) delete process.env.AUTOPILOT_LIVE;
