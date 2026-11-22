@@ -23,7 +23,7 @@ The timestamp above is an **example**, not a permanent value. Pass the current U
 ## Run activation and scope
 
 - Campaign is **paused** by default; real sends require explicit reactivation, `AUTOPILOT_LIVE=1`, and an exact `CAREER_OPS_ROOT` for a selected direction. `npm run autopilot` is a safe preview; `npm run autopilot:live` requires the live env gate.
-- Process suitable queued jobs before rescanning. Default live runner uses `--no-scan`, a small job cap and bounded per-job timeout. Run scans separately; request `--scan` and optionally `AUTOPILOT_DISCOVERY=full` to discover anew.
+- Process suitable queued jobs before rescanning. Default live runner uses `--no-scan`, a small job cap and bounded per-job timeout. Run scans separately; request `--scan` (with upstream portal filters) and optionally `AUTOPILOT_DISCOVERY=full` to discover anew.
 - No `tg-ops`, `hh-ops`, HeadHunter or Telegram in autonomous mode; never switch projects or profiles. Source-level filtering is enforced by the scan adapter, URL guard and worker.
 - Explicit `strict_market: Russia` remains a hard preference; canonical tracker state wins over an old queued SQLite record.
 - Reuse authorized browser sessions and autonomously attempt supported text-image CAPTCHA only where permitted. Do not bypass interactive third-party challenges or MFA; defer and continue other jobs.
