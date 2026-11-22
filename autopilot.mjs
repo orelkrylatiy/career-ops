@@ -701,6 +701,10 @@ export function cmdNext({
   const excluded = excludedHostTokens(profile);
   const titleFilter = loadTitleFilter();
   let job = claimNextJob(owner, leaseMinutes);
+  // Bound SQLite transitions per dispatch when a legacy queue contains
+  // thousands of irrelevant entries. A later invocation may drain the rest.
+  const maxSuppressed = 250;
+  let suppressed = 0;
   while (job) {
     const host = hostOf(job.url);
     const alreadyApplied = tracker.rawSet.has(job.url) || tracker.keySet.has(job.url_key);
@@ -714,6 +718,12 @@ export function cmdNext({
       forbiddenSource ? 'excluded source' :
       marketMismatch ? 'strict market mismatch' : 'application title filter mismatch';
     reportOutcome(job.url_key, 'skipped', reason + '; suppressed before browser worker', null, { claimOwner: owner });
+    suppressed++;
+    if (suppressed >= maxSuppressed) {
+      console.error('[autopilot] suppressed ' + suppressed + ' ineligible queued jobs in this dispatch; repeat next to inspect later entries');
+      job = null;
+      break;
+    }
     job = claimNextJob(owner, leaseMinutes);
   }
   regenerateQueue();
