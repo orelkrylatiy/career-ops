@@ -223,8 +223,10 @@ export function regenerateQueue() {
     ? Math.min(requested, 1000) : 200;
   const profile = loadYamlIfExists(PROFILE_PATH);
   const titleFilter = loadTitleFilter();
+  const tracker = loadTrackerUrlIndex();
+  const excludedHosts = excludedHostTokens(profile);
   const eligible = queued.filter(job =>
-    matchesStrictMarket(job, profile) && applicationTitleEligible(job, titleFilter, profile));
+    applicationClaimEligible(job, { titleFilter, profile, tracker, excludedHosts }));
   const visible = eligible.slice(0, viewLimit);
   const counts = statusCounts();
   const lines = [
@@ -690,9 +692,26 @@ export function cmdCap() {
 // broader campaigns. This is *not* a substitute for checking the full JD.
 export function applicationTitleEligible(job, titleFilter = {}, profile = {}) {
   if (profile?.autopilot?.require_title_match_for_apply === false) return true;
-  if (!Array.isArray(titleFilter?.positive) || titleFilter.positive.length === 0) return true;
+  const positive = Array.isArray(titleFilter?.positive) && titleFilter.positive.length > 0;
+  const negative = Array.isArray(titleFilter?.negative) && titleFilter.negative.length > 0;
+  if (!positive && !negative) return true;
   const rank = scoreJob(job, { titleFilter, profile });
-  return rank.positiveHits.length > 0 && rank.negativeHits.length === 0;
+  return rank.negativeHits.length === 0 && (!positive || rank.positiveHits.length > 0);
+}
+
+// Avoid leasing irrelevant or excluded historical rows at all: a direction can
+// have tens of thousands of globally collected postings. Revalidation after
+// lease remains necessary, but selection is deterministic and queue-first.
+export function applicationClaimEligible(job, {
+  titleFilter = {}, profile = {}, tracker = {}, excludedHosts = [],
+} = {}) {
+  if (!applicationTitleEligible(job, titleFilter, profile)) return false;
+  if (!matchesStrictMarket(job, profile)) return false;
+  if (!inspectApplicationUrl(job.url).ok) return false;
+  const host = hostOf(job.url);
+  if (excludedHosts.some(token => hostMatchesToken(host, token))) return false;
+  if (tracker.rawSet?.has(job.url) || tracker.keySet?.has(job.url_key)) return false;
+  return true;
 }
 
 export function cmdNext({
@@ -710,14 +729,13 @@ export function cmdNext({
   const profile = loadYamlIfExists(PROFILE_PATH);
   const excluded = excludedHostTokens(profile);
   const titleFilter = loadTitleFilter();
-  let job = claimNextJob(owner, leaseMinutes, {
-    accept: candidate => applicationTitleEligible(candidate, titleFilter, profile),
-  });
+  const accept = candidate =>
+    applicationClaimEligible(candidate, { titleFilter, profile, tracker, excludedHosts: excluded });
+  let job = claimNextJob(owner, leaseMinutes, { accept });
   // Bound SQLite transitions per dispatch when a legacy queue contains
   // thousands of irrelevant entries. A later invocation may drain the rest.
   const maxSuppressed = 250;
   let suppressed = 0;
-  const accept = candidate => applicationTitleEligible(candidate, titleFilter, profile);
   while (job) {
     const host = hostOf(job.url);
     const alreadyApplied = tracker.rawSet.has(job.url) || tracker.keySet.has(job.url_key);
