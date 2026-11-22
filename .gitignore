@@ -316,3 +316,18 @@ web/out/
 # Regenerate with `npm run harvest:buildlist`.
 buildlist-*.yml
 buildlist-*.yml.progress.json
+
+# Playwright MCP and CLI artifacts may contain screenshots and session data.
+.playwright-cli/
+**/.playwright-cli/
+# Autonomous fork: private multi-profile data, session credentials and generated CVs
+/profiles.yml
+/data/profiles/
+/data/browser-profile/
+/data/autopilot/
+/data/autopilot.db*
+/data/source-registry.db*
+/batch/cv-payloads/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
