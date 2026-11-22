@@ -22,24 +22,29 @@ const BROWSER_SESSION = process.env.AUTOPILOT_BROWSER_SESSION || 'career-ops-wor
 const require = createRequire(import.meta.url);
 
 export function parseRunnerArgs(argv) {
-  const config = { agent: 'auto', maxJobs: 5, noScan: true, refresh: false, dryRun: false, timeoutMinutes: DEFAULT_TIMEOUT_MIN };
+  const config = { agent: 'auto', maxJobs: 5, targetApplied: null, scanOnEmpty: false, noScan: true, refresh: false, dryRun: false, timeoutMinutes: DEFAULT_TIMEOUT_MIN };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--no-scan') config.noScan = true;
     else if (a === '--scan') config.noScan = false;
+    else if (a === '--scan-on-empty') config.scanOnEmpty = true;
     else if (a === '--refresh-registry') config.refresh = true;
     else if (a === '--dry-run') config.dryRun = true;
-    else if (['--agent', '--max-jobs', '--timeout-minutes'].includes(a)) {
+    else if (['--agent', '--max-jobs', '--timeout-minutes', '--target-applied'].includes(a)) {
       const value = argv[++i];
       if (value == null) throw new Error(a + ' needs a value');
       if (a === '--agent') config.agent = value;
       if (a === '--max-jobs') config.maxJobs = Number(value);
+      if (a === '--target-applied') config.targetApplied = Number(value);
       if (a === '--timeout-minutes') config.timeoutMinutes = Number(value);
     } else throw new Error('unknown runner argument: ' + a);
   }
   if (config.noScan && config.refresh) throw new Error('--no-scan conflicts with --refresh-registry');
   if (!['auto', ...SUPPORTED_AGENTS].includes(config.agent)) throw new Error('unsupported agent: ' + config.agent);
   if (config.maxJobs !== Infinity && (!Number.isSafeInteger(config.maxJobs) || config.maxJobs < 1)) throw new Error('--max-jobs must be a positive integer');
+  if (config.targetApplied != null && (!Number.isSafeInteger(config.targetApplied) || config.targetApplied < 1)) {
+    throw new Error('--target-applied must be a positive integer');
+  }
   if (!Number.isFinite(config.timeoutMinutes) || config.timeoutMinutes < 1 || config.timeoutMinutes > 110) throw new Error('--timeout-minutes must be 1..110');
   return config;
 }
@@ -211,40 +216,9 @@ export function detectBlockingChallenge({ session = BROWSER_SESSION, run = spawn
   } catch { return null; }
 }
 
-export async function main(argv = process.argv.slice(2)) {
-  assertLinux();
-  const opts = parseRunnerArgs(argv);
-  const runId = process.env.AUTOPILOT_RUN_ID || randomUUID();
-  process.env.AUTOPILOT_RUN_ID = runId;
-  const started = Date.now();
-  const counters = { claimed: 0, applied: 0, submitted_unconfirmed: 0, deferred: 0, captcha: 0, failed: 0, validation_failed: 0, skipped: 0, no_outcome: 0 };
-  const owner = process.env.AUTOPILOT_WORKER_ID || ('worker-' + runId.replace(/[^a-z0-9]/gi, '').slice(0, 16));
-  let error = null;
-  let agent = null;
-  let consecutiveWorkerFailures = 0;
-  auditLog('runner_start', { no_scan: opts.noScan, refresh_registry: opts.refresh, dry_run: opts.dryRun });
-  try {
-    if (opts.dryRun) {
-      // Do not claim, open a browser or call external agent.
-      await cmdRun({ dryRun: true, noScan: true });
-      console.log('Autopilot dry-run: no submissions or claims.');
-      return;
-    }
-    if (process.env.AUTOPILOT_LIVE !== '1') throw new Error('campaign paused: live application requires AUTOPILOT_LIVE=1; use npm run autopilot for a safe dry-run');
-    if (!process.env.CAREER_OPS_ROOT && !process.env.CAREER_OPS_DATA_DIR) throw new Error('select explicit CAREER_OPS_ROOT for the active React/Next.js/Vue direction (node profile.mjs env)');
-    if (!cmdPreflight()) throw new Error('preflight failed');
-    agent = resolveAgent(opts.agent);
-    // --version does not prove the coding CLI is authenticated or has model
-    // access. A fixed, safe one-word prompt tests the actual noninteractive path
-    // BEFORE leasing any vacancy; a failed account cannot consume a whole queue.
-    const probe = await runAgent(agent,
-      'Career Ops readiness check: respond with exactly READY. Do not browse, read files, or take actions.',
-      90_000, { AUTOPILOT_RUN_ID: runId }, { capture: true });
-    if (!probe.ok || !/^\s*READY\s*$/im.test(probe.output || '')) {
-      throw new Error('coding-agent login/model probe failed; fix CLI authorization first');
-    }
-    // A Playwright --help check also does not prove Chromium can launch.
-    assertBrowserReady();
+// Reuse the same trusted provider pipeline for initial and one-time recovery scans.
+// No general web searches or ad-hoc browser vacancy hunting in this layer.
+function runDiscovery(opts) {
     if (!opts.noScan) {
       // Start with configured employer sources, then widen to the upstream ATS
       // directories by default. Discovery never uses HH or Telegram transport.
@@ -285,10 +259,60 @@ export async function main(argv = process.argv.slice(2)) {
         }
       }
     }
+
+}
+
+export async function main(argv = process.argv.slice(2)) {
+  assertLinux();
+  const opts = parseRunnerArgs(argv);
+  const runId = process.env.AUTOPILOT_RUN_ID || randomUUID();
+  process.env.AUTOPILOT_RUN_ID = runId;
+  const started = Date.now();
+  const counters = { claimed: 0, applied: 0, submitted_unconfirmed: 0, deferred: 0, captcha: 0, failed: 0, validation_failed: 0, skipped: 0, no_outcome: 0 };
+  const owner = process.env.AUTOPILOT_WORKER_ID || ('worker-' + runId.replace(/[^a-z0-9]/gi, '').slice(0, 16));
+  let error = null;
+  let agent = null;
+  let consecutiveWorkerFailures = 0;
+  let recoveryScanned = false;
+  auditLog('runner_start', { no_scan: opts.noScan, refresh_registry: opts.refresh, dry_run: opts.dryRun });
+  try {
+    if (opts.dryRun) {
+      // Do not claim, open a browser or call external agent.
+      await cmdRun({ dryRun: true, noScan: true });
+      console.log('Autopilot dry-run: no submissions or claims.');
+      return;
+    }
+    if (process.env.AUTOPILOT_LIVE !== '1') throw new Error('campaign paused: live application requires AUTOPILOT_LIVE=1; use npm run autopilot for a safe dry-run');
+    if (!process.env.CAREER_OPS_ROOT && !process.env.CAREER_OPS_DATA_DIR) throw new Error('select explicit CAREER_OPS_ROOT for the active React/Next.js/Vue direction (node profile.mjs env)');
+    if (!cmdPreflight()) throw new Error('preflight failed');
+    agent = resolveAgent(opts.agent);
+    // --version does not prove the coding CLI is authenticated or has model
+    // access. A fixed, safe one-word prompt tests the actual noninteractive path
+    // BEFORE leasing any vacancy; a failed account cannot consume a whole queue.
+    const probe = await runAgent(agent,
+      'Career Ops readiness check: respond with exactly READY. Do not browse, read files, or take actions.',
+      90_000, { AUTOPILOT_RUN_ID: runId }, { capture: true });
+    if (!probe.ok || !/^\s*READY\s*$/im.test(probe.output || '')) {
+      throw new Error('coding-agent login/model probe failed; fix CLI authorization first');
+    }
+    // A Playwright --help check also does not prove Chromium can launch.
+    assertBrowserReady();
+    if (!opts.noScan) runDiscovery(opts);
     await cmdRun({ noScan: true });
-    while (counters.claimed < opts.maxJobs) {
+    while (counters.claimed < opts.maxJobs
+      && (opts.targetApplied == null || counters.applied < opts.targetApplied)) {
       const job = cmdNext({ owner, json: false });
-      if (!job) break;
+      if (!job) {
+        if (opts.scanOnEmpty && !recoveryScanned) {
+          recoveryScanned = true;
+          console.error('[autopilot] eligible queue exhausted; one bounded configured/RU provider scan');
+          auditLog('recovery_scan_start', { reason: 'no_eligible_queue_jobs' });
+          runDiscovery({ ...opts, noScan: false });
+          await cmdRun({ noScan: true });
+          continue;
+        }
+        break;
+      }
       counters.claimed++;
       // Historical SQLite queues may predate the HH exclusion in the scanner.
       const sourceHost = new URL(job.url).hostname.toLowerCase();
@@ -353,6 +377,9 @@ export async function main(argv = process.argv.slice(2)) {
       version: 1, run_id: runId, started_at: new Date(started).toISOString(),
       finished_at: new Date().toISOString(), duration_ms: Date.now() - started,
       agent, counts: counters, queue: opts.dryRun ? null : statusCounts(), ok: !error,
+      goal: { target_applied: opts.targetApplied, verified_applied: counters.applied,
+        met: opts.targetApplied == null ? null : counters.applied >= opts.targetApplied },
+      recovery_scan_performed: recoveryScanned,
       error_code: error ? 'RUNNER_FAILED' : null,
     };
     const reportDir = path.join(DATA_ROOT, 'data', 'autopilot', 'reports');
