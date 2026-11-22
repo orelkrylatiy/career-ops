@@ -24,7 +24,7 @@ Additional CIS adapters may be present: `careercenter-am`, `ishuz`, and `staffam
 - The selected direction's `portals.yml` holds configured employers and boards. `provider:` or recognized `careers_url`/`api` fields map the entry to an adapter.
 - `catalog/source-catalog.yml` contains country-scoped entries such as `ru-habr-career`, `ru-geekjob` and `ru-superjob`, mapped to provider IDs `habr-career`, `geekjob`, `superjob`.
 - `source-registry.mjs export --country RU` merges candidate settings and catalog entries into `data/portals-regional.generated.yml` under the active `CAREER_OPS_ROOT`. It must **not** overwrite the candidate's `portals.yml`.
-- The scanner adapter `autopilot-scan.mjs` passes a temporary YAML configuration to the upstream scanner. It removes soft preferences only for discovery. Explicit market rules, blacklists, eligibility and application evidence remain binding for actual sends.
+- The scanner adapter `autopilot-scan.mjs` passes a temporary YAML configuration to the upstream scanner. It preserves upstream preferences by default; explicit `--wide` removes soft filters for broad discovery. Explicit market rules, blacklists, eligibility and application evidence remain binding for actual sends.
 - A full ATS discovery is optional and potentially expensive. Never begin wide discovery before checking the existing queue.
 
 ## Commands (safe, no submissions)
