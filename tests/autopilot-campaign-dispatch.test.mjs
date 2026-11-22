@@ -23,8 +23,8 @@ autopilot:
   cv_pdf: data/mock.pdf
   priority_sources: [jobs.junkcorp.ru]
 `);
-put('cv.md', '# Candidate CV\\nContact: other@candidate.test\\n');
-put('data/mock.pdf', '%PDF-1.4\\n% fixture (no real CV)\\n');
+put('cv.md', '# Candidate CV\nContact: other@candidate.test\n');
+put('data/mock.pdf', '%PDF-1.4\n% fixture (no real CV)\n');
 put('portals.yml', `title_filter:
   positive: [react]
   negative: [sales]
@@ -45,7 +45,7 @@ const autopilot = await import(pathToFileURL(path.join(CODE_ROOT, 'autopilot.mjs
 const db = await import(pathToFileURL(path.join(CODE_ROOT, 'autopilot-db.mjs')).href);
 
 test('preflight rejects mismatched CV/profile email before live submission', () => {
-  assert.match(autopilot.contactPreflight().join(' | '), /conflicts with cv\\.md/);
+  assert.match(autopilot.contactPreflight().join(' | '), /conflicts with cv\.md/);
   const matching = autopilot.applicationContactIssues(
     { candidate: { email: 'applied@candidate.test' } },
     'Contact: applied@candidate.test',
@@ -89,7 +89,7 @@ test('router advertises autopilot separately from upstream review-only apply', (
   assert.match(skill, /\/career-ops autopilot/);
   assert.match(skill, /autonomous campaign routing/i);
   assert.match(skill, /autopilot:live/);
-  assert.match(guide, /dedicated \`autopilot-runner\\.mjs\`/);
+  assert.match(guide, /autopilot-runner\.mjs/);
 });
 
 test.after(() => {
