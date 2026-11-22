@@ -155,7 +155,7 @@ When the user asks to **send/submit applications**, continue a quota (e.g. "20 a
 2. Run `node autopilot.mjs preflight` before discovery. If CV/PDF and profile email conflict, stop, report the **one specific contact blocker once**, and do not search the web to appear busy. Candidate selection does not itself select a conflicting email address.
 3. For a **clearly authorized live campaign only**, invoke the dedicated runner with `AUTOPILOT_LIVE=1 npm run autopilot:live -- --agent codex --max-jobs <N>` (or the user's supported agent). This starts from the existing SQLite queue and verifies each application. Never manually browse/search as an alternative execution loop, and never claim jobs outside the runner.
 4. For code-review, testing, or ambiguous instructions, keep live mode disabled and use `npm run autopilot` or `node autopilot.mjs status`. A debugging request is not permission to submit.
-5. Run separate `npm run autopilot:scan` / `--scan` **only when explicitly requested or when the verified queue is exhausted**. Use the repository's providers, not general web-search loops. Report verified sends, blocked jobs and the specific stop reason; don't claim quota success from scan or queue counts.
+5. If the existing eligible queue runs out before the requested target, permit **one** bounded recovery pass via `AUTOPILOT_LIVE=1 npm run autopilot:live -- --agent codex --scan --max-jobs <remaining>` after the same preflight; this scans configured/RU providers and then resumes queue processing. Do not start repeated broad web-search loops. If the target remains unmet, report the verified count and source/eligibility blockers rather than inventing submissions. A direct scan without live authorization never submits.
 
 ## Discovery Mode (no arguments)
 
