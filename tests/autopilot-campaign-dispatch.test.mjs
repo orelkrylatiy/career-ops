@@ -62,6 +62,13 @@ test('application target filter can be explicitly relaxed without weakening sour
   assert.equal(autopilot.applicationTitleEligible({ title: 'Sales Manager' }, titles, {}), false);
   assert.equal(autopilot.applicationTitleEligible({ title: 'React Developer' }, titles, {}), true);
   assert.equal(autopilot.applicationTitleEligible(
+    { title: 'Sales Manager' }, { negative: ['sales'] }, {},
+  ), false, 'negative-only targeting must still reject sales');
+  assert.equal(autopilot.applicationClaimEligible(
+    { title: 'React Developer', location: 'Berlin, Germany', url: 'https://jobs.valid.com/react' },
+    { titleFilter: titles, profile: { autopilot: { strict_market: 'Russia' } } },
+  ), false, 'historical cross-market jobs must not take live leases');
+  assert.equal(autopilot.applicationTitleEligible(
     { title: 'Sales Manager' }, titles,
     { autopilot: { require_title_match_for_apply: false } },
   ), true);
