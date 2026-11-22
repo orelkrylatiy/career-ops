@@ -636,6 +636,11 @@ export function contactPreflight() {
     });
     if (extracted.status === 0) {
       problems.push(...applicationContactIssues(profile, '', extracted.stdout));
+      if (!String(extracted.stdout || '').trim()) {
+        problems.push('warning: prepared resume PDF has no extractable text; worker must inspect contact before Submit');
+      }
+    } else {
+      problems.push('warning: prepared resume PDF email not checked (pdftotext unavailable/failed); worker must inspect it before Submit');
     }
   }
   return problems;
@@ -644,7 +649,7 @@ export function contactPreflight() {
 export function cmdPreflight() {
   const problems = contactPreflight();
   // Phone stays a warning because many forms do not require one.
-  const blockers = problems.filter((p) => !p.startsWith('candidate.phone'));
+  const blockers = problems.filter((p) => !p.startsWith('candidate.phone') && !p.startsWith('warning:'));
   const browser = checkPlaywrightCli();
   if (!browser.ok) blockers.push(`playwright-cli: ${browser.reason}`);
 
@@ -889,7 +894,7 @@ export async function cmdReport(target, outcome, note, channel, metadata = {}) {
   }
 
   if (outcome === 'applied') {
-    const blockers = contactPreflight().filter((p) => !p.startsWith('candidate.phone'));
+    const blockers = contactPreflight().filter((p) => !p.startsWith('candidate.phone') && !p.startsWith('warning:'));
     if (blockers.length) {
       throw new Error(`contact preflight failed:\n  - ${blockers.join('\n  - ')}`);
     }
