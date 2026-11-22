@@ -40,6 +40,7 @@ export function parseRunnerArgs(argv) {
     } else throw new Error('unknown runner argument: ' + a);
   }
   if (config.noScan && config.refresh) throw new Error('--no-scan conflicts with --refresh-registry');
+  if (!config.noScan && config.scanOnEmpty) throw new Error('--scan and --scan-on-empty cannot be combined');
   if (!['auto', ...SUPPORTED_AGENTS].includes(config.agent)) throw new Error('unsupported agent: ' + config.agent);
   if (config.maxJobs !== Infinity && (!Number.isSafeInteger(config.maxJobs) || config.maxJobs < 1)) throw new Error('--max-jobs must be a positive integer');
   if (config.targetApplied != null && (!Number.isSafeInteger(config.targetApplied) || config.targetApplied < 1)) {
@@ -196,6 +197,16 @@ export function workerEnvironment(owner, runId, session = BROWSER_SESSION, optio
   };
 }
 
+// A direction has a stable browser profile, but each campaign execution needs
+// a fresh lease owner. Reusing the profile's static AUTOPILOT_WORKER_ID would
+// silently resume a possibly-submitted claim left by a previous process.
+export function runOwnerFor(runId, prefix = process.env.AUTOPILOT_WORKER_ID || 'worker') {
+  const base = String(prefix || 'worker').replace(/[^a-z0-9._-]/gi, '').slice(0, 50) || 'worker';
+  const suffix = String(runId).replace(/[^a-z0-9]/gi, '').slice(0, 16);
+  if (!suffix) throw new Error('invalid runId for unique claim owner');
+  return base + '-' + suffix;
+}
+
 export function safeJobId(job) {
   return createHash('sha256').update(String(job.url_key || job.url)).digest('hex').slice(0, 16);
 }
@@ -269,7 +280,7 @@ export async function main(argv = process.argv.slice(2)) {
   process.env.AUTOPILOT_RUN_ID = runId;
   const started = Date.now();
   const counters = { claimed: 0, applied: 0, submitted_unconfirmed: 0, deferred: 0, captcha: 0, failed: 0, validation_failed: 0, skipped: 0, no_outcome: 0 };
-  const owner = process.env.AUTOPILOT_WORKER_ID || ('worker-' + runId.replace(/[^a-z0-9]/gi, '').slice(0, 16));
+  const owner = runOwnerFor(runId);
   let error = null;
   let agent = null;
   let consecutiveWorkerFailures = 0;
