@@ -215,6 +215,9 @@ function hostOf(url) {
 }
 
 export function regenerateQueue() {
+  // The CLI runner owns SQLite state; a full Markdown mirror is optional when
+  // a campaign processes thousands of jobs. Keep interactive/manual behavior.
+  if (process.env.AUTOPILOT_QUEUE_MIRROR === 'off') return statusCounts().queued ?? 0;
   const queued = listJobs('queued');
   const counts = statusCounts();
   const lines = [
@@ -579,6 +582,18 @@ export function cmdAnalytics() {
 
 const PLACEHOLDER_RE = /TODO|example\.(com|org)|@example/i;
 
+export function checkCandidateEmailConsistency(candidateEmail, cvSource = '') {
+  const email = String(candidateEmail || '').trim().toLowerCase();
+  // The primary cv.md is the human-authored source. Examine only its header:
+  // URLs or project references deep in the document may contain third-party mail.
+  const head = String(cvSource || '').slice(0, 2500).split(/\n(?=##?\s)/, 1)[0];
+  const found = [...new Set((head.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || []).map(v => v.toLowerCase()))];
+  if (email && found.length === 1 && found[0] !== email) {
+    return ['candidate.email does not match the primary cv.md contact email (check identity before live mode)'];
+  }
+  return [];
+}
+
 function contactPreflight() {
   const profile = loadYamlIfExists(PROFILE_PATH) ?? {};
   const candidate = profile.candidate ?? {};
@@ -588,6 +603,10 @@ function contactPreflight() {
   }
   if (!candidate.phone || PLACEHOLDER_RE.test(candidate.phone)) {
     problems.push('candidate.phone');
+  }
+  const sourceCv = path.join(DATA_ROOT, 'cv.md');
+  if (existsSync(sourceCv)) {
+    problems.push(...checkCandidateEmailConsistency(candidate.email, readFileSync(sourceCv, 'utf8')));
   }
   const resume = resolveResume({ profile });
   if (!resume.ok) {
