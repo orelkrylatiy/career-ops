@@ -46,11 +46,14 @@ export function scoreJob(job, { titleFilter = {}, profile = {}, nowMs = Date.now
   const title = String(job?.title || '');
   const location = String(job?.location || '');
   const lowerTitle = title.toLowerCase();
+  // Front-End / Front End / Frontend are the same target in a React campaign.
+  // Leave upstream's general-purpose title-keyword compiler untouched.
+  const titleVariants = [lowerTitle, lowerTitle.replace(/\bfront[\s-]?end\b/g, 'frontend')];
 
   const positive = strings(titleFilter.positive);
   const negative = strings(titleFilter.negative);
-  const positiveHits = positive.filter((k) => compilePositiveKeyword(k.toLowerCase())(lowerTitle));
-  const negativeHits = negative.filter((k) => compileKeyword(k.toLowerCase())(lowerTitle));
+  const positiveHits = positive.filter((k) => titleVariants.some(t => compilePositiveKeyword(k.toLowerCase())(t)));
+  const negativeHits = negative.filter((k) => titleVariants.some(t => compileKeyword(k.toLowerCase())(t)));
 
   if (positiveHits.length) {
     const boost = Math.min(30, 20 + (positiveHits.length - 1) * 3);
