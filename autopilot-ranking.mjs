@@ -8,8 +8,10 @@
 import { compileKeyword, compilePositiveKeyword } from './title-keywords.mjs';
 
 const REMOTE_RE = /\b(remote|worldwide|anywhere|distributed|work from home|wfh|удал[её]н|дистанц)\b/i;
-const ONSITE_RE = /\b(hybrid|onsite|on-site|office[- ]based|in office|гибрид|офис)\b/i;
-const RUSSIA_LOCATION_RE = /\b(russia|russian federation|росси(?:я|и|йская|йской)|москва|moscow|санкт[- ]?петербург|saint petersburg|st\.? petersburg)\b/i;
+// JavaScript \b treats Cyrillic as non-word characters: keep Russian terms
+// outside ASCII word-boundary groups or Москва/Россия/офис never match.
+const ONSITE_RE = /\b(?:hybrid|onsite|on-site|office[- ]based|in office)\b|гибрид|офис/i;
+const RUSSIA_LOCATION_RE = /\b(?:russia|russian federation|moscow|saint petersburg|st\.? petersburg)\b|росси(?:я|и|йская|йской)|москва|санкт[- ]?петербург/i;
 const RUSSIA_JOB_BOARD_HOSTS = new Set(['career.habr.com']);
 
 function strings(value) {
