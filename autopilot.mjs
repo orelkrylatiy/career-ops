@@ -221,14 +221,18 @@ export function regenerateQueue() {
   const requested = Number(process.env.AUTOPILOT_QUEUE_VIEW_LIMIT);
   const viewLimit = Number.isSafeInteger(requested) && requested > 0
     ? Math.min(requested, 1000) : 200;
-  const visible = queued.slice(0, viewLimit);
+  const profile = loadYamlIfExists(PROFILE_PATH);
+  const titleFilter = loadTitleFilter();
+  const eligible = queued.filter(job =>
+    matchesStrictMarket(job, profile) && applicationTitleEligible(job, titleFilter, profile));
+  const visible = eligible.slice(0, viewLimit);
   const counts = statusCounts();
   const lines = [
     '# Autopilot Queue',
     '',
     `Generated: ${new Date().toISOString()}`,
     `Queued: ${queued.length} job(s), ordered by priority then freshness.`,
-    `Showing: ${visible.length} of ${queued.length} (full queue is in SQLite; use autopilot.mjs next to claim).`,
+    `Showing: ${visible.length} of ${eligible.length} eligible (total queued: ${queued.length}; full queue is in SQLite).`,
     `Job status counts: ${JOB_STATUSES.map((s) => `${s}=${counts[s] ?? 0}`).join(' ')}`,
     '',
   ];
@@ -700,23 +704,24 @@ export function cmdNext({
   const profile = loadYamlIfExists(PROFILE_PATH);
   const excluded = excludedHostTokens(profile);
   const titleFilter = loadTitleFilter();
-  let job = claimNextJob(owner, leaseMinutes);
+  let job = claimNextJob(owner, leaseMinutes, {
+    accept: candidate => applicationTitleEligible(candidate, titleFilter, profile),
+  });
   // Bound SQLite transitions per dispatch when a legacy queue contains
   // thousands of irrelevant entries. A later invocation may drain the rest.
   const maxSuppressed = 250;
   let suppressed = 0;
+  const accept = candidate => applicationTitleEligible(candidate, titleFilter, profile);
   while (job) {
     const host = hostOf(job.url);
     const alreadyApplied = tracker.rawSet.has(job.url) || tracker.keySet.has(job.url_key);
     const destination = inspectApplicationUrl(job.url);
     const forbiddenSource = excluded.some((token) => hostMatchesToken(host, token));
     const marketMismatch = !matchesStrictMarket(job, profile);
-    const titleMismatch = !applicationTitleEligible(job, titleFilter, profile);
-    if (!alreadyApplied && destination.ok && !forbiddenSource && !marketMismatch && !titleMismatch) break;
+    if (!alreadyApplied && destination.ok && !forbiddenSource && !marketMismatch) break;
     const reason = alreadyApplied ? 'already in applications tracker' :
       !destination.ok ? `forbidden destination (${destination.reason})` :
-      forbiddenSource ? 'excluded source' :
-      marketMismatch ? 'strict market mismatch' : 'application title filter mismatch';
+      forbiddenSource ? 'excluded source' : 'strict market mismatch';
     reportOutcome(job.url_key, 'skipped', reason + '; suppressed before browser worker', null, { claimOwner: owner });
     suppressed++;
     if (suppressed >= maxSuppressed) {
@@ -724,13 +729,15 @@ export function cmdNext({
       job = null;
       break;
     }
-    job = claimNextJob(owner, leaseMinutes);
+    job = claimNextJob(owner, leaseMinutes, { accept });
   }
   regenerateQueue();
 
   if (!job) {
     if (json) console.log(JSON.stringify({ job: null }));
-    else console.log('queue empty');
+    else console.log(statusCounts().queued > 0
+      ? 'no eligible queued jobs for this candidate/title/market; try a separate scan or review targeting'
+      : 'queue empty');
     return null;
   }
 
