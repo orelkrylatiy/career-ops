@@ -57,6 +57,16 @@ test('preflight rejects mismatched CV/profile email before live submission', () 
   ).length, 1);
 });
 
+test('application target filter can be explicitly relaxed without weakening source blacklists', () => {
+  const titles = { positive: ['react'], negative: ['sales'] };
+  assert.equal(autopilot.applicationTitleEligible({ title: 'Sales Manager' }, titles, {}), false);
+  assert.equal(autopilot.applicationTitleEligible({ title: 'React Developer' }, titles, {}), true);
+  assert.equal(autopilot.applicationTitleEligible(
+    { title: 'Sales Manager' }, titles,
+    { autopilot: { require_title_match_for_apply: false } },
+  ), true);
+});
+
 test('wide discovery retains both jobs, but live dispatch skips an unrelated high-priority job', async () => {
   process.env.AUTOPILOT_QUEUE_VIEW_LIMIT = '1';
   const summary = await autopilot.cmdRun({ noScan: true, dryRun: false });
