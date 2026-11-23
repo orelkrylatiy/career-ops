@@ -60,7 +60,7 @@ test('Codex skill router explicitly discovers fork Autopilot and no conflicting 
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   assert.match(skill, /\| `autopilot` \| `autopilot`/);
   assert.match(skill, /Autonomous submission routing/);
-  assert.match(skill, /подай 30 откликов/);
+  assert.match(skill, /подай N откликов/);
   assert.match(skill, /review-first/);
   assert.equal(pkg.scripts['autopilot:live'], 'node autopilot-runner.mjs');
   assert.equal(pkg.scripts['autopilot:full-scan'], 'node autopilot-scan.mjs --ats-full');
