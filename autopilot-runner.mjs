@@ -269,6 +269,17 @@ export function detectBlockingChallenge({ session = BROWSER_SESSION, run = spawn
 }
 
 export async function main(argv = process.argv.slice(2)) {
+  // Help is safe even when no profile, coding CLI or browser is installed.
+  if (argv.includes('--help') || argv.includes('-h')) {
+    console.log(`Usage: node autopilot-runner.mjs [--dry-run] [--agent codex|claude|opencode|auto]
+  [--target-applied N] [--max-jobs M] [--timeout-minutes N]
+  [--scan | --no-scan] [--refresh-registry]
+
+Default: no scan, max 5 claimed jobs. --max-jobs is NOT the number of verified sends.
+Live requires explicit current-session authorization, AUTOPILOT_LIVE=1 and selected CAREER_OPS_ROOT.
+Normal upstream 'apply' does not submit. Full/wide/undated ATS discovery is separate.`);
+    return;
+  }
   assertLinux();
   const opts = parseRunnerArgs(argv);
   const runId = process.env.AUTOPILOT_RUN_ID || randomUUID();
