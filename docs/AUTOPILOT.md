@@ -1,6 +1,6 @@
 # Autonomous application mode (fork extension)
 
-**Status:** rebuild on the full upstream Career Ops as of 2026-11-21. This document describes the optional fork-specific browser application runner, not the upstream review-first `apply` mode. No real jobs or site CAPTCHAs were exercised in this rebuild.
+**Scope:** optional browser application runner layered over unchanged upstream Career Ops. This is an operator contract, not a live campaign status file. Ordinary upstream `apply` remains review-first and never submits on its own. Do not infer that a running campaign is paused or authorized solely from this document.
 
 [CAPTCHA handling](./CAPTCHA.md) · [Russian and international sources](./REGIONAL_SOURCES.md) · [isolated profiles](./PROFILES.md) · [architecture](./AUTOPILOT_ARCHITECTURE.md)
 
@@ -8,7 +8,7 @@
 
 The original Career Ops scans ATS systems and job boards, evaluates postings, generates resumes and maintains the Markdown tracker. Our opt-in extension provides a SQLite lease-based queue and a browser worker that uses the same authorized Playwright CLI session, chooses a verified CV, fills a real application, and requires a receipt from `autopilot-verify.mjs` before it can mark a submission verified.
 
-The worker **does not** run in the ordinary upstream modes. This campaign (30 new verified frontend applications, at least 10 in the Russian market) remains **paused** until the user explicitly resumes it. Old, duplicate or uncertain sends are not part of the campaign. The runner has a hard `AUTOPILOT_LIVE=1` activation gate and an explicit `CAREER_OPS_ROOT` requirement.
+The worker **does not** run in ordinary upstream modes. Autopilot is **paused by default**; a user instruction in the current session to send applications is the authorization for that run, but the runner still requires `AUTOPILOT_LIVE=1`, preflight, and the explicitly chosen `CAREER_OPS_ROOT`. Never hard-code a 30-application quota, Russian-market minimum or React/Next/Vue target in repository policy: the user's current request and the selected direction determine these. Old, duplicate and ambiguous sends never count.
 
 ## Install and inspect without submissions
 
@@ -72,7 +72,7 @@ npm run autopilot:wide-scan
 CAREER_OPS_PORTALS="$CAREER_OPS_ROOT/data/portals-regional.generated.yml" npm run autopilot:wide-scan
 ```
 
-For on-demand discovery within the live runner, pass `--scan`. For deep ATS enumeration, also set `AUTOPILOT_DISCOVERY=full`. Ordinary use needs neither.
+For on-demand discovery within the live runner, pass `--scan`; do not pass it together with `--no-scan`. Avoid repeated full discovery when the existing queue is enormous. For deep ATS enumeration, also set `AUTOPILOT_DISCOVERY=full`. Ordinary use needs neither.
 
 ## Application workflow and safety
 
@@ -86,10 +86,10 @@ For optional email-based authentication, `autopilot-mail.mjs wait` only reads re
 
 For supported text-image CAPTCHAs, the agent attempts bounded OCR only where permitted; unresolved reCAPTCHA/hCaptcha/Turnstile are reported as job-specific blockers rather than forced bypasses. See [CAPTCHA](./CAPTCHA.md).
 
-## Explicitly authorized live start (not currently approved)
+## Live start (requires explicit authorization in the current session)
 
 ```bash
-# After the user explicitly resumes this paused campaign,
+# After the user explicitly authorizes this live campaign in the current conversation,
 # and after exporting the chosen direction's environment:
 AUTOPILOT_LIVE=1 npm run autopilot:live -- --agent codex --max-jobs 3
 # A larger explicitly approved campaign can set a goal AND a separate attempt ceiling:
