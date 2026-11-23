@@ -111,6 +111,8 @@ export function assertBrowserReady({
   const cliEnv = browserCliEnvironment({ env, dataRoot, checkExecutable });
   const profile = cliEnv.AUTOPILOT_BROWSER_PROFILE;
   mkdirSync(path.dirname(profile), { recursive: true });
+  // Clearcote/Playwright cache must be writable to each isolated worker.
+  mkdirSync(cliEnv.XDG_CACHE_HOME, { recursive: true });
   const call = (args) => {
     const res = run(process.execPath, [binary, 'cli', '-s=' + session, ...args], {
       cwd: ROOT, encoding: 'utf8', shell: false, env: cliEnv,
