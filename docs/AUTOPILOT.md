@@ -79,9 +79,7 @@ By default, a live runner **processes the selected profile's existing queue**, w
 
 ```bash
 # Run only after choosing the correct profile/root.
-# The configured profile gets the original upstream filters.
-npm run autopilot:scan -- --no-scan
-# To scan only selected configured sources without running live applications:
+# To scan configured sources without launching live application workers:
 node autopilot-scan.mjs
 # If the current profile requests Russian sources:
 node source-registry.mjs export --country RU
