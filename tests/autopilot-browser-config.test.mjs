@@ -35,6 +35,10 @@ test('browser profile is independent of executable and resolved against active d
   const root = mkdtempSync(join(tmpdir(), 'autopilot-profile-'));
   try {
     assert.equal(linuxBrowserSettings({ env: {}, dataRoot: root }).profileDir, join(root, 'data/browser-profile'));
+    const cache = join(root, 'data', 'autopilot', 'browser-cache');
+    assert.equal(browserCliEnvironment({ env: {}, dataRoot: root }).XDG_CACHE_HOME, cache);
+    assert.equal(browserCliEnvironment({ env: { XDG_CACHE_HOME: '/outside/profile' }, dataRoot: root }).XDG_CACHE_HOME, cache);
+    assert.equal(browserCliEnvironment({ env: { AUTOPILOT_CACHE_DIR: '.cache' }, dataRoot: root }).XDG_CACHE_HOME, join(root, '.cache'));
     assert.equal(linuxBrowserSettings({ env: { AUTOPILOT_BROWSER_PROFILE: 'sessions/react' }, dataRoot: root }).profileDir, join(root, 'sessions/react'));
     const full = join(root, 'explicit-profile');
     assert.equal(linuxBrowserSettings({ env: { AUTOPILOT_BROWSER_PROFILE: full }, dataRoot: root }).profileDir, full);
