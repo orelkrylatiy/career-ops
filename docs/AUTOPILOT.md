@@ -96,7 +96,7 @@ For on-demand **configured** discovery within the live runner, pass `--scan`; `n
 
 The runner checks primary cv.md/profile contact consistency, probes installed coding-agent login (auto-falling back to another authenticated CLI) and Playwright startup, then leases one job, reads the JD, checks candidate fit/eligibility and previous tracker records, selects a verified PDF, fills the form in an authorized session, calls `autopilot-verify.mjs begin` before Submit and `finish` after, then records `applied` **only** with matching evidence. A click alone is not proof.
 
-The worker uses the exact project-local Playwright CLI entrypoint with the same named browser session; no temporary symlink or global `playwright-cli` is required. A prepared PDF is still subject to a factual/contact review before actual submission: this static preflight compares profile.yml to primary cv.md, not extracted PDF text.
+The worker uses the exact project-local Playwright CLI entrypoint with the same named browser session; no temporary symlink or global `playwright-cli` is required. Preflight compares the selected profile email to primary cv.md and, when the local `pdftotext` utility can extract the first PDF page, checks the prepared resume PDF contact too. If PDF text extraction is unavailable, it prints an explicit warning: the worker must still verify the exact PDF it uploads. No contact email is logged in a mismatch diagnostic.
 
 Other possible outcomes: `submitted_unconfirmed`, `captcha`, `validation_failed`, `failed`, `skipped`, or a deferred lease. Never retry ambiguous submissions automatically. A site-specific blocker must not switch the worker to `tg-ops`, `hh-ops`, Telegram contacts, or a different profile. HeadHunter and Telegram are excluded.
 
