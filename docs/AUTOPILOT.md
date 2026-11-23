@@ -40,6 +40,8 @@ node autopilot-runner.mjs --browser-check
 npm run autopilot:dry-run
 ```
 
+The contact preflight requires a real `candidate.email` and an existing prepared PDF. It extracts email-like text from the header of `cv.md` and the first page of the fallback PDF using `pdftotext`. An email differing from `candidate.email` is a **warning by default**, not a submission blocker: applicants may legitimately use different addresses for their application form and CV. The operator is responsible for making sure both addresses belong to the intended candidate and receive replies. To opt into the stricter legacy rule, set `autopilot.require_email_match: true` in the selected direction's `config/profile.yml`; this blocks mismatches again. Neither setting logs the actual email addresses in the diagnostic.
+
 Never publish `cv.md`, `config/profile.yml`, browser profiles/cookies, Gmail OAuth tokens, screenshots, or local SQLite files. Do not copy example identity information into real applications.
 
 ## Browser binary and saved login (Linux)
