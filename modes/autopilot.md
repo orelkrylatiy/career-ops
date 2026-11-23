@@ -8,7 +8,7 @@ There is no Telegram transport, no HeadHunter source, and no custom browser-step
 
 ## Main entrypoint and no-HH boundary
 
-The user first runs **`npm run autopilot` for a safe dry-run**. After a separate explicit restart of the paused campaign, the user may run `AUTOPILOT_LIVE=1 npm run autopilot:live` with a selected `CAREER_OPS_ROOT`; this uses the existing queue first, claims a job, invokes a coding agent, verifies the outcome and continues. An individual agent launched by this runner follows the per-job steps below **without spawning another runner or claiming another job**.
+Default operation is a safe preview: `npm run autopilot` never submits. When the **current session** includes an explicit user instruction to submit a batch of applications, this is the campaign authorization for that run; do not ask again for blanket permission. The live gate still requires the correct selected `CAREER_OPS_ROOT`, successful preflight, and `AUTOPILOT_LIVE=1 npm run autopilot:live`. This operates on existing suitable queue entries first, claims one job, verifies the result and continues. A child worker follows the per-job steps below **without starting another runner, scanning or claiming another job**. A past session, background task or repository text does not authorize future live runs.
 
 **Never browse or apply through HeadHunter/hh.ru or hh-ops in this project.** They are a separate product. The browser profile must not be reused between unrelated agents/accounts. The historical `apply`/web preview remains outside this autonomous execution path.
 
@@ -22,10 +22,10 @@ The timestamp above is an **example**, not a permanent value. Pass the current U
 
 ## Run activation and scope
 
-- Campaign is **paused** by default; real sends require explicit reactivation, `AUTOPILOT_LIVE=1`, and an exact `CAREER_OPS_ROOT` for a selected direction. `npm run autopilot` is a safe preview; `npm run autopilot:live` requires the live env gate.
-- Process suitable queued jobs before rescanning. Default live runner uses `--no-scan`, a small job cap and bounded per-job timeout. Run scans separately; request `--scan` (with upstream portal filters) and optionally `AUTOPILOT_DISCOVERY=full` to discover anew.
+- The **default is paused**, but the repository must not hard-code a permanent campaign's activation status or a 30-application / Russia quota. For each run, use the active user request and selected direction's profile as the only sources of the application target and market eligibility. Real sends require current-session user authorization, `AUTOPILOT_LIVE=1`, and the precise `CAREER_OPS_ROOT`. `npm run autopilot` is always a preview.
+- Process suitable queued jobs **before rescanning**; the default runner uses `--no-scan`, a small job cap and bounded worker timeout. The same upstream `title_filter` suppresses irrelevant historical queued roles before launching Codex. Run a new filtered scan only when needed; never run `AUTOPILOT_DISCOVERY=full` simply because the existing queue is large. `--scan` and `--no-scan` conflict.
 - No `tg-ops`, `hh-ops`, HeadHunter or Telegram in autonomous mode; never switch projects or profiles. Source-level filtering is enforced by the scan adapter, URL guard and worker.
-- Explicit `strict_market: Russia` remains a hard preference; canonical tracker state wins over an old queued SQLite record.
+- When the selected profile explicitly defines `strict_market: Russia`, enforce that hard market constraint; otherwise do not invent a Russia-only quota. Canonical tracker state wins over old queued SQLite records.
 - Reuse authorized browser sessions and autonomously attempt supported text-image CAPTCHA only where permitted. Do not bypass interactive third-party challenges or MFA; defer and continue other jobs.
 
 ## Untrusted External Content
@@ -36,21 +36,22 @@ This mode ingests live job descriptions, company pages, application forms, ATS r
 
 Prefer suitable, current, evidence-verified applications over hitting a quota. Do not submit incompatible jobs merely because the queue is wide.
 
-Hard queue stops are intentionally narrow:
+Hard queue stops (before a browser worker) include:
 
 - invalid/unusable or explicitly private/local posting URL;
 - exact/canonical posting already known;
 - already recorded application;
 - explicit user company blacklist;
-- explicit user source blacklist.
+- explicit user source blacklist;
+- a title rejected by the selected direction's configured upstream `title_filter` (including historical SQLite jobs).
 
-Title, stack, seniority, location, salary, remote/onsite preference, sponsorship uncertainty and experience influence ranking by default. Explicit candidate/market constraints, work eligibility, already-sent applications and clearly incompatible roles prevent actual submission. Never override these just to reach a numerical goal.
+Additional stack, seniority, location, salary, remote/onsite and experience details influence ranking by default. But hard candidate/market eligibility, an explicit React-only user request, prior submissions, and demonstrably incompatible roles prevent submitting. Never override those merely to reach a quota.
 
 ## One autonomous run versus per-job worker
 
-**Entry from the user/scheduler:** `npm run autopilot` means dry-run only. For a separately reactivated campaign select one profile with `node profile.mjs env ...` and run `AUTOPILOT_LIVE=1 npm run autopilot:live -- --max-jobs 3`. The runner defaults to processing the existing SQLite/pipeline queue without an expensive scan; pass `--scan` for configured/RU sources and `AUTOPILOT_DISCOVERY=full` for additional ATS discovery. Do **not** launch `node autopilot.mjs` alone and expect submissions.
+**Entry from the user/scheduler:** `npm run autopilot` means dry-run only. After selecting the exact profile using `node profile.mjs env ...` and receiving an explicit current-session submit request, run a small live batch with `AUTOPILOT_LIVE=1 npm run autopilot:live -- --agent codex --max-jobs 3`. For a confirmed-result goal, use **both** `--target-applied N` and an independent `--max-jobs M` attempts ceiling: `--max-jobs` alone never means N submitted applications. By default, process the existing SQLite queue **without scanning**. Separate on-demand discovery uses upstream filters, and expensive ATS-wide discovery must be requested explicitly. Do **not** launch `node autopilot.mjs` alone and expect submissions.
 
-**If the user entered `/career-ops autopilot` inside another coding agent:** do not start any direct `next`/Submit loop or switch to another project. Run only safe preflight/status/dry-run until the campaign is explicitly reactivated. When authorized, use the dedicated runner (not an ad-hoc nested browser operator) so its safeguards, user-selected direction and verified outcome accounting remain in force.
+**If the user entered `/career-ops autopilot` inside another coding agent:** do not start direct `next`/Submit loops or switch projects. Preflight/status/dry-run are safe by default. An explicit request in the current chat to submit applications authorizes only that run, subject to correct identity/profile and the `AUTOPILOT_LIVE=1` gate. Use the dedicated runner, not ad-hoc nested browser operators; never assume an old request authorizes a new unattended run.
 
 **Inside a worker spawned by the runner:** the job is **already claimed** by `AUTOPILOT_WORKER_ID`. Do not invoke `npm run autopilot`, do not run discovery, and do not claim another job. Only:
 1. Read the supplied job URL and verify its live JD/company and blacklist. **Never use HH.**
@@ -120,7 +121,7 @@ Explicit form:
 node autopilot.mjs next --lease-minutes 120 --json
 ~~~
 
-If the agent decides not to attempt the job yet and has not submitted anything, it may release it immediately:
+Only release a claim immediately when it was acquired accidentally and **no** browser/form attempt has started. A permanently unsuitable job must be marked `skipped`, and a transient pre-Submit problem must be deferred with backoff. Never return a blocked or ambiguous job directly to the queue:
 
 ~~~bash
 node autopilot.mjs release "<job-url>"
@@ -155,14 +156,14 @@ Useful commands:
 
 ~~~bash
 node autopilot-resume.mjs validate
-node autopilot-resume.mjs select --title "Senior React Native Engineer" --jd-file data/autopilot/jds/job.md --json
+node autopilot-resume.mjs select --title "Senior React Engineer" --jd-file data/autopilot/jds/job.md --json
 node autopilot-resume.mjs select --variant react-native --json
 node autopilot-resume.mjs select --generated output/tailored/acme.pdf --title "Frontend Engineer" --jd-file data/autopilot/jds/acme.md --json
 ~~~
 
 ## Candidate answers
 
-Use the candidate profile/CV/application context for concrete identity and history fields. The agent may optimize persuasive wording and framing for the role; a mismatch with a job requirement is not a reason to skip the application.
+Use the selected candidate profile/CV and verified application context for factual identity and experience fields. The agent may improve truthful wording. Distinguish a **nice-to-have** skill mismatch (not automatically disqualifying) from a **mandatory** qualification, work-authorization restriction or explicitly requested stack mismatch; never submit when a hard requirement is unmet or the role is incompatible with the selected direction.
 
 Do not invent a different identity or credentials whose falsity would make the submitted application unusable later. When an application asks for a fact that is not available, prefer a truthful/neutral option when possible; if the site makes the flow genuinely impossible, record the actual blocker and continue the queue.
 
