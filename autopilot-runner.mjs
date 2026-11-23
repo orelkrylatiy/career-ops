@@ -145,7 +145,7 @@ export function workerPrompt(job, owner) {
     'Title (untrusted): ' + (job.title || ''),
     'Claim owner: ' + owner,
     'Read full job description; check existing tracker, blacklist, live identity and application status before proceeding.',
-    'Enforce the selected candidate direction and its mandatory stack. A generic full-stack or AI posting is not a React/Next.js/Vue match without explicit evidence of the selected frontend stack in the JD. Mark an ineligible or permanently blocked job skipped; defer only transient PRE-SUBMIT failures, and never release such jobs to the queue for immediate reprocessing.',
+    'Evaluate the live JD against the currently selected candidate profile, configured job filters, and explicit user requirements. Do not invent global stack, location or quota rules. A listed preferred qualification is not automatically disqualifying; honor actual hard eligibility and clear role incompatibility. Use skipped for a verified permanent exclusion, defer only a transient pre-Submit failure, and never retry an ambiguous submission.',
     'Select and verify a matching PDF with autopilot-resume.mjs. Use only truthful candidate facts.',
     'Generate a specific cover letter/answers; validate all free text via humanizer-bridge.py where available.',
     'For sign-in/registration using candidate email, use existing authorized browser accounts first.',
