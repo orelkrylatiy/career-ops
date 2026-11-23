@@ -4,8 +4,9 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import * as yaml from 'js-yaml';
 import { fileURLToPath } from 'node:url';
 import { cmdNext, cmdPreflight, cmdReport, cmdRun } from './autopilot.mjs';
 import { getJob, statusCounts } from './autopilot-db.mjs';
@@ -22,13 +23,15 @@ const BROWSER_SESSION = process.env.AUTOPILOT_BROWSER_SESSION || 'career-ops-wor
 const require = createRequire(import.meta.url);
 
 export function parseRunnerArgs(argv) {
-  const config = { agent: 'auto', maxJobs: 5, targetApplied: null, noScan: true, refresh: false, dryRun: false, timeoutMinutes: DEFAULT_TIMEOUT_MIN };
+  const config = { agent: 'auto', maxJobs: 5, targetApplied: null, noScan: true, scanOnEmpty: true, refresh: false, dryRun: false, timeoutMinutes: DEFAULT_TIMEOUT_MIN };
   let sawScan = false;
   let sawNoScan = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--no-scan') { config.noScan = true; sawNoScan = true; }
-    else if (a === '--scan') { config.noScan = false; sawScan = true; }
+    if (a === '--no-scan') { config.noScan = true; config.scanOnEmpty = false; sawNoScan = true; }
+    else if (a === '--scan') { config.noScan = false; config.scanOnEmpty = false; sawScan = true; }
+    else if (a === '--scan-on-empty') config.scanOnEmpty = true;
+    else if (a === '--no-scan-on-empty') config.scanOnEmpty = false;
     else if (a === '--refresh-registry') config.refresh = true;
     else if (a === '--dry-run') config.dryRun = true;
     else if (['--agent', '--max-jobs', '--target-applied', '--timeout-minutes'].includes(a)) {
@@ -91,14 +94,31 @@ export function agentCommand(agent, prompt) {
 function runStep(file, args, env = {}) {
   const r = spawnSync(process.execPath, [path.join(ROOT, file), ...args], {
     cwd: ROOT, stdio: 'inherit', shell: false, env: { ...process.env, ...env },
-    timeout: Number(process.env.AUTOPILOT_SCAN_TIMEOUT_MS) || 45 * 60_000,
+    timeout: Number(env.AUTOPILOT_SCAN_TIMEOUT_MS || process.env.AUTOPILOT_SCAN_TIMEOUT_MS) || 45 * 60_000,
   });
   if (r.error || r.status !== 0) throw new Error(file + ' failed (' + (r.error?.message || r.status) + ')');
 }
 
 /**
- * Prove that the actual persistent Chromium session can open a harmless page
- * and return a snapshot before claiming a real job. No external traffic.
+ * The normal Playwright CLI --help doctor only checks its installation.
+ * This preflight must use the same named browser session and writable profile
+ * as the real worker. Never reset/delete an existing authenticated session.
+ */
+export function browserCliFailure(stage, result = {}) {
+  const code = result.error?.code || result.signal || result.status || 'unknown';
+  const raw = String(result.stderr || result.stdout || result.error?.message || 'No CLI details available');
+  // Prevent CLI diagnostics from inadvertently printing local contact details or tokens.
+  const details = raw.replace(/\x1b\[[0-9;]*m/g, '')
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email]')
+    .replace(/(bearer\s+)[a-z0-9_.-]+/gi, '$1[redacted]')
+    .trim().slice(0, 900).replace(/\s+/g, ' ');
+  return `browser startup/snapshot failed [${stage}; ${code}]: ${details}`;
+}
+
+/**
+ * Checks the actual browser. If a named session already works, do not open
+ * about:blank over the user's existing tab or replace their authenticated
+ * Chromium context. Only open a new persistent session when snapshot fails.
  */
 export function assertBrowserReady({
   headless = process.env.AUTOPILOT_BROWSER_HEADED !== '1' && process.env.AUTOPILOT_BROWSER_HEADLESS !== '0',
@@ -111,22 +131,25 @@ export function assertBrowserReady({
   const cliEnv = browserCliEnvironment({ env, dataRoot, checkExecutable });
   const profile = cliEnv.AUTOPILOT_BROWSER_PROFILE;
   mkdirSync(path.dirname(profile), { recursive: true });
-  // Clearcote/Playwright cache must be writable to each isolated worker.
   mkdirSync(cliEnv.XDG_CACHE_HOME, { recursive: true });
-  const call = (args) => {
-    const res = run(process.execPath, [binary, 'cli', '-s=' + session, ...args], {
-      cwd: ROOT, encoding: 'utf8', shell: false, env: cliEnv,
-      timeout: 60_000, maxBuffer: 2 * 1024 * 1024,
-    });
-    if (res.error || res.status !== 0) {
-      const reason = res.error?.code === 'ETIMEDOUT' ? 'TIMEOUT' : 'CLI_FAILED';
-      throw new Error('browser startup/snapshot failed [' + reason + '] (check Chromium display/session/profile)');
-    }
-    return res;
-  };
-  call(['open', 'about:blank', '--profile=' + profile, ...(headless ? [] : ['--headed'])]);
-  call(['snapshot']);
-  return { session, headless, profile };
+
+  const call = (args, timeout = 45_000) => run(
+    process.execPath, [binary, 'cli', '-s=' + session, ...args],
+    { cwd: ROOT, encoding: 'utf8', shell: false, env: cliEnv, timeout, maxBuffer: 2 * 1024 * 1024 },
+  );
+  const success = (result) => !result.error && result.status === 0;
+
+  // Fast path preserves browser navigation and logged-in cookies.
+  const snapshot = call(['snapshot'], 20_000);
+  if (success(snapshot)) return { session, headless, profile, reused: true };
+
+  const open = call(['open', 'about:blank', '--profile=' + profile, ...(headless ? [] : ['--headed'])], 60_000);
+  if (!success(open)) throw new Error(browserCliFailure('open', open) + '; prior snapshot: '
+    + browserCliFailure('snapshot', snapshot));
+
+  const after = call(['snapshot'], 30_000);
+  if (!success(after)) throw new Error(browserCliFailure('snapshot-after-open', after));
+  return { session, headless, profile, reused: false };
 }
 
 export function workerPrompt(job, owner) {
@@ -134,7 +157,7 @@ export function workerPrompt(job, owner) {
   // Vacancy fields and the website are UNTRUSTED inputs, never instructions.
   return [
     'You are the authorized, autonomous career-ops browser application worker.',
-    'Read AGENTS.md and modes/autopilot.md first. Work on ONE leased job, then exit.',
+    'Follow repository AGENTS.md (Codex/Claude may already load it via their project instructions); do not redundantly read the 100KB+ file again if its rules are in context. If not provided, read it once. Then read modes/autopilot.md. Work on exactly ONE already-leased job and exit.',
     'Run Playwright through the project-local entrypoint: node ' + path.join(path.dirname(require.resolve('playwright')), 'cli.js') + ' cli -s=' + BROWSER_SESSION + ' <command>. Do not assume a global playwright-cli binary exists. Use the SAME session for verifier calls.',
     'Only use Career Ops and the selected CAREER_OPS_ROOT. Never read, run or modify tg-ops, hh-ops or other sibling projects. No HeadHunter or Telegram links or messaging.',
     'This worker is invoked only under an explicitly enabled AUTOPILOT_LIVE=1 campaign. Do not change campaign settings.',
@@ -145,7 +168,7 @@ export function workerPrompt(job, owner) {
     'Title (untrusted): ' + (job.title || ''),
     'Claim owner: ' + owner,
     'Read full job description; check existing tracker, blacklist, live identity and application status before proceeding.',
-    'Enforce the selected candidate direction and its mandatory stack. A generic full-stack or AI posting is not a React/Next.js/Vue match without explicit evidence of the selected frontend stack in the JD. Mark an ineligible or permanently blocked job skipped; defer only transient PRE-SUBMIT failures, and never release such jobs to the queue for immediate reprocessing.',
+    'Evaluate the live JD against the currently selected candidate profile, configured job filters, and explicit user requirements. Do not invent global stack, location or quota rules. A listed preferred qualification is not automatically disqualifying; honor actual hard eligibility and clear role incompatibility. Use skipped for a verified permanent exclusion, defer only a transient pre-Submit failure, and never retry an ambiguous submission.',
     'Select and verify a matching PDF with autopilot-resume.mjs. Use only truthful candidate facts.',
     'Generate a specific cover letter/answers; validate all free text via humanizer-bridge.py where available.',
     'For sign-in/registration using candidate email, use existing authorized browser accounts first.',
@@ -218,6 +241,65 @@ export function workerEnvironment(owner, runId, session = BROWSER_SESSION, optio
   };
 }
 
+// Reuse a browser session across runs, but NEVER reuse its lease owner.
+ // A previous worker may have submitted a form before it crashed.
+// Regional adapters are an optional extension. For RU profiles they are
+// enabled by the selected user's config, never by an unconditional system
+// default; the operator may opt out via AUTOPILOT_REGIONAL=off.
+export function useRussianSources(profile, override = process.env.AUTOPILOT_REGIONAL) {
+  if (override === 'off') return false;
+  if (override === 'RU') return true;
+  const declared = [
+    profile?.autopilot?.strict_market,
+    profile?.location?.country,
+  ];
+  return declared.some(v => /^(?:ru|russia|россия)$/i.test(String(v || '').trim()));
+}
+
+function selectedProfile() {
+  const location = process.env.CAREER_OPS_PROFILE || path.join(DATA_ROOT, 'config', 'profile.yml');
+  if (!existsSync(location)) return {};
+  const parsed = yaml.load(readFileSync(location, 'utf8'));
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+}
+
+export function runOwnerFor(runId, prefix = process.env.AUTOPILOT_WORKER_ID || 'worker') {
+  const name = String(prefix || 'worker').replace(/[^a-z0-9._-]/gi, '').slice(0, 50) || 'worker';
+  const suffix = String(runId || '').replace(/[^a-z0-9]/gi, '').slice(0, 16);
+  if (!suffix) throw new Error('invalid runId for unique claim owner');
+  return name + '-' + suffix;
+}
+
+// A shared browser session must never be driven by two live runners.
+ // Exclusive create is atomic per direction. We do NOT delete a possibly stale
+ // lock automatically: a prior worker might still own an active submission.
+export function acquireRunLock({ dataRoot = DATA_ROOT, pid = process.pid, token = randomUUID() } = {}) {
+  const dir = path.join(dataRoot, 'data', 'autopilot');
+  mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'live-runner.lock');
+  const payload = { pid, token, started_at: new Date().toISOString() };
+  try {
+    writeFileSync(file, JSON.stringify(payload) + '\n', { flag: 'wx', mode: 0o600 });
+  } catch (error) {
+    if (error?.code !== 'EEXIST') throw error;
+    let heldBy = 'unknown';
+    try {
+      const existing = JSON.parse(readFileSync(file, 'utf8'));
+      heldBy = String(existing.pid || 'unknown');
+    } catch { /* inspect manually */ }
+    throw new Error('a live runner lock already exists for this direction (PID ' + heldBy
+      + '). Do not start a second runner. Verify the old process has stopped before removing a stale lock: ' + file);
+  }
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    try {
+      if (JSON.parse(readFileSync(file, 'utf8')).token === token) unlinkSync(file);
+    } catch { /* already gone or no longer ours */ }
+  };
+}
+
 export function safeJobId(job) {
   return createHash('sha256').update(String(job.url_key || job.url)).digest('hex').slice(0, 16);
 }
@@ -238,17 +320,71 @@ export function detectBlockingChallenge({ session = BROWSER_SESSION, run = spawn
   } catch { return null; }
 }
 
+/** Only filtered, configured discovery. Wide/full is deliberately separate. */
+export function runConfiguredDiscovery(opts = {}, {
+  bounded = false, step = runStep, profile = selectedProfile(),
+} = {}) {
+  // A fallback after queue exhaustion is one attempt, not a renewed 45-minute
+  // scan per source. Explicit scans retain the operator's existing timeout.
+  const scanEnv = bounded ? { AUTOPILOT_SCAN_TIMEOUT_MS: String(3 * 60_000) } : {};
+  try {
+    step('autopilot-scan.mjs', [], scanEnv);
+  } catch (error) {
+    auditLog('configured_scan_error', { error_code: 'CONFIGURED_SCAN_FAILED' }, { level: 'warn' });
+    console.error('[autopilot] configured scan failed; checking remaining sources: ' + error.message);
+  }
+  if (useRussianSources(profile)) {
+    try {
+      step('source-registry.mjs', [opts.refresh && !bounded ? 'full' : 'export', '--country', 'RU'], scanEnv);
+      const regionalPortals = process.env.CAREER_OPS_EXPANDED_PORTALS
+        || path.join(DATA_ROOT, 'data', 'portals-regional.generated.yml');
+      step('autopilot-scan.mjs', [], { ...scanEnv, CAREER_OPS_PORTALS: regionalPortals });
+    } catch (error) {
+      auditLog('regional_scan_error', { error_code: 'REGIONAL_SCAN_FAILED' }, { level: 'warn' });
+      console.error('[autopilot] regional source scan unavailable; proceeding with queue: ' + error.message);
+    }
+  }
+  // Full/undated/wide ATS sweeps are never run by the live applier, including
+  // when legacy AUTOPILOT_DISCOVERY=full remains in the shell environment.
+  // Use the separate explicit `npm run autopilot:full-scan` command instead.
+}
+
 export async function main(argv = process.argv.slice(2)) {
+  // Browser-only diagnostic: no live gate, vacancy leases, agent CLI or submissions.
+  if (argv.includes('--browser-check')) {
+    if (argv.length !== 1) throw new Error('--browser-check does not accept live runner flags');
+    if (!process.env.CAREER_OPS_ROOT && !process.env.CAREER_OPS_DATA_DIR)
+      throw new Error('select exact candidate direction with CAREER_OPS_ROOT before --browser-check');
+    assertLinux();
+    const info = assertBrowserReady();
+    console.log(JSON.stringify({ ok: true, session: info.session, profile: info.profile, reused: info.reused }, null, 2));
+    return;
+  }
+  // Help is safe even when no profile, coding CLI or browser is installed.
+  if (argv.includes('--help') || argv.includes('-h')) {
+    console.log(`Usage: node autopilot-runner.mjs --browser-check  # no submissions, only Playwright open/snapshot
+  node autopilot-runner.mjs [--dry-run] [--agent codex|claude|opencode|auto]
+  [--target-applied N] [--max-jobs M] [--timeout-minutes N]
+  [--scan | --no-scan] [--scan-on-empty | --no-scan-on-empty]
+  [--refresh-registry]
+
+Default: use existing queue, then one bounded filtered scan if no suitable jobs; max 5 claimed jobs. --max-jobs is NOT the number of verified sends.
+Live requires explicit current-session authorization, AUTOPILOT_LIVE=1 and selected CAREER_OPS_ROOT.
+Normal upstream 'apply' does not submit. Full/wide/undated ATS discovery is separate.`);
+    return;
+  }
   assertLinux();
   const opts = parseRunnerArgs(argv);
   const runId = process.env.AUTOPILOT_RUN_ID || randomUUID();
   process.env.AUTOPILOT_RUN_ID = runId;
   const started = Date.now();
   const counters = { claimed: 0, applied: 0, submitted_unconfirmed: 0, deferred: 0, captcha: 0, failed: 0, validation_failed: 0, skipped: 0, no_outcome: 0 };
-  const owner = process.env.AUTOPILOT_WORKER_ID || ('worker-' + runId.replace(/[^a-z0-9]/gi, '').slice(0, 16));
+  const owner = runOwnerFor(runId);
   let error = null;
   let agent = null;
   let consecutiveWorkerFailures = 0;
+  let recoveryScanned = false;
+  let releaseRunLock = null;
   auditLog('runner_start', { no_scan: opts.noScan, refresh_registry: opts.refresh, dry_run: opts.dryRun });
   try {
     if (opts.dryRun) {
@@ -258,7 +394,9 @@ export async function main(argv = process.argv.slice(2)) {
       return;
     }
     if (process.env.AUTOPILOT_LIVE !== '1') throw new Error('campaign paused: live application requires AUTOPILOT_LIVE=1; use npm run autopilot for a safe dry-run');
-    if (!process.env.CAREER_OPS_ROOT && !process.env.CAREER_OPS_DATA_DIR) throw new Error('select explicit CAREER_OPS_ROOT for the active React/Next.js/Vue direction (node profile.mjs env)');
+    if (!process.env.CAREER_OPS_ROOT && !process.env.CAREER_OPS_DATA_DIR) throw new Error('select explicit CAREER_OPS_ROOT for the active candidate/direction (node profile.mjs env)');
+    releaseRunLock = acquireRunLock();
+    process.once('exit', releaseRunLock);
     if (!cmdPreflight()) throw new Error('preflight failed');
     // --version proves installation, not authentication. Auto selection falls
     // back to the next installed CLI when the model/login probe fails.
@@ -269,46 +407,24 @@ export async function main(argv = process.argv.slice(2)) {
     });
     // A Playwright --help check also does not prove Chromium can launch.
     assertBrowserReady();
-    if (!opts.noScan) {
-      // Start with configured employer sources, then widen to the upstream ATS
-      // directories by default. Discovery never uses HH or Telegram transport.
-      runStep('autopilot-scan.mjs', []);
-      // A provider module is not an enabled source by itself. Export the RU
-      // catalog into a temporary-looking runtime portals file, then scan it.
-      // This activates Habr Career, GeekJob and SuperJob without touching the
-      // user's configured portals.yml, and leaves HH/Telegram excluded by the
-      // adapter regardless of what appears in the source registry.
-      if (process.env.AUTOPILOT_REGIONAL !== 'off') {
-        try {
-          runStep('source-registry.mjs', [opts.refresh ? 'full' : 'export', '--country', 'RU']);
-          const regionalPortals = process.env.CAREER_OPS_EXPANDED_PORTALS
-            || path.join(DATA_ROOT, 'data', 'portals-regional.generated.yml');
-          runStep('autopilot-scan.mjs', [], { CAREER_OPS_PORTALS: regionalPortals });
-        } catch (error) {
-          auditLog('regional_scan_error', { error_code: 'REGIONAL_SCAN_FAILED' }, { level: 'warn' });
-          console.error('[autopilot] regional source scan unavailable; continuing other sources: ' + error.message);
-        }
-      }
-      const deepMode = process.env.AUTOPILOT_DISCOVERY === 'full' || opts.refresh;
-      if (deepMode) {
-        const days = Math.min(30, Math.max(1, Math.trunc(Number(process.env.AUTOPILOT_ATS_SINCE_DAYS) || 14)));
-        try {
-          runStep('autopilot-scan.mjs', ['--ats-full', '--since', String(days), '--include-undated']);
-        } catch (error) {
-          // A partial/network-failed deep scan must not prevent already found
-          // jobs from being applied to. Keep each failure visible in the log.
-          auditLog('deep_scan_error', { error_code: 'DEEP_SCAN_FAILED' }, { level: 'warn' });
-          console.error('[autopilot] deep discovery unavailable; proceeding with configured sources: ' + error.message);
-        }
-      }
-    }
+    if (!opts.noScan) runConfiguredDiscovery(opts);
     // SQLite remains authoritative; avoid re-rendering a 20k+ job Markdown
     // inspection file on every lease/report. Manual CLI can still export it.
     if (!process.env.AUTOPILOT_QUEUE_MIRROR) process.env.AUTOPILOT_QUEUE_MIRROR = 'off';
     await cmdRun({ noScan: true });
     while (counters.claimed < opts.maxJobs && (opts.targetApplied === null || counters.applied < opts.targetApplied)) {
       const job = cmdNext({ owner, json: false });
-      if (!job) break;
+      if (!job) {
+        if (opts.scanOnEmpty && !recoveryScanned) {
+          recoveryScanned = true;
+          console.error('[autopilot] no eligible queued vacancies; running one bounded, upstream-filtered discovery pass');
+          auditLog('recovery_scan_start', { reason: 'no_eligible_queue_jobs' });
+          runConfiguredDiscovery({ refresh: false }, { bounded: true });
+          await cmdRun({ noScan: true });
+          continue;
+        }
+        break;
+      }
       counters.claimed++;
       // Historical SQLite queues may predate the HH exclusion in the scanner.
       const sourceHost = new URL(job.url).hostname.toLowerCase();
@@ -369,6 +485,10 @@ export async function main(argv = process.argv.slice(2)) {
     process.exitCode = 1;
     console.error('[autopilot] ' + error);
   } finally {
+    if (releaseRunLock) {
+      process.removeListener('exit', releaseRunLock);
+      releaseRunLock();
+    }
     const report = {
       version: 1, run_id: runId, target_applied: opts.targetApplied, max_jobs: opts.maxJobs, started_at: new Date(started).toISOString(),
       finished_at: new Date().toISOString(), duration_ms: Date.now() - started,

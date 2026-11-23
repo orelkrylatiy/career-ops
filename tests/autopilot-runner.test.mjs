@@ -1,11 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRunnerArgs, resolveAgent, resolveReadyAgent, agentCommand, assertBrowserReady, safeJobId, workerPrompt, workerEnvironment, detectBlockingChallenge } from '../autopilot-runner.mjs';
+import { parseRunnerArgs, resolveAgent, resolveReadyAgent, agentCommand, assertBrowserReady, browserCliFailure, safeJobId, runOwnerFor, useRussianSources, acquireRunLock, runConfiguredDiscovery, workerPrompt, workerEnvironment, detectBlockingChallenge } from '../autopilot-runner.mjs';
 
 test('runner defaults to real autonomous mode and accepts bounded options', () => {
   assert.equal(parseRunnerArgs([]).dryRun, false);
   assert.equal(parseRunnerArgs([]).maxJobs, 5);
   assert.equal(parseRunnerArgs([]).noScan, true);
+  assert.equal(parseRunnerArgs([]).scanOnEmpty, true);
+  assert.equal(parseRunnerArgs(['--no-scan']).scanOnEmpty, false);
+  assert.equal(parseRunnerArgs(['--no-scan-on-empty']).scanOnEmpty, false);
   assert.equal(parseRunnerArgs(['--scan']).noScan, false);
   assert.equal(parseRunnerArgs(['--agent','codex','--max-jobs','3','--timeout-minutes','12']).maxJobs, 3);
   assert.throws(() => parseRunnerArgs(['--no-scan', '--refresh-registry']), /conflicts/);
@@ -40,6 +43,85 @@ test('auto mode falls back from an installed but unauthorized CLI', async () => 
   );
 });
 
+test('each campaign uses a fresh claim owner although the browser profile is persistent', () => {
+  assert.notEqual(runOwnerFor('aaaaaaaa-1111', 'candidate-direction'), runOwnerFor('bbbbbbbb-2222', 'candidate-direction'));
+  assert.match(runOwnerFor('aaaaaaaa-1111', 'candidate-direction'), /^candidate-direction-/);
+  assert.throws(() => runOwnerFor('!', 'worker'), /invalid runId/);
+});
+
+test('automatic discovery runs once, uses configured sources and bounded timeouts', () => {
+  const steps = [];
+  const step = (file, args, env = {}) => steps.push({ file, args, env });
+  runConfiguredDiscovery({ refresh: false }, {
+    bounded: true, profile: { location: { country: 'Россия' } }, step,
+  });
+  assert.deepEqual(steps.map(x => x.file), [
+    'autopilot-scan.mjs', 'source-registry.mjs', 'autopilot-scan.mjs',
+  ]);
+  assert.ok(steps.every(x => x.env.AUTOPILOT_SCAN_TIMEOUT_MS === '180000'));
+  assert.ok(steps.every(x => !x.args.includes('--ats-full') && !x.args.includes('--wide')));
+  assert.ok(steps.some(x => x.file === 'source-registry.mjs' && x.args.includes('export')));
+});
+
+test('discovery does not inject a regional market for unrelated profiles', () => {
+  const steps = [];
+  runConfiguredDiscovery({}, {
+    bounded: true, profile: { location: { country: 'Germany' } },
+    step: (file, args) => steps.push([file, args]),
+  });
+  assert.deepEqual(steps, [['autopilot-scan.mjs', []]]);
+});
+
+test('regional adapters follow candidate configuration rather than all profiles', () => {
+  assert.equal(useRussianSources({ location: { country: 'Россия' } }, undefined), true);
+  assert.equal(useRussianSources({ autopilot: { strict_market: 'Russia' } }, undefined), true);
+  assert.equal(useRussianSources({ location: { country: 'Germany' } }, undefined), false);
+  assert.equal(useRussianSources({ location: { country: 'Россия' } }, 'off'), false);
+  assert.equal(useRussianSources({ location: { country: 'Germany' } }, 'RU'), true);
+});
+
+test('only one live runner may use a direction browser; unrelated roots stay independent', async () => {
+  const { mkdtempSync, existsSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const root = mkdtempSync(join(tmpdir(), 'career-ops-runlock-'));
+  const secondRoot = mkdtempSync(join(tmpdir(), 'career-ops-runlock-other-'));
+  let releaseOne = null;
+  let releaseOther = null;
+  try {
+    releaseOne = acquireRunLock({ dataRoot: root, pid: 1001 });
+    assert.throws(() => acquireRunLock({ dataRoot: root, pid: 1002 }), /a live runner lock already exists/);
+    releaseOther = acquireRunLock({ dataRoot: secondRoot, pid: 1003 });
+    releaseOther();
+    releaseOther = null;
+    releaseOne();
+    releaseOne = null;
+    const repeat = acquireRunLock({ dataRoot: root, pid: 1004 });
+    repeat();
+    assert.equal(existsSync(join(root, 'data/autopilot/live-runner.lock')), false);
+    const lock = join(root, 'data/autopilot/live-runner.lock');
+    writeFileSync(lock, '{"pid":1005,"token":"abandoned"}\n');
+    assert.throws(() => acquireRunLock({ dataRoot: root, pid: 1006 }), /Verify the old process/);
+  } finally {
+    releaseOne?.();
+    releaseOther?.();
+    rmSync(root, { recursive: true, force: true });
+    rmSync(secondRoot, { recursive: true, force: true });
+  }
+});
+
+test('Codex skill router explicitly discovers fork Autopilot and no conflicting npm scan arguments', async () => {
+  const { readFileSync } = await import('node:fs');
+  const skill = readFileSync(new URL('../.agents/skills/career-ops/SKILL.md', import.meta.url), 'utf8');
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.match(skill, /\| `autopilot` \| `autopilot`/);
+  assert.match(skill, /Autonomous submission routing/);
+  assert.match(skill, /подай N откликов/);
+  assert.match(skill, /review-first/);
+  assert.equal(pkg.scripts['autopilot:live'], 'node autopilot-runner.mjs');
+  assert.equal(pkg.scripts['autopilot:full-scan'], 'node autopilot-scan.mjs --ats-full');
+});
+
 test('Codex global approval option precedes exec (CLI parsing regression)', () => {
   const [binary, args] = agentCommand('codex', 'apply to an example job');
   assert.equal(binary, 'codex');
@@ -65,19 +147,65 @@ test('worker instruction requires evidence and never uses HH Ops', () => {
   assert.equal(safeJobId(job).length, 16);
 });
 
-test('browser must open a real named session and snapshot BEFORE processing jobs', () => {
-  const calls = [];
-  const mockedRun = (_binary, args) => { calls.push(args); return { status: 0 }; };
-  const info = assertBrowserReady({ headless: true, run: mockedRun });
-  assert.equal(info.session, 'career-ops-worker-0');
-  assert.equal(calls.length, 2);
-  assert.ok(calls[0].includes('open'));
-  assert.ok(calls[0].includes('about:blank'));
-  assert.ok(calls[0].some(s => String(s).startsWith('--profile=')));
-  assert.equal(calls[1].at(-1), 'snapshot');
-  assert.ok(info.profile.endsWith('/data/browser-profile'));
+test('worker instructions avoid duplicate upstream policy loading and retain the per-job boundary', () => {
+  const job = { url_key: 'https://example.com/1', url: 'https://example.com/1', title: 'React Engineer', company: 'Acme' };
+  const instruction = workerPrompt(job, 'worker-0');
+  assert.match(instruction, /do not redundantly read/i);
+  assert.match(instruction, /modes\/autopilot\.md/);
+  assert.match(instruction, /ONE already-leased job/);
+  assert.match(instruction, /currently selected candidate profile/);
+  assert.doesNotMatch(instruction, /React\/Next\.js\/Vue match/);
+});
 
-  assert.throws(() => assertBrowserReady({ headless: true, run: () => ({status: 1}) }), /browser startup\/snapshot failed/);
+test('fork docs never override mandatory eligibility or hardcode an outdated campaign quota', async () => {
+  const { readFileSync } = await import('node:fs');
+  const policy = readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8');
+  const mode = readFileSync(new URL('../modes/autopilot.md', import.meta.url), 'utf8');
+  const overlay = policy.split('## Origin')[0];
+  assert.doesNotMatch(overlay, /at least 10 for the Russian market/i);
+  assert.match(overlay, /Activation is per run/);
+  assert.doesNotMatch(mode, /mismatch with a job requirement is not a reason to skip/i);
+  assert.match(mode, /generic queue-state semantics, not personal filters/i);
+  assert.match(mode, /config\/profile\.yml/);
+  assert.doesNotMatch(overlay, /30 new React applications|permanent 30-job goal/i);
+});
+
+test('browser preflight reuses a live session without navigating away from existing form', () => {
+  const calls = [];
+  const run = (_binary, args) => { calls.push(args); return { status: 0 }; };
+  const info = assertBrowserReady({ headless: true, run });
+  assert.equal(info.reused, true);
+  assert.equal(info.session, 'career-ops-worker-0');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].at(-1), 'snapshot');
+  assert.ok(info.profile.endsWith('/data/browser-profile'));
+});
+
+test('browser preflight opens a persistent session only when no existing snapshot works', () => {
+  const calls = [];
+  const run = (_bin, args) => {
+    calls.push(args);
+    return calls.length === 1 ? { status: 1, stderr: 'Browser is not open' } : { status: 0 };
+  };
+  const info = assertBrowserReady({ headless: true, run });
+  assert.equal(info.reused, false);
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0].at(-1), 'snapshot');
+  assert.ok(calls[1].includes('open'));
+  assert.ok(calls[1].includes('about:blank'));
+  assert.ok(calls[1].some(arg => String(arg).startsWith('--profile=')));
+  assert.equal(calls[2].at(-1), 'snapshot');
+});
+
+test('browser preflight exposes which command failed, without logging contact emails or bearer tokens', () => {
+  const error = browserCliFailure('open', { status: 1, stderr: 'EPERM for candidate@sample.net Bearer sensitive.token' });
+  assert.match(error, /open; 1/);
+  assert.match(error, /EPERM/);
+  assert.doesNotMatch(error, /candidate@sample.net|sensitive\.token/);
+  assert.throws(
+    () => assertBrowserReady({ headless: true, run: () => ({ status: 1, stderr: 'profile is locked' }) }),
+    /browser startup\/snapshot failed \[open; 1\].*profile is locked/,
+  );
 });
 
 test('Linux agent execution uses direct argv without a shell', () => {

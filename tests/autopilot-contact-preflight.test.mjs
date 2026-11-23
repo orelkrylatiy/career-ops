@@ -8,7 +8,7 @@ test('contact preflight detects conflicting primary CV email without logging add
     '# Candidate\ncontact: other@example.org\n\n## Experience\nOther experience',
   );
   assert.equal(issues.length, 1);
-  assert.match(issues[0], /does not match/);
+  assert.match(issues[0], /conflicts with primary cv\.md/);
   assert.doesNotMatch(issues[0], /other@example.org|candidate@example.net/);
 });
 
@@ -24,4 +24,23 @@ test('contact preflight does not mistake portfolio references for a candidate em
     checkCandidateEmailConsistency('candidate@example.net', '# Candidate\n\n## Experience\nContact: company@example.org'),
     [],
   );
+});
+
+test('multiple competing contact emails block instead of silently passing', () => {
+  const issues = checkCandidateEmailConsistency(
+    'candidate@example.net',
+    '# Candidate\nContact: candidate@example.net; old@example.org\n\n## Experience',
+  );
+  assert.equal(issues.length, 1);
+  assert.doesNotMatch(issues[0], /candidate@example.net|old@example.org/);
+});
+
+test('PDF contact mismatches identify source without exposing private email', () => {
+  const issues = checkCandidateEmailConsistency(
+    'candidate@example.net',
+    'Candidate\nEmail: incorrect@example.org',
+    'prepared resume PDF',
+  );
+  assert.match(issues[0], /prepared resume PDF/);
+  assert.doesNotMatch(issues[0], /incorrect@example.org/);
 });

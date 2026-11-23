@@ -1007,7 +1007,7 @@ Columns are matched by header name, so their order does not matter. The file nee
 | unknown stage | a stage neither table knows. Rename it in the file to a tracker state and run again |
 | missing company or role | the row is left out |
 
-Dates are read as `YYYY-MM-DD` (a time part is dropped), `Jul 3, 2026`, `3 Jul 2026`, or a slash date. Slash dates are read month first unless a date in the file has a first part above 12, which proves day first. `--day-first` forces day/month/year and skips that check, so a mixed file is not refused. A slash date that does not fit the chosen order has no readable date. It gets today's date and `no date in source` in Notes. Normalize the dates in the file before importing. Notes also carry `imported from <file>` and the source stage when it differs from the tracker state.
+Dates are read as `YYYY-MM-DD` (a time part is dropped), `Jul 3, 2026`, `3 Jul 2026`, or a slash date. Slash dates are read month first unless a date in the file has a first part above 12, which proves day first. A dotted date (`05.11.2026`) also makes the file day first, since that is how dotted dates are written. `--day-first` forces day/month/year and skips that check, so a mixed file is not refused. A slash date that does not fit the chosen order has no readable date. It gets today's date and `no date in source` in Notes. Normalize the dates in the file before importing. Notes also carry `imported from <file>` and the source stage when it differs from the tracker state.
 
 `--confirm` reserves numbers with `reserve-report-num.mjs`, writes one headed tracker-addition TSV per row, runs `merge-tracker.mjs` and releases the numbers. A missing tracker is created first, with a `URL` column when the file has posting links. On a tracker with no `URL` column the preview says the links cannot be kept, and `--confirm` refuses the import until `node merge-tracker.mjs --backfill-urls` adds the column. A row merge refuses (for example a report link to a number `batch-state.tsv` marks failed) is not lost: its TSV stays in the printed temp directory with its number reserved, the import exits `1`, and the message gives the `merge-tracker.mjs` command to re-run after the fix. Use that command, not a second import. The refused row is not in the tracker, so importing the file again plans it again under a new number. After an import that completes, re-running the same file adds nothing. Imports do not write to `data/status-log.tsv`, so `funnel-velocity.mjs` has no pre-import stage timing for those rows.
 
@@ -1348,7 +1348,7 @@ Cache hits and lookups that coalesce onto an in-flight one are free, so only unc
 ```bash
 CAREER_OPS_DNS_LOOKUPS_PER_MIN=800 npm run scan:full   # raise the ceiling
 CAREER_OPS_DNS_LOOKUPS_PER_MIN=0 npm run scan:full     # no pacing (pre-#2229 behaviour)
-CAREER_OPS_NO_DNS_CACHE=1 npm run scan:full            # no DNS cache AND no pacing
+CAREER_OPS_NO_DNS_CACHE=1 npm run scan:full            # no DNS cache, no pacing AND no connect-time address guard
 ```
 
 The cost is real: a full Workday + iCIMS + BambooHR sweep becomes DNS-bound at roughly 63 minutes (25,205 hostnames ÷ 400/min default pacing). Raise the ceiling if your resolver has the budget — but if you see `fetch failed` in bulk from one ATS section, suspect the resolver before the boards.
@@ -1685,7 +1685,13 @@ it reports `hits` and `unique` (offers no other keyword catches), and flags:
 
 Rank keywords by `unique`, not `hits`. The audit reads only the positive list:
 offers that `title_filter.negative` or `location_filter` already drop still
-count. Duplicate entries are audited once and listed. Read-only, zero-LLM.
+count. Duplicate entries are audited once and listed. A `tracked_companies` entry
+with its own `title_filter.positive` replaces the global list for that company,
+so its rows are replayed against that list and its keywords are reported in a
+separate `companyRows` / "company-level keywords" section instead of landing in
+`unmatched`; the row's `company` must match the entry's `name`. `job_boards`
+entries are not covered, since an aggregator records each posting's own
+employer. Read-only, zero-LLM.
 
 ```bash
 npm run filter-audit            # human-readable summary

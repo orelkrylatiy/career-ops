@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeScanConfig, makeWideConfig, isExcludedTransport, parseScanArgs } from '../autopilot-scan.mjs';
+import { makeScanConfig, makeWideConfig, isExcludedTransport, parseScanArgs, checkFullScanCheckpoint } from '../autopilot-scan.mjs';
 
 test('scan preserves upstream filters by default, except explicitly forbidden transports', () => {
   const raw = {title_filter: {positive:['react']}, location_filter: {allow:['RU']}, job_boards:[{url:'https://t.me/jobs'},{url:'https://jobs.example.com'}]};
@@ -40,6 +40,26 @@ test('adapter selects original scanner by default; --wide is explicitly opt-in',
   assert.deepEqual(parseScanArgs(['--wide','--ats-full','--since','7']), {atsFull:true,wide:true,args:['--since','7']});
 });
 
+test('full ATS scan requires explicit checkpoint disposition before overwriting work', () => {
+  const exists = () => true;
+  const opts = { atsFull: true, args: [] };
+  assert.throws(
+    () => checkFullScanCheckpoint(opts, { dataRoot: '/test-direction', exists }),
+    /unfinished ATS checkpoint exists/,
+  );
+  assert.doesNotThrow(
+    () => checkFullScanCheckpoint({ atsFull: true, args: ['--resume'] }, { dataRoot: '/test-direction', exists }),
+  );
+  assert.doesNotThrow(
+    () => checkFullScanCheckpoint({ atsFull: true, args: ['--resume-if-compatible'] }, { dataRoot: '/test-direction', exists }),
+  );
+  assert.doesNotThrow(
+    () => checkFullScanCheckpoint({ atsFull: false, args: [] }, { dataRoot: '/test-direction', exists }),
+  );
+  assert.doesNotThrow(() => checkFullScanCheckpoint({ atsFull: true, args: ['--dry-run'] }, { dataRoot: '/test-direction', exists }));
+  assert.doesNotThrow(() => checkFullScanCheckpoint({ atsFull: true, args: ['--help'] }, { dataRoot: '/test-direction', exists }));
+});
+
 // The source registry is a separate activation step: a .mjs provider module
 // alone does not create a configured source for scan.mjs.
 test('Russian catalog providers remain configured and are not HH/Telegram', async () => {
@@ -57,6 +77,7 @@ test('Russian catalog providers remain configured and are not HH/Telegram', asyn
 test('runner actively exports and scans the Russian regional catalog', async () => {
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../autopilot-runner.mjs', import.meta.url), 'utf8');
-  assert.match(src, /runStep\('source-registry\.mjs', \[opts\.refresh \? 'full' : 'export', '--country', 'RU'\]\)/);
+  assert.match(src, /if \(useRussianSources\(profile\)\)/);
+  assert.match(src, /step\('source-registry\.mjs',/);
   assert.match(src, /CAREER_OPS_PORTALS: regionalPortals/);
 });

@@ -1,6 +1,6 @@
 # Autonomous application mode (fork extension)
 
-**Status:** rebuild on the full upstream Career Ops as of 2026-11-21. This document describes the optional fork-specific browser application runner, not the upstream review-first `apply` mode. No real jobs or site CAPTCHAs were exercised in this rebuild.
+**Scope:** optional browser application runner layered over unchanged upstream Career Ops. This is an operator contract, not a live campaign status file. Ordinary upstream `apply` remains review-first and never submits on its own. Do not infer that a running campaign is paused or authorized solely from this document.
 
 [CAPTCHA handling](./CAPTCHA.md) · [Russian and international sources](./REGIONAL_SOURCES.md) · [isolated profiles](./PROFILES.md) · [architecture](./AUTOPILOT_ARCHITECTURE.md)
 
@@ -8,7 +8,20 @@
 
 The original Career Ops scans ATS systems and job boards, evaluates postings, generates resumes and maintains the Markdown tracker. Our opt-in extension provides a SQLite lease-based queue and a browser worker that uses the same authorized Playwright CLI session, chooses a verified CV, fills a real application, and requires a receipt from `autopilot-verify.mjs` before it can mark a submission verified.
 
-The worker **does not** run in the ordinary upstream modes. This campaign (30 new verified frontend applications, at least 10 in the Russian market) remains **paused** until the user explicitly resumes it. Old, duplicate or uncertain sends are not part of the campaign. The runner has a hard `AUTOPILOT_LIVE=1` activation gate and an explicit `CAREER_OPS_ROOT` requirement.
+The worker **does not** run in ordinary upstream modes. Autopilot is **paused by default**; a user instruction in the current session to send applications is the authorization for that run, but the runner still requires `AUTOPILOT_LIVE=1`, preflight, and the explicitly chosen `CAREER_OPS_ROOT`. Never hard-code a fixed campaign quota, market minimum or technology stack in repository policy: the user's current request and the selected direction determine these. Old, duplicate and ambiguous sends never count.
+
+## Starting from Codex (same entrypoint as upstream)
+
+Open the checkout and start Codex normally:
+
+```bash
+cd ~/projects/career-ops
+codex
+```
+
+The upstream skill router at `.agents/skills/career-ops/SKILL.md` is used for standard modes; this fork additionally routes **explicit autonomous submission requests** to `autopilot`. Plain prompts such as "Run the Career Ops scan mode" use upstream `scan`; "Fill this application" uses review-first `apply`; an explicit "send N applications for the selected profile" uses the fork-only Autopilot **after current-session authorization, profile selection and preflight**. Simply starting Codex does not begin a campaign. If the skill is not auto-discovered, ask Codex to run `career-ops autopilot` by name; do not improvise manual browsing or broad vacancy searches.
+
+The selected candidate and direction live under the User Layer, not `AGENTS.md` or a permanent script default. Confirm the exact active profile with `node profile.mjs list` and `node profile.mjs env <candidate> <direction>` before any runner starts. Do not launch two runners for one direction or discard local changes while updating.
 
 ## Install and inspect without submissions
 
@@ -22,6 +35,8 @@ npm run autopilot:test
 node profile.mjs list
 npm run autopilot:status
 npm run autopilot:preflight
+# After selecting exact CAREER_OPS_ROOT, prove a browser can open/snapshot WITHOUT applications:
+node autopilot-runner.mjs --browser-check
 npm run autopilot:dry-run
 ```
 
@@ -52,9 +67,17 @@ reuse a currently open personal Chrome profile. Linux/bash only in this fork's
 autonomous/profile-manager tools. The original upstream `apply` flow remains
 separate and unchanged.
 
+## When doctor says OK but Playwright startup fails
+
+`node autopilot-verify.mjs doctor` validates the local CLI installation; it does **not** prove that Chromium launches under the current Codex sandbox, uses the right profile or can snapshot. Do not start a live run just because doctor says `ok: true`.
+
+After exporting the exact selected profile, run `node autopilot-runner.mjs --browser-check` with **no** `AUTOPILOT_LIVE` required. This opens only `about:blank` when necessary, preserves an already-open named session, and prints the specific failing Playwright CLI command (`open` or `snapshot`), its exit code and sanitized stderr. It does not scan, claim jobs or submit anything. If the error mentions a busy profile, check for a surviving browser/daemon before closing it; never delete the browser profile, cookies, or session data as a first fix. A failure related to sandbox/cache permissions needs the candidate-scoped `XDG_CACHE_HOME`/writable path; a Chrome executable alone does not prove the launch works.
+
+The user-local script printed by `npm run autopilot:live` is also a version fingerprint: if it still expands to `node autopilot-runner.mjs --no-scan`, the checkout has not yet received this branch's updated wrapper. Check `git status --short` and the current `git log -1` before updating; never overwrite uncommitted browser changes.
+
 ## Candidate/direction isolation
 
-A **candidate** can have independent **React**, **Next.js** and **Vue** directions. `node profile.mjs add-profile candidate --name Candidate` registers a new person, and `node profile.mjs add-direction candidate react --name React` creates a direction. Use `node profile.mjs env candidate react` to print its data-root and browser-session exports. Apply them in the shell **before** preflight or live operations. Do not recreate existing directions.
+A **candidate** can have independent directions (for example React, Next.js or Vue). `node profile.mjs add-profile <candidate> --name Candidate` registers a new person, and `node profile.mjs add-direction <candidate> <direction> --name Direction` creates a direction. Use `node profile.mjs env <candidate> <direction>` to print its data-root and browser-session exports. Apply them in the shell **before** preflight or live operations. Do not recreate existing directions.
 
 Each direction has a different `portals.yml`, `config/profile.yml`, resume selection, `data/applications.md`, `data/autopilot.db` and Playwright session. Mixing roots silently causes wrong-CV applications and tracker duplicates.
 
@@ -62,23 +85,28 @@ Each direction has a different `portals.yml`, `config/profile.yml`, resume selec
 
 Provider adapters are for finding jobs, **not** evidence that a particular site can submit a form. Available fork-specific boards include Habr Career, GeekJob and SuperJob. Full upstream international ATS and board adapters remain present.
 
-By default, a live runner **processes an existing queue**, without performing a new scan. A requested scan keeps upstream's filters; only explicit wide-scan commands remove soft preferences. The runner also applies upstream's exact configured `title_filter` to historical SQLite queue entries **before invoking a browser worker**, so previously collected unrelated roles do not consume a Codex invocation. Explicit discovery steps:
+By default, a live runner **processes eligible vacancies already in the selected profile's queue first**. If no eligible jobs remain, it performs **one time-bounded scan of configured sources with upstream filters**, then checks the queue once more and stops if still empty. `--no-scan-on-empty` disables that fallback; explicit `--no-scan` disables all scans. It applies the original `buildTitleFilter` to historical SQLite entries **before leasing**, without marking another direction's jobs `skipped`. A requested scan preserves upstream filters; the selected user's profile determines whether extra RU catalog sources are enabled (or set `AUTOPILOT_REGIONAL=off` to disable them). Explicit wide-scan commands disable soft preferences and should not be used for a normal targeted campaign. On-demand discovery examples:
 
 ```bash
 # Run only after choosing the correct profile/root.
+# To scan configured sources without launching live application workers:
+node autopilot-scan.mjs
+# If the current profile requests Russian sources:
 node source-registry.mjs export --country RU
-npm run autopilot:wide-scan
-# The expanded regional portals can also be scanned explicitly:
-CAREER_OPS_PORTALS="$CAREER_OPS_ROOT/data/portals-regional.generated.yml" npm run autopilot:wide-scan
+CAREER_OPS_PORTALS="$CAREER_OPS_ROOT/data/portals-regional.generated.yml" node autopilot-scan.mjs
+# Explicit reverse-ATS discovery, not part of the normal application loop:
+npm run autopilot:full-scan
+# To resume a previous matching sweep:
+npm run autopilot:full-scan -- --resume
 ```
 
-For on-demand discovery within the live runner, pass `--scan`. For deep ATS enumeration, also set `AUTOPILOT_DISCOVERY=full`. Ordinary use needs neither.
+For a deliberate **initial configured-source scan** within the runner, pass `--scan`; `npm run autopilot:live` does not hardcode `--no-scan`, and the parser rejects conflicting flags. Normal queue-first execution performs at most one filtered scan only when no eligible jobs remain; that recovery never triggers a full ATS sweep. Avoid repeatedly scanning an existing large queue. Deep ATS discovery requires the separate `npm run autopilot:full-scan` command; the live runner deliberately ignores old `AUTOPILOT_DISCOVERY=full` environment values; `autopilot:full-scan` now keeps upstream filters and its normal posting-date defaults, rather than silently enabling `--wide --include-undated`. If an unfinished checkpoint exists, the adapter refuses to overwrite it without explicit `--resume` or `--resume-if-compatible` (the latter may start fresh on mismatch). Ordinary operation needs neither discovery mode.
 
 ## Application workflow and safety
 
 The runner checks primary cv.md/profile contact consistency, probes installed coding-agent login (auto-falling back to another authenticated CLI) and Playwright startup, then leases one job, reads the JD, checks candidate fit/eligibility and previous tracker records, selects a verified PDF, fills the form in an authorized session, calls `autopilot-verify.mjs begin` before Submit and `finish` after, then records `applied` **only** with matching evidence. A click alone is not proof.
 
-The worker uses the exact project-local Playwright CLI entrypoint with the same named browser session; no temporary symlink or global `playwright-cli` is required. A prepared PDF is still subject to a factual/contact review before actual submission: this static preflight compares profile.yml to primary cv.md, not extracted PDF text.
+The worker uses the exact project-local Playwright CLI entrypoint with the same named browser session; no temporary symlink or global `playwright-cli` is required. Preflight compares the selected profile email to primary cv.md and, when the local `pdftotext` utility can extract the first PDF page, checks the prepared resume PDF contact too. If PDF text extraction is unavailable, it prints an explicit warning: the worker must still verify the exact PDF it uploads. No contact email is logged in a mismatch diagnostic.
 
 Other possible outcomes: `submitted_unconfirmed`, `captcha`, `validation_failed`, `failed`, `skipped`, or a deferred lease. Never retry ambiguous submissions automatically. A site-specific blocker must not switch the worker to `tg-ops`, `hh-ops`, Telegram contacts, or a different profile. HeadHunter and Telegram are excluded.
 
@@ -86,17 +114,23 @@ For optional email-based authentication, `autopilot-mail.mjs wait` only reads re
 
 For supported text-image CAPTCHAs, the agent attempts bounded OCR only where permitted; unresolved reCAPTCHA/hCaptcha/Turnstile are reported as job-specific blockers rather than forced bypasses. See [CAPTCHA](./CAPTCHA.md).
 
-## Explicitly authorized live start (not currently approved)
+## Live start (requires explicit authorization in the current session)
 
 ```bash
-# After the user explicitly resumes this paused campaign,
-# and after exporting the chosen direction's environment:
+# After the user explicitly authorizes this live campaign in the current conversation,
+# export the direction and execute preflight/live in this SAME shell:
+CANDIDATE_ID="your-candidate-slug"   # choose from: node profile.mjs list
+DIRECTION_ID="your-direction-slug"   # choose from: node profile.mjs list
+eval "$(node profile.mjs env "$CANDIDATE_ID" "$DIRECTION_ID")"
+node autopilot.mjs preflight
 AUTOPILOT_LIVE=1 npm run autopilot:live -- --agent codex --max-jobs 3
-# A larger explicitly approved campaign can set a goal AND a separate attempt ceiling:
-# AUTOPILOT_LIVE=1 npm run autopilot:live -- --agent codex --target-applied 30 --max-jobs 120
+# An explicitly approved campaign can set a goal AND a separate attempt ceiling:
+# AUTOPILOT_LIVE=1 npm run autopilot:live -- --agent codex --target-applied 5 --max-jobs 20  # illustrative limits
 ```
 
-Defaults: existing queue, at most five claimed jobs per run (not five successful submissions), ten minutes per worker. `--target-applied N` stops after N new verified submissions in this run; `--max-jobs M` independently bounds attempts. A goal alone never overrides the attempt cap. `--scan` and `--no-scan` are mutually exclusive. When the runner processes a large queue it skips repeated full Markdown queue exports (`AUTOPILOT_QUEUE_MIRROR=off`); SQLite is authoritative, and `autopilot-queue.md` may be stale until a manual export or scan refresh. Increasing the cap or performing a scan is always deliberate. Use a restricted OS account or container: CLI flags and `AGENTS.md` are not a filesystem security boundary.
+The live runner takes an exclusive per-direction lock at `<CAREER_OPS_ROOT>/data/autopilot/live-runner.lock` before preflight/browser work. A second live process for the same direction fails safely instead of sharing Chromium; distinct candidate roots can run separately. After an abnormal machine/process kill, the lock may remain: verify the recorded PID and any ambiguous submission before manually removing a stale lock. Do not force-clear an active runner.
+
+Defaults: existing eligible queue, one bounded configured-source scan only if no eligible jobs remain, at most five claimed jobs per run (not five successful submissions), ten minutes per worker. `--target-applied N` stops after N new verified submissions in this run; `--max-jobs M` independently bounds attempts. A goal alone never overrides the attempt cap. `--scan` and `--no-scan` are mutually exclusive. When the runner processes a large queue it skips repeated full Markdown queue exports (`AUTOPILOT_QUEUE_MIRROR=off`); SQLite is authoritative, and `autopilot-queue.md` may be stale until a manual export or scan refresh. Increasing the cap or performing a full/wide/undated scan is always deliberate. The one configured-source recovery scan is the documented default, unless explicitly disabled. Use a restricted OS account or container: CLI flags and `AGENTS.md` are not a filesystem security boundary.
 
 ## Verification and known limitations
 
