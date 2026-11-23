@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRunnerArgs, resolveAgent, resolveReadyAgent, agentCommand, assertBrowserReady, safeJobId, workerPrompt, workerEnvironment, detectBlockingChallenge } from '../autopilot-runner.mjs';
+import { parseRunnerArgs, resolveAgent, resolveReadyAgent, agentCommand, assertBrowserReady, safeJobId, runOwnerFor, workerPrompt, workerEnvironment, detectBlockingChallenge } from '../autopilot-runner.mjs';
 
 test('runner defaults to real autonomous mode and accepts bounded options', () => {
   assert.equal(parseRunnerArgs([]).dryRun, false);
@@ -38,6 +38,24 @@ test('auto mode falls back from an installed but unauthorized CLI', async () => 
     resolveReadyAgent('claude', {exists: () => true, probe: async () => ({ok:false,output:''})}),
     /No authenticated/,
   );
+});
+
+test('each campaign uses a fresh claim owner although the browser profile is persistent', () => {
+  assert.notEqual(runOwnerFor('aaaaaaaa-1111', 'candidate-direction'), runOwnerFor('bbbbbbbb-2222', 'candidate-direction'));
+  assert.match(runOwnerFor('aaaaaaaa-1111', 'candidate-direction'), /^candidate-direction-/);
+  assert.throws(() => runOwnerFor('!', 'worker'), /invalid runId/);
+});
+
+test('Codex skill router explicitly discovers fork Autopilot and no conflicting npm scan arguments', async () => {
+  const { readFileSync } = await import('node:fs');
+  const skill = readFileSync(new URL('../.agents/skills/career-ops/SKILL.md', import.meta.url), 'utf8');
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.match(skill, /\| `autopilot` \| `autopilot`/);
+  assert.match(skill, /Autonomous submission routing/);
+  assert.match(skill, /подай 30 откликов/);
+  assert.match(skill, /review-first/);
+  assert.equal(pkg.scripts['autopilot:live'], 'node autopilot-runner.mjs');
+  assert.equal(pkg.scripts['autopilot:full-scan'], 'node autopilot-scan.mjs --ats-full');
 });
 
 test('Codex global approval option precedes exec (CLI parsing regression)', () => {
