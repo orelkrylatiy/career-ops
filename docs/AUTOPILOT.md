@@ -75,7 +75,7 @@ Each direction has a different `portals.yml`, `config/profile.yml`, resume selec
 
 Provider adapters are for finding jobs, **not** evidence that a particular site can submit a form. Available fork-specific boards include Habr Career, GeekJob and SuperJob. Full upstream international ATS and board adapters remain present.
 
-By default, a live runner **processes the selected profile's existing queue**, without performing a new scan. It applies the original `buildTitleFilter` to historical SQLite entries **before leasing**, without marking another direction's jobs `skipped`. A requested scan preserves upstream filters; the selected user's profile determines whether extra RU catalog sources are enabled (or set `AUTOPILOT_REGIONAL=off` to disable them). Explicit wide-scan commands disable soft preferences and should not be used for a normal targeted campaign. On-demand discovery examples:
+By default, a live runner **processes eligible vacancies already in the selected profile's queue first**. If no eligible jobs remain, it performs **one time-bounded scan of configured sources with upstream filters**, then checks the queue once more and stops if still empty. `--no-scan-on-empty` disables that fallback; explicit `--no-scan` disables all scans. It applies the original `buildTitleFilter` to historical SQLite entries **before leasing**, without marking another direction's jobs `skipped`. A requested scan preserves upstream filters; the selected user's profile determines whether extra RU catalog sources are enabled (or set `AUTOPILOT_REGIONAL=off` to disable them). Explicit wide-scan commands disable soft preferences and should not be used for a normal targeted campaign. On-demand discovery examples:
 
 ```bash
 # Run only after choosing the correct profile/root.
@@ -90,7 +90,7 @@ npm run autopilot:full-scan
 npm run autopilot:full-scan -- --resume
 ```
 
-For on-demand **configured** discovery within the live runner, pass `--scan`; `npm run autopilot:live` no longer hardcodes `--no-scan`, and the parser still rejects conflicting flags. Do not repeatedly scan an existing large queue. Deep ATS discovery requires a separate intentional request (`AUTOPILOT_DISCOVERY=full` or the dedicated script); `autopilot:full-scan` now keeps upstream filters and its normal posting-date defaults, rather than silently enabling `--wide --include-undated`. If an unfinished checkpoint exists, the adapter refuses to overwrite it without explicit `--resume` or `--resume-if-compatible` (the latter may start fresh on mismatch). Ordinary operation needs neither discovery mode.
+For a deliberate **initial configured-source scan** within the runner, pass `--scan`; `npm run autopilot:live` does not hardcode `--no-scan`, and the parser rejects conflicting flags. Normal queue-first execution performs at most one filtered scan only when no eligible jobs remain; that recovery never triggers a full ATS sweep. Avoid repeatedly scanning an existing large queue. Deep ATS discovery requires a separate intentional request (`AUTOPILOT_DISCOVERY=full` or the dedicated script); `autopilot:full-scan` now keeps upstream filters and its normal posting-date defaults, rather than silently enabling `--wide --include-undated`. If an unfinished checkpoint exists, the adapter refuses to overwrite it without explicit `--resume` or `--resume-if-compatible` (the latter may start fresh on mismatch). Ordinary operation needs neither discovery mode.
 
 ## Application workflow and safety
 
@@ -108,13 +108,15 @@ For supported text-image CAPTCHAs, the agent attempts bounded OCR only where per
 
 ```bash
 # After the user explicitly authorizes this live campaign in the current conversation,
-# and after exporting the chosen direction's environment:
+# export the direction and execute preflight/live in this SAME shell:
+eval "$(node profile.mjs env <candidate> <direction>)"
+node autopilot.mjs preflight
 AUTOPILOT_LIVE=1 npm run autopilot:live -- --agent codex --max-jobs 3
 # An explicitly approved campaign can set a goal AND a separate attempt ceiling:
 # AUTOPILOT_LIVE=1 npm run autopilot:live -- --agent codex --target-applied 5 --max-jobs 20  # illustrative limits
 ```
 
-The live runner takes an exclusive per-direction lock at `<CAREER_OPS_ROOT>/data/autopilot/live-runner.lock` before preflight/browser work. A second live process for the same direction fails safely instead of sharing Chromium; distinct candidate roots can run separately. After an abnormal machine/process kill, the lock may remain: verify the recorded PID and any ambiguous submission before manually removing a stale lock. Do not force-clear an active runner.\n\nDefaults: existing queue, at most five claimed jobs per run (not five successful submissions), ten minutes per worker. `--target-applied N` stops after N new verified submissions in this run; `--max-jobs M` independently bounds attempts. A goal alone never overrides the attempt cap. `--scan` and `--no-scan` are mutually exclusive. When the runner processes a large queue it skips repeated full Markdown queue exports (`AUTOPILOT_QUEUE_MIRROR=off`); SQLite is authoritative, and `autopilot-queue.md` may be stale until a manual export or scan refresh. Increasing the cap or performing a scan is always deliberate. Use a restricted OS account or container: CLI flags and `AGENTS.md` are not a filesystem security boundary.
+The live runner takes an exclusive per-direction lock at `<CAREER_OPS_ROOT>/data/autopilot/live-runner.lock` before preflight/browser work. A second live process for the same direction fails safely instead of sharing Chromium; distinct candidate roots can run separately. After an abnormal machine/process kill, the lock may remain: verify the recorded PID and any ambiguous submission before manually removing a stale lock. Do not force-clear an active runner.\n\nDefaults: existing eligible queue, one bounded configured-source scan only if no eligible jobs remain, at most five claimed jobs per run (not five successful submissions), ten minutes per worker. `--target-applied N` stops after N new verified submissions in this run; `--max-jobs M` independently bounds attempts. A goal alone never overrides the attempt cap. `--scan` and `--no-scan` are mutually exclusive. When the runner processes a large queue it skips repeated full Markdown queue exports (`AUTOPILOT_QUEUE_MIRROR=off`); SQLite is authoritative, and `autopilot-queue.md` may be stale until a manual export or scan refresh. Increasing the cap or performing a full/wide/undated scan is always deliberate. The one configured-source recovery scan is the documented default, unless explicitly disabled. Use a restricted OS account or container: CLI flags and `AGENTS.md` are not a filesystem security boundary.
 
 ## Verification and known limitations
 
