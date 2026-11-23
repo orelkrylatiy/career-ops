@@ -585,14 +585,14 @@ export function cmdAnalytics() {
 
 const PLACEHOLDER_RE = /TODO|example\.(com|org)|@example/i;
 
-export function checkCandidateEmailConsistency(candidateEmail, cvSource = '', sourceLabel = 'primary cv.md') {
+export function checkCandidateEmailConsistency(candidateEmail, cvSource = '', sourceLabel = 'primary cv.md', { strict = false } = {}) {
   const email = String(candidateEmail || '').trim().toLowerCase();
   // The primary cv.md is the human-authored source. Examine only its header:
   // URLs or project references deep in the document may contain third-party mail.
   const head = String(cvSource || '').slice(0, 2500).split(/\n(?=##?\s)/, 1)[0];
   const found = [...new Set((head.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || []).map(v => v.toLowerCase()))];
   if (email && found.length > 0 && (found.length !== 1 || found[0] !== email)) {
-    return [`candidate.email conflicts with ${sourceLabel} contact information; reconcile before live submission`];
+    return [`${strict ? '' : 'warning: '}candidate.email differs from ${sourceLabel} contact information; verify both addresses are authorized before live submission`];
   }
   return [];
 }
@@ -609,7 +609,9 @@ function contactPreflight() {
   }
   const sourceCv = path.join(DATA_ROOT, 'cv.md');
   if (existsSync(sourceCv)) {
-    problems.push(...checkCandidateEmailConsistency(candidate.email, readFileSync(sourceCv, 'utf8')));
+    problems.push(...checkCandidateEmailConsistency(candidate.email, readFileSync(sourceCv, 'utf8'), 'primary cv.md', {
+      strict: profile.autopilot?.require_email_match === true,
+    }));
   }
   const resume = resolveResume({ profile });
   if (!resume.ok) {
@@ -625,6 +627,7 @@ function contactPreflight() {
     if (extracted.status === 0 && String(extracted.stdout || '').trim()) {
       problems.push(...checkCandidateEmailConsistency(
         candidate.email, extracted.stdout, 'prepared resume PDF',
+        { strict: profile.autopilot?.require_email_match === true },
       ));
     } else {
       problems.push('warning: prepared PDF contact not machine-verified; inspect the uploaded PDF before Submit');
