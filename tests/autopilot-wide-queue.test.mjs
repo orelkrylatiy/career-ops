@@ -75,6 +75,27 @@ test('strict Russia market gates queue admission before a browser can claim a po
   assert.ok(good.priority > 0);
 });
 
+test('historical queue title mismatch is skipped before Codex claims a job', () => {
+  const url = 'https://jobs.example.com/irrelevant-sales';
+  const key = dbMod.normalizeUrlKey(url);
+  dbMod.upsertJob({
+    urlKey: key, url, title: 'Sales Operations Manager', company: 'Noise Co',
+    location: 'Remote, Russia', priority: 100, status: 'queued',
+  });
+  const previous = process.env.AUTOPILOT_LIVE;
+  process.env.AUTOPILOT_LIVE = '1';
+  try {
+    const job = autopilot.cmdNext({ owner: 'fixture-worker' });
+    assert.equal(job?.company, 'Good Co');
+    const discarded = dbMod.getJob(key);
+    assert.equal(discarded?.status, 'skipped');
+    assert.match(discarded?.note || '', /title_filter mismatch/);
+  } finally {
+    if (previous == null) delete process.env.AUTOPILOT_LIVE;
+    else process.env.AUTOPILOT_LIVE = previous;
+  }
+});
+
 test.after(() => {
   try { dbMod.openDb().close(); } catch {}
   rmSync(ROOT, { recursive: true, force: true });
