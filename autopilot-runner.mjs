@@ -23,13 +23,15 @@ const BROWSER_SESSION = process.env.AUTOPILOT_BROWSER_SESSION || 'career-ops-wor
 const require = createRequire(import.meta.url);
 
 export function parseRunnerArgs(argv) {
-  const config = { agent: 'auto', maxJobs: 5, targetApplied: null, noScan: true, refresh: false, dryRun: false, timeoutMinutes: DEFAULT_TIMEOUT_MIN };
+  const config = { agent: 'auto', maxJobs: 5, targetApplied: null, noScan: true, scanOnEmpty: true, refresh: false, dryRun: false, timeoutMinutes: DEFAULT_TIMEOUT_MIN };
   let sawScan = false;
   let sawNoScan = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--no-scan') { config.noScan = true; sawNoScan = true; }
-    else if (a === '--scan') { config.noScan = false; sawScan = true; }
+    if (a === '--no-scan') { config.noScan = true; config.scanOnEmpty = false; sawNoScan = true; }
+    else if (a === '--scan') { config.noScan = false; config.scanOnEmpty = false; sawScan = true; }
+    else if (a === '--scan-on-empty') config.scanOnEmpty = true;
+    else if (a === '--no-scan-on-empty') config.scanOnEmpty = false;
     else if (a === '--refresh-registry') config.refresh = true;
     else if (a === '--dry-run') config.dryRun = true;
     else if (['--agent', '--max-jobs', '--target-applied', '--timeout-minutes'].includes(a)) {
@@ -303,9 +305,10 @@ export async function main(argv = process.argv.slice(2)) {
   if (argv.includes('--help') || argv.includes('-h')) {
     console.log(`Usage: node autopilot-runner.mjs [--dry-run] [--agent codex|claude|opencode|auto]
   [--target-applied N] [--max-jobs M] [--timeout-minutes N]
-  [--scan | --no-scan] [--refresh-registry]
+  [--scan | --no-scan] [--scan-on-empty | --no-scan-on-empty]
+  [--refresh-registry]
 
-Default: no scan, max 5 claimed jobs. --max-jobs is NOT the number of verified sends.
+Default: use existing queue, then one bounded filtered scan if no suitable jobs; max 5 claimed jobs. --max-jobs is NOT the number of verified sends.
 Live requires explicit current-session authorization, AUTOPILOT_LIVE=1 and selected CAREER_OPS_ROOT.
 Normal upstream 'apply' does not submit. Full/wide/undated ATS discovery is separate.`);
     return;
