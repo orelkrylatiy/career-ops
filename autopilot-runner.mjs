@@ -94,7 +94,7 @@ export function agentCommand(agent, prompt) {
 function runStep(file, args, env = {}) {
   const r = spawnSync(process.execPath, [path.join(ROOT, file), ...args], {
     cwd: ROOT, stdio: 'inherit', shell: false, env: { ...process.env, ...env },
-    timeout: Number(process.env.AUTOPILOT_SCAN_TIMEOUT_MS) || 45 * 60_000,
+    timeout: Number(env.AUTOPILOT_SCAN_TIMEOUT_MS || process.env.AUTOPILOT_SCAN_TIMEOUT_MS) || 45 * 60_000,
   });
   if (r.error || r.status !== 0) throw new Error(file + ' failed (' + (r.error?.message || r.status) + ')');
 }
@@ -300,6 +300,41 @@ export function detectBlockingChallenge({ session = BROWSER_SESSION, run = spawn
   } catch { return null; }
 }
 
+/** Only filtered, configured discovery. Wide/full is deliberately separate. */
+export function runConfiguredDiscovery(opts = {}, { bounded = false } = {}) {
+  // A fallback after queue exhaustion is one attempt, not a renewed 45-minute
+  // scan per source. Explicit scans retain the operator's existing timeout.
+  const scanEnv = bounded ? { AUTOPILOT_SCAN_TIMEOUT_MS: String(3 * 60_000) } : {};
+  try {
+    runStep('autopilot-scan.mjs', [], scanEnv);
+  } catch (error) {
+    auditLog('configured_scan_error', { error_code: 'CONFIGURED_SCAN_FAILED' }, { level: 'warn' });
+    console.error('[autopilot] configured scan failed; checking remaining sources: ' + error.message);
+  }
+  if (useRussianSources(selectedProfile())) {
+    try {
+      runStep('source-registry.mjs', [opts.refresh && !bounded ? 'full' : 'export', '--country', 'RU'], scanEnv);
+      const regionalPortals = process.env.CAREER_OPS_EXPANDED_PORTALS
+        || path.join(DATA_ROOT, 'data', 'portals-regional.generated.yml');
+      runStep('autopilot-scan.mjs', [], { ...scanEnv, CAREER_OPS_PORTALS: regionalPortals });
+    } catch (error) {
+      auditLog('regional_scan_error', { error_code: 'REGIONAL_SCAN_FAILED' }, { level: 'warn' });
+      console.error('[autopilot] regional source scan unavailable; proceeding with queue: ' + error.message);
+    }
+  }
+  // A wide ATS sweep is never a recovery strategy for an empty eligible
+  // queue. It must be independently requested for deliberate discovery.
+  if (!bounded && process.env.AUTOPILOT_DISCOVERY === 'full') {
+    const days = Math.min(30, Math.max(1, Math.trunc(Number(process.env.AUTOPILOT_ATS_SINCE_DAYS) || 14)));
+    try {
+      runStep('autopilot-scan.mjs', ['--ats-full', '--since', String(days)]);
+    } catch (error) {
+      auditLog('deep_scan_error', { error_code: 'DEEP_SCAN_FAILED' }, { level: 'warn' });
+      console.error('[autopilot] deep discovery unavailable; proceeding with queue: ' + error.message);
+    }
+  }
+}
+
 export async function main(argv = process.argv.slice(2)) {
   // Help is safe even when no profile, coding CLI or browser is installed.
   if (argv.includes('--help') || argv.includes('-h')) {
@@ -323,6 +358,7 @@ Normal upstream 'apply' does not submit. Full/wide/undated ATS discovery is sepa
   let error = null;
   let agent = null;
   let consecutiveWorkerFailures = 0;
+  let recoveryScanned = false;
   let releaseRunLock = null;
   auditLog('runner_start', { no_scan: opts.noScan, refresh_registry: opts.refresh, dry_run: opts.dryRun });
   try {
@@ -346,46 +382,24 @@ Normal upstream 'apply' does not submit. Full/wide/undated ATS discovery is sepa
     });
     // A Playwright --help check also does not prove Chromium can launch.
     assertBrowserReady();
-    if (!opts.noScan) {
-      // Explicit --scan uses the current direction's configured upstream filters.
-      // Never widen to full ATS directories unless separately requested.
-      runStep('autopilot-scan.mjs', []);
-      // A provider module is not an enabled source by itself. Export the RU
-      // catalog into a temporary-looking runtime portals file, then scan it.
-      // This activates Habr Career, GeekJob and SuperJob without touching the
-      // user's configured portals.yml, and leaves HH/Telegram excluded by the
-      // adapter regardless of what appears in the source registry.
-      if (useRussianSources(selectedProfile())) {
-        try {
-          runStep('source-registry.mjs', [opts.refresh ? 'full' : 'export', '--country', 'RU']);
-          const regionalPortals = process.env.CAREER_OPS_EXPANDED_PORTALS
-            || path.join(DATA_ROOT, 'data', 'portals-regional.generated.yml');
-          runStep('autopilot-scan.mjs', [], { CAREER_OPS_PORTALS: regionalPortals });
-        } catch (error) {
-          auditLog('regional_scan_error', { error_code: 'REGIONAL_SCAN_FAILED' }, { level: 'warn' });
-          console.error('[autopilot] regional source scan unavailable; continuing other sources: ' + error.message);
-        }
-      }
-      const deepMode = process.env.AUTOPILOT_DISCOVERY === 'full';
-      if (deepMode) {
-        const days = Math.min(30, Math.max(1, Math.trunc(Number(process.env.AUTOPILOT_ATS_SINCE_DAYS) || 14)));
-        try {
-          runStep('autopilot-scan.mjs', ['--ats-full', '--since', String(days)]);
-        } catch (error) {
-          // A partial/network-failed deep scan must not prevent already found
-          // jobs from being applied to. Keep each failure visible in the log.
-          auditLog('deep_scan_error', { error_code: 'DEEP_SCAN_FAILED' }, { level: 'warn' });
-          console.error('[autopilot] deep discovery unavailable; proceeding with configured sources: ' + error.message);
-        }
-      }
-    }
+    if (!opts.noScan) runConfiguredDiscovery(opts);
     // SQLite remains authoritative; avoid re-rendering a 20k+ job Markdown
     // inspection file on every lease/report. Manual CLI can still export it.
     if (!process.env.AUTOPILOT_QUEUE_MIRROR) process.env.AUTOPILOT_QUEUE_MIRROR = 'off';
     await cmdRun({ noScan: true });
     while (counters.claimed < opts.maxJobs && (opts.targetApplied === null || counters.applied < opts.targetApplied)) {
       const job = cmdNext({ owner, json: false });
-      if (!job) break;
+      if (!job) {
+        if (opts.scanOnEmpty && !recoveryScanned) {
+          recoveryScanned = true;
+          console.error('[autopilot] no eligible queued vacancies; running one bounded, upstream-filtered discovery pass');
+          auditLog('recovery_scan_start', { reason: 'no_eligible_queue_jobs' });
+          runConfiguredDiscovery({ refresh: false }, { bounded: true });
+          await cmdRun({ noScan: true });
+          continue;
+        }
+        break;
+      }
       counters.claimed++;
       // Historical SQLite queues may predate the HH exclusion in the scanner.
       const sourceHost = new URL(job.url).hostname.toLowerCase();
