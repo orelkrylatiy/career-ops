@@ -89,6 +89,8 @@ test('predicate claim skips unrelated high-priority jobs without changing their 
   assert.equal(unrelated.status, 'queued');
   assert.equal(unrelated.claim_owner, null);
   assert.equal(releaseClaim(targetKey, 'predicate-worker'), true);
+  // The following tests expect their own high-priority fixtures to win.
+  openDb().prepare('DELETE FROM jobs WHERE url_key IN (?, ?)').run(wrongKey, targetKey);
 });
 
 test('expired browser claims are quarantined, not resubmitted', () => {
