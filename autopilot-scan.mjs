@@ -6,7 +6,7 @@
  * Explicit --wide opts into temporary filter-free discovery instead.
  */
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -67,8 +67,23 @@ export function parseScanArgs(argv) {
   return { atsFull, wide, args };
 }
 
+// Upstream warns that a fresh reverse-ATS sweep can replace an unfinished
+// checkpoint. Require explicit selection before any destructive restart.
+export function checkFullScanCheckpoint({ atsFull, args }, { dataRoot = getCareerOpsRoot(), exists = existsSync } = {}) {
+  if (!atsFull) return null;
+  const checkpoint = path.join(dataRoot, 'data', 'cache', 'ats-full-checkpoint.json');
+  if (exists(checkpoint) && !args.includes('--resume') && !args.includes('--resume-if-compatible')) {
+    throw new Error(
+      'unfinished ATS checkpoint exists; use --resume for matching settings, or explicitly ' +
+      '--resume-if-compatible to allow a new sweep on mismatch. No checkpoint was changed: ' + checkpoint
+    );
+  }
+  return checkpoint;
+}
+
 export function main(argv = process.argv.slice(2)) {
   const { atsFull, wide, args } = parseScanArgs(argv);
+  checkFullScanCheckpoint({ atsFull, args });
   const portals = process.env.CAREER_OPS_PORTALS || path.join(getCareerOpsRoot(), 'portals.yml');
   const base = yaml.load(readFileSync(portals, 'utf8'));
   const config = makeScanConfig(base, { wide });
