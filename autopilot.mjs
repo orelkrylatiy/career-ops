@@ -668,34 +668,33 @@ export function cmdNext({
   if (process.env.AUTOPILOT_LIVE !== '1') {
     throw new Error('campaign paused: claiming applications requires AUTOPILOT_LIVE=1');
   }
-  // Suppress stale queue items immediately before dispatch, not only while scanning.
+  // Apply the selected direction's upstream title preference to old SQLite
+  // queue entries without changing their lifecycle status. Historical queues
+  // may contain jobs for other directions; those must not be permanently
+  // marked skipped merely because this *run* targets a different role.
   const tracker = loadTrackerUrlIndex();
   const profile = loadYamlIfExists(PROFILE_PATH);
   const excluded = excludedHostTokens(profile);
-  // Reapply the exact upstream title predicate to historical wide queues.
-  // Unlike soft ranking, this blocks obviously irrelevant jobs BEFORE Codex.
-  const allowsTitle = buildTitleFilter(loadTitleFilter());
-  let job = claimNextJob(owner, leaseMinutes);
-  while (job) {
-    const host = hostOf(job.url);
-    const alreadyApplied = tracker.rawSet.has(job.url) || tracker.keySet.has(job.url_key);
-    const destination = inspectApplicationUrl(job.url);
-    const forbiddenSource = excluded.some((token) => hostMatchesToken(host, token));
-    const marketMismatch = !matchesStrictMarket(job, profile);
-    const titleMismatch = !allowsTitle(job.title || '');
-    if (!alreadyApplied && destination.ok && !forbiddenSource && !marketMismatch && !titleMismatch) break;
-    const reason = alreadyApplied ? 'already in applications tracker' :
-      !destination.ok ? `forbidden destination (${destination.reason})` :
-      forbiddenSource ? 'excluded source' :
-      marketMismatch ? 'strict market mismatch' : 'configured upstream title_filter mismatch';
-    reportOutcome(job.url_key, 'skipped', reason + '; suppressed before browser worker', null, { claimOwner: owner });
-    job = claimNextJob(owner, leaseMinutes);
-  }
+  const titleFilter = loadTitleFilter();
+  const allowsTitle = buildTitleFilter(titleFilter);
+  const accept = (candidate) => (
+    (profile?.autopilot?.require_title_match_for_apply === false
+      || allowsTitle(candidate.title || ''))
+    && matchesStrictMarket(candidate, profile)
+    && inspectApplicationUrl(candidate.url).ok
+    && !excluded.some(token => hostMatchesToken(hostOf(candidate.url), token))
+    && !tracker.rawSet.has(candidate.url)
+    && !tracker.keySet.has(candidate.url_key)
+  );
+  const job = claimNextJob(owner, leaseMinutes, { accept });
   regenerateQueue();
 
   if (!job) {
-    if (json) console.log(JSON.stringify({ job: null }));
-    else console.log('queue empty');
+    const msg = statusCounts().queued > 0
+      ? 'no eligible queued jobs for the selected direction; review portals.yml/profile.yml or request a separate filtered scan'
+      : 'queue empty';
+    if (json) console.log(JSON.stringify({ job: null, reason: msg }));
+    else console.log(msg);
     return null;
   }
 
