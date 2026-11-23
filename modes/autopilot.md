@@ -62,7 +62,7 @@ Stack, seniority, location, salary, remote/onsite and experience details influen
 6. Submit, immediately finish verification and call `node autopilot.mjs report ... --owner <worker>` with the receipt, or defer/reject safely before Submit.
 7. Exit. The runner checks the database state before taking the next job.
 
-SQLite is authoritative for queue/outcomes; Markdown tracker is the user-facing history. A possibly-submitted job must never be retried on worker timeout.
+The runner serializes access to each selected direction's persistent browser with an exclusive `data/autopilot/live-runner.lock`. Never launch a second runner for that direction. A stale lock after an abnormal kill requires verifying the old process and ambiguous outcomes before manual cleanup.\n\nSQLite is authoritative for queue/outcomes; Markdown tracker is the user-facing history. A possibly-submitted job must never be retried on worker timeout.
 
 ## Browser
 
