@@ -111,7 +111,7 @@ For supported text-image CAPTCHAs, the agent attempts bounded OCR only where per
 # and after exporting the chosen direction's environment:
 AUTOPILOT_LIVE=1 npm run autopilot:live -- --agent codex --max-jobs 3
 # An explicitly approved campaign can set a goal AND a separate attempt ceiling:
-# AUTOPILOT_LIVE=1 npm run autopilot:live -- --agent codex --target-applied 30 --max-jobs 120
+# AUTOPILOT_LIVE=1 npm run autopilot:live -- --agent codex --target-applied 5 --max-jobs 20  # illustrative limits
 ```
 
 Defaults: existing queue, at most five claimed jobs per run (not five successful submissions), ten minutes per worker. `--target-applied N` stops after N new verified submissions in this run; `--max-jobs M` independently bounds attempts. A goal alone never overrides the attempt cap. `--scan` and `--no-scan` are mutually exclusive. When the runner processes a large queue it skips repeated full Markdown queue exports (`AUTOPILOT_QUEUE_MIRROR=off`); SQLite is authoritative, and `autopilot-queue.md` may be stale until a manual export or scan refresh. Increasing the cap or performing a scan is always deliberate. Use a restricted OS account or container: CLI flags and `AGENTS.md` are not a filesystem security boundary.
