@@ -53,7 +53,7 @@ test('automatic discovery runs once, uses configured sources and bounded timeout
   const steps = [];
   const step = (file, args, env = {}) => steps.push({ file, args, env });
   runConfiguredDiscovery({ refresh: false }, {
-    bounded: true, profile: { location: { country: 'Россия' } }, deepDiscovery: 'full', step,
+    bounded: true, profile: { location: { country: 'Россия' } }, step,
   });
   assert.deepEqual(steps.map(x => x.file), [
     'autopilot-scan.mjs', 'source-registry.mjs', 'autopilot-scan.mjs',
