@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRunnerArgs, resolveAgent, resolveReadyAgent, agentCommand, assertBrowserReady, safeJobId, runOwnerFor, workerPrompt, workerEnvironment, detectBlockingChallenge } from '../autopilot-runner.mjs';
+import { parseRunnerArgs, resolveAgent, resolveReadyAgent, agentCommand, assertBrowserReady, safeJobId, runOwnerFor, useRussianSources, workerPrompt, workerEnvironment, detectBlockingChallenge } from '../autopilot-runner.mjs';
 
 test('runner defaults to real autonomous mode and accepts bounded options', () => {
   assert.equal(parseRunnerArgs([]).dryRun, false);
@@ -44,6 +44,14 @@ test('each campaign uses a fresh claim owner although the browser profile is per
   assert.notEqual(runOwnerFor('aaaaaaaa-1111', 'candidate-direction'), runOwnerFor('bbbbbbbb-2222', 'candidate-direction'));
   assert.match(runOwnerFor('aaaaaaaa-1111', 'candidate-direction'), /^candidate-direction-/);
   assert.throws(() => runOwnerFor('!', 'worker'), /invalid runId/);
+});
+
+test('regional adapters follow candidate configuration rather than all profiles', () => {
+  assert.equal(useRussianSources({ location: { country: 'Россия' } }, undefined), true);
+  assert.equal(useRussianSources({ autopilot: { strict_market: 'Russia' } }, undefined), true);
+  assert.equal(useRussianSources({ location: { country: 'Germany' } }, undefined), false);
+  assert.equal(useRussianSources({ location: { country: 'Россия' } }, 'off'), false);
+  assert.equal(useRussianSources({ location: { country: 'Germany' } }, 'RU'), true);
 });
 
 test('Codex skill router explicitly discovers fork Autopilot and no conflicting npm scan arguments', async () => {
