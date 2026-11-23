@@ -303,7 +303,6 @@ export function detectBlockingChallenge({ session = BROWSER_SESSION, run = spawn
 /** Only filtered, configured discovery. Wide/full is deliberately separate. */
 export function runConfiguredDiscovery(opts = {}, {
   bounded = false, step = runStep, profile = selectedProfile(),
-  deepDiscovery = process.env.AUTOPILOT_DISCOVERY,
 } = {}) {
   // A fallback after queue exhaustion is one attempt, not a renewed 45-minute
   // scan per source. Explicit scans retain the operator's existing timeout.
@@ -325,17 +324,9 @@ export function runConfiguredDiscovery(opts = {}, {
       console.error('[autopilot] regional source scan unavailable; proceeding with queue: ' + error.message);
     }
   }
-  // A wide ATS sweep is never a recovery strategy for an empty eligible
-  // queue. It must be independently requested for deliberate discovery.
-  if (!bounded && deepDiscovery === 'full') {
-    const days = Math.min(30, Math.max(1, Math.trunc(Number(process.env.AUTOPILOT_ATS_SINCE_DAYS) || 14)));
-    try {
-      step('autopilot-scan.mjs', ['--ats-full', '--since', String(days)]);
-    } catch (error) {
-      auditLog('deep_scan_error', { error_code: 'DEEP_SCAN_FAILED' }, { level: 'warn' });
-      console.error('[autopilot] deep discovery unavailable; proceeding with queue: ' + error.message);
-    }
-  }
+  // Full/undated/wide ATS sweeps are never run by the live applier, including
+  // when legacy AUTOPILOT_DISCOVERY=full remains in the shell environment.
+  // Use the separate explicit `npm run autopilot:full-scan` command instead.
 }
 
 export async function main(argv = process.argv.slice(2)) {
