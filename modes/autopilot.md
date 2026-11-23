@@ -2,7 +2,7 @@
 
 > Operator guides: [Autopilot](../docs/AUTOPILOT.md) · [CAPTCHA](../docs/CAPTCHA.md) · [Regional sources](../docs/REGIONAL_SOURCES.md). This file is the **agent execution contract**, not a beginner setup guide.
 
-This fork-specific mode is an autonomous web job applier. Its job is to keep the funnel wide, claim work from SQLite, and complete real application forms with a coding agent driving **Playwright CLI directly**.
+This fork-specific mode is an autonomous web job applier. Its job is to retain upstream vacancy filters by default (with explicit optional wide discovery), claim suitable work from SQLite, and complete real application forms with a coding agent driving **Playwright CLI directly**.
 
 There is no Telegram transport, no HeadHunter source, and no custom browser-step JSON protocol. Discovery uses the temporary-config adapter `autopilot-scan.mjs` around modern upstream scanners.
 
