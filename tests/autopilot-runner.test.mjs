@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRunnerArgs, resolveAgent, resolveReadyAgent, agentCommand, assertBrowserReady, safeJobId, runOwnerFor, useRussianSources, workerPrompt, workerEnvironment, detectBlockingChallenge } from '../autopilot-runner.mjs';
+import { parseRunnerArgs, resolveAgent, resolveReadyAgent, agentCommand, assertBrowserReady, safeJobId, runOwnerFor, useRussianSources, acquireRunLock, workerPrompt, workerEnvironment, detectBlockingChallenge } from '../autopilot-runner.mjs';
 
 test('runner defaults to real autonomous mode and accepts bounded options', () => {
   assert.equal(parseRunnerArgs([]).dryRun, false);
@@ -52,6 +52,36 @@ test('regional adapters follow candidate configuration rather than all profiles'
   assert.equal(useRussianSources({ location: { country: 'Germany' } }, undefined), false);
   assert.equal(useRussianSources({ location: { country: 'Россия' } }, 'off'), false);
   assert.equal(useRussianSources({ location: { country: 'Germany' } }, 'RU'), true);
+});
+
+test('only one live runner may use a direction browser; unrelated roots stay independent', async () => {
+  const { mkdtempSync, existsSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const root = mkdtempSync(join(tmpdir(), 'career-ops-runlock-'));
+  const secondRoot = mkdtempSync(join(tmpdir(), 'career-ops-runlock-other-'));
+  let releaseOne = null;
+  let releaseOther = null;
+  try {
+    releaseOne = acquireRunLock({ dataRoot: root, pid: 1001 });
+    assert.throws(() => acquireRunLock({ dataRoot: root, pid: 1002 }), /a live runner lock already exists/);
+    releaseOther = acquireRunLock({ dataRoot: secondRoot, pid: 1003 });
+    releaseOther();
+    releaseOther = null;
+    releaseOne();
+    releaseOne = null;
+    const repeat = acquireRunLock({ dataRoot: root, pid: 1004 });
+    repeat();
+    assert.equal(existsSync(join(root, 'data/autopilot/live-runner.lock')), false);
+    const lock = join(root, 'data/autopilot/live-runner.lock');
+    writeFileSync(lock, '{"pid":1005,"token":"abandoned"}\n');
+    assert.throws(() => acquireRunLock({ dataRoot: root, pid: 1006 }), /Verify the old process/);
+  } finally {
+    releaseOne?.();
+    releaseOther?.();
+    rmSync(root, { recursive: true, force: true });
+    rmSync(secondRoot, { recursive: true, force: true });
+  }
 });
 
 test('Codex skill router explicitly discovers fork Autopilot and no conflicting npm scan arguments', async () => {
