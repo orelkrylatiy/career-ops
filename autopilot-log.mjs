@@ -20,7 +20,7 @@ export function scrubLogString(input) {
   return String(input)
     .replace(/https?:\/\/[^\s"'<>]+/gi, '[url]')
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email]')
-    .replace(/\b(?:bearer\s+|token[=:]\s*|password[=:]\s*|otp[=:]\s*)[^\s;,]+/gi, '[secret]')
+    .replace(/\b(?:bearer\s+|token[=:]\s*|password[=:]\s*|otp[=:]\s*)[^\s;,]+/gi, '[redacted]')
     .replace(/\b(?:\+?\d[\d\s()\-]{8,}\d)\b/g, '[number]');
 }
 
