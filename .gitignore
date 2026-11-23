@@ -258,10 +258,8 @@ career-dashboard.exe
 package-lock.json
 !web/package-lock.json
 
-# Playwright MCP and CLI artifacts may contain screenshots and session data.
+# Playwright MCP server run artifacts (ephemeral, machine-local)
 .playwright-mcp/
-.playwright-cli/
-**/.playwright-cli/
 test-results/
 playwright-report/
 
@@ -319,6 +317,9 @@ web/out/
 buildlist-*.yml
 buildlist-*.yml.progress.json
 
+# Playwright MCP and CLI artifacts may contain screenshots and session data.
+.playwright-cli/
+**/.playwright-cli/
 # Autonomous fork: private multi-profile data, session credentials and generated CVs
 /profiles.yml
 /data/profiles/
@@ -330,5 +331,3 @@ buildlist-*.yml.progress.json
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
-*.db-shm
-*.db-wal

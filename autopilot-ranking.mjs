@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // autopilot-ranking.mjs — soft priority scoring for the wide-funnel worker.
 //
-// This module NEVER rejects a job. Hard stops belong to the queue ingestion
-// layer and are intentionally limited to structural impossibility, exact
-// duplicate/already-applied records, and explicit user blacklists.
+// This scoring module NEVER rejects a job. Hard stops belong to the queue
+// admission layer, which also reuses upstream's configured title_filter when
+// selecting a legacy queued job for a browser worker.
 
 import { compileKeyword, compilePositiveKeyword } from './title-keywords.mjs';
 

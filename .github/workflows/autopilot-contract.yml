@@ -2,7 +2,7 @@ name: Autonomous CareerOps integration
 
 on:
   push:
-    branches: ['rebuild/upstream-2026-11-21', 'main']
+    branches: ['rebuild/upstream-2026-11-21', 'sync/upstream-*', 'main']
   pull_request:
     paths:
       - 'autopilot*'

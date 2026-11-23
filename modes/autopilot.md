@@ -2,7 +2,7 @@
 
 > Operator guides: [Autopilot](../docs/AUTOPILOT.md) · [CAPTCHA](../docs/CAPTCHA.md) · [Regional sources](../docs/REGIONAL_SOURCES.md). This file is the **agent execution contract**, not a beginner setup guide.
 
-This fork-specific mode is an autonomous web job applier. Its job is to keep the funnel wide, claim work from SQLite, and complete real application forms with a coding agent driving **Playwright CLI directly**.
+This fork-specific mode is an autonomous web job applier. Its job is to retain upstream vacancy filters by default (with explicit optional wide discovery), claim suitable work from SQLite, and complete real application forms with a coding agent driving **Playwright CLI directly**.
 
 There is no Telegram transport, no HeadHunter source, and no custom browser-step JSON protocol. Discovery uses the temporary-config adapter `autopilot-scan.mjs` around modern upstream scanners.
 
@@ -23,7 +23,7 @@ The timestamp above is an **example**, not a permanent value. Pass the current U
 ## Run activation and scope
 
 - Campaign is **paused** by default; real sends require explicit reactivation, `AUTOPILOT_LIVE=1`, and an exact `CAREER_OPS_ROOT` for a selected direction. `npm run autopilot` is a safe preview; `npm run autopilot:live` requires the live env gate.
-- Process suitable queued jobs before rescanning. Default live runner uses `--no-scan`, a small job cap and bounded per-job timeout. Run scans separately; request `--scan` and optionally `AUTOPILOT_DISCOVERY=full` to discover anew.
+- Process suitable queued jobs before rescanning. Default live runner uses `--no-scan`, a small job cap and bounded per-job timeout. Run scans separately; request `--scan` (with upstream portal filters) and optionally `AUTOPILOT_DISCOVERY=full` to discover anew.
 - No `tg-ops`, `hh-ops`, HeadHunter or Telegram in autonomous mode; never switch projects or profiles. Source-level filtering is enforced by the scan adapter, URL guard and worker.
 - Explicit `strict_market: Russia` remains a hard preference; canonical tracker state wins over an old queued SQLite record.
 - Reuse authorized browser sessions and autonomously attempt supported text-image CAPTCHA only where permitted. Do not bypass interactive third-party challenges or MFA; defer and continue other jobs.

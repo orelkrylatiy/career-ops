@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeWideConfig, isExcludedTransport, parseScanArgs } from '../autopilot-scan.mjs';
+import { makeScanConfig, makeWideConfig, isExcludedTransport, parseScanArgs } from '../autopilot-scan.mjs';
+
+test('scan preserves upstream filters by default, except explicitly forbidden transports', () => {
+  const raw = {title_filter: {positive:['react']}, location_filter: {allow:['RU']}, job_boards:[{url:'https://t.me/jobs'},{url:'https://jobs.example.com'}]};
+  const filtered = makeScanConfig(raw);
+  assert.deepEqual(filtered.title_filter, raw.title_filter);
+  assert.deepEqual(filtered.location_filter, raw.location_filter);
+  assert.equal(filtered.job_boards.length, 1);
+  assert.equal(filtered.job_boards[0].url, 'https://jobs.example.com');
+});
 
 test('wide config removes fit filters but keeps trust and blacklist settings', () => {
   const raw = {
@@ -25,9 +34,10 @@ test('HeadHunter remains excluded, unrelated hosts remain allowed', () => {
   assert.equal(isExcludedTransport({url:'https://not-hh.ru/jobs'}), false);
   assert.equal(isExcludedTransport({url:'https://example.org/jobs'}), false);
 });
-test('adapter selects native upstream scanners without legacy --wide', () => {
-  assert.deepEqual(parseScanArgs(['--ats-full','--since','7']), {atsFull:true,args:['--since','7']});
-  assert.throws(() => parseScanArgs(['--wide']), /obsolete/);
+test('adapter selects original scanner by default; --wide is explicitly opt-in', () => {
+  assert.deepEqual(parseScanArgs([]), {atsFull:false,wide:false,args:[]});
+  assert.deepEqual(parseScanArgs(['--ats-full','--since','7']), {atsFull:true,wide:false,args:['--since','7']});
+  assert.deepEqual(parseScanArgs(['--wide','--ats-full','--since','7']), {atsFull:true,wide:true,args:['--since','7']});
 });
 
 // The source registry is a separate activation step: a .mjs provider module

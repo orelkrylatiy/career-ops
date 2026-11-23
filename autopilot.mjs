@@ -2,15 +2,17 @@
 // autopilot.mjs — wide-funnel queue/state CLI for the autonomous web applier.
 //
 // Discovery is deterministic and zero-token:
-//   scan.mjs --wide -> data/pipeline.md -> SQLite priority queue
+//   upstream-filtered scan.mjs -> data/pipeline.md -> SQLite priority queue
+// Use explicit `autopilot-scan.mjs --wide` only for broader discovery.
 //
 // The coding agent is the application brain. It claims one job at a time,
 // reads the full JD, selects/generates a resume, controls Chrome directly
 // through Playwright CLI, verifies Submit evidence, and reports the outcome.
 //
-// Hard rejection is intentionally minimal: invalid URL, exact duplicate /
-// already-known posting, and explicit user company/source blacklists. Fit,
-// title and location preferences only influence priority.
+// Admission protects against invalid URLs, duplicates, explicit blacklists
+// and strict market. Before leasing to a browser worker, historical queue
+// entries also pass upstream's exact configured title_filter predicate.
+// Other fit preferences continue to influence priority, not admission.
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
@@ -27,6 +29,7 @@ import {
 } from './autopilot-db.mjs';
 import { resolveResume } from './autopilot-resume.mjs';
 import { scoreJob } from './autopilot-ranking.mjs';
+import { buildTitleFilter } from './title-keywords.mjs';
 import { inspectApplicationUrl } from './autopilot-url-policy.mjs';
 import { auditLog, auditLogPath } from './autopilot-log.mjs';
 import {
@@ -215,6 +218,9 @@ function hostOf(url) {
 }
 
 export function regenerateQueue() {
+  // The CLI runner owns SQLite state; a full Markdown mirror is optional when
+  // a campaign processes thousands of jobs. Keep interactive/manual behavior.
+  if (process.env.AUTOPILOT_QUEUE_MIRROR === 'off') return statusCounts().queued ?? 0;
   const queued = listJobs('queued');
   const counts = statusCounts();
   const lines = [
@@ -579,6 +585,18 @@ export function cmdAnalytics() {
 
 const PLACEHOLDER_RE = /TODO|example\.(com|org)|@example/i;
 
+export function checkCandidateEmailConsistency(candidateEmail, cvSource = '') {
+  const email = String(candidateEmail || '').trim().toLowerCase();
+  // The primary cv.md is the human-authored source. Examine only its header:
+  // URLs or project references deep in the document may contain third-party mail.
+  const head = String(cvSource || '').slice(0, 2500).split(/\n(?=##?\s)/, 1)[0];
+  const found = [...new Set((head.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || []).map(v => v.toLowerCase()))];
+  if (email && found.length === 1 && found[0] !== email) {
+    return ['candidate.email does not match the primary cv.md contact email (check identity before live mode)'];
+  }
+  return [];
+}
+
 function contactPreflight() {
   const profile = loadYamlIfExists(PROFILE_PATH) ?? {};
   const candidate = profile.candidate ?? {};
@@ -588,6 +606,10 @@ function contactPreflight() {
   }
   if (!candidate.phone || PLACEHOLDER_RE.test(candidate.phone)) {
     problems.push('candidate.phone');
+  }
+  const sourceCv = path.join(DATA_ROOT, 'cv.md');
+  if (existsSync(sourceCv)) {
+    problems.push(...checkCandidateEmailConsistency(candidate.email, readFileSync(sourceCv, 'utf8')));
   }
   const resume = resolveResume({ profile });
   if (!resume.ok) {
@@ -650,6 +672,9 @@ export function cmdNext({
   const tracker = loadTrackerUrlIndex();
   const profile = loadYamlIfExists(PROFILE_PATH);
   const excluded = excludedHostTokens(profile);
+  // Reapply the exact upstream title predicate to historical wide queues.
+  // Unlike soft ranking, this blocks obviously irrelevant jobs BEFORE Codex.
+  const allowsTitle = buildTitleFilter(loadTitleFilter());
   let job = claimNextJob(owner, leaseMinutes);
   while (job) {
     const host = hostOf(job.url);
@@ -657,10 +682,12 @@ export function cmdNext({
     const destination = inspectApplicationUrl(job.url);
     const forbiddenSource = excluded.some((token) => hostMatchesToken(host, token));
     const marketMismatch = !matchesStrictMarket(job, profile);
-    if (!alreadyApplied && destination.ok && !forbiddenSource && !marketMismatch) break;
+    const titleMismatch = !allowsTitle(job.title || '');
+    if (!alreadyApplied && destination.ok && !forbiddenSource && !marketMismatch && !titleMismatch) break;
     const reason = alreadyApplied ? 'already in applications tracker' :
       !destination.ok ? `forbidden destination (${destination.reason})` :
-      forbiddenSource ? 'excluded source' : 'strict market mismatch';
+      forbiddenSource ? 'excluded source' :
+      marketMismatch ? 'strict market mismatch' : 'configured upstream title_filter mismatch';
     reportOutcome(job.url_key, 'skipped', reason + '; suppressed before browser worker', null, { claimOwner: owner });
     job = claimNextJob(owner, leaseMinutes);
   }

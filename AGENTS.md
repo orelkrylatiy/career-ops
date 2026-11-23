@@ -1,6 +1,5 @@
 # career-ops: open-source AI job search agent
 
-
 ## Fork autonomous-mode overlay (explicit opt-in only)
 
 This tree starts from **unmodified upstream Career Ops** and adds a separate regional/autonomous extension. Upstream research, CV, evaluation, review-first modes and data protections remain authoritative. Only the explicitly enabled `modes/autopilot.md` mode allows pressing the real Submit button without a separate human approval per qualified job; it does **not** authorize invented facts, unrelated terms, unauthorized sites or unverifiable submissions. In this mode, this policy takes precedence over conflicting review-first procedural defaults. In all other modes, original human review rules apply.
@@ -16,6 +15,7 @@ This tree starts from **unmodified upstream Career Ops** and adds a separate reg
 **CAPTCHA and auth:** Autonomously detect supported text-image CAPTCHA and use bounded, permitted recognition attempts when allowed by the site. Do not require a human on every simple form. Reuse existing authorized logins. Interactive third-party reCAPTCHA, hCaptcha, Turnstile and MFA/access controls must not be bypassed: defer/mark only that job and move to another Career Ops job. No unbounded retry loops or pretending that recognition proves submission.
 
 **Worker boundary:** An application worker processes one leased job and exits. It must not change code, install packages, alter permissions, modify another profile, launch a different project, invent job sources or send Telegram messages. Autonomous operation is distinct from this user-requested repository maintenance task.
+
 
 ## Origin
 

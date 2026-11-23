@@ -38,7 +38,7 @@ node profile.mjs launch candidate react        # prints exact command; no browse
 # node profile.mjs launch candidate react --run # GUI login only, desktop required
 ```
 
-The browser binary and profile directory are **different paths**. The runner
+The browser binary and profile directory are **different paths**. Browser/CLI cache defaults to the selected direction's `data/autopilot/browser-cache` through `XDG_CACHE_HOME`, so sandboxed workers do not need to write in the global `~/.cache`; `AUTOPILOT_CACHE_DIR` optionally chooses another cache path. The preflight creates the directory before launching Chromium. The runner
 validates that the configured executable is absolute, exists and is executable.
 It passes `PLAYWRIGHT_MCP_EXECUTABLE_PATH` to Playwright CLI rather than relying
 on the upstream browser-launch helper used for other flows. The upstream
@@ -62,7 +62,7 @@ Each direction has a different `portals.yml`, `config/profile.yml`, resume selec
 
 Provider adapters are for finding jobs, **not** evidence that a particular site can submit a form. Available fork-specific boards include Habr Career, GeekJob and SuperJob. Full upstream international ATS and board adapters remain present.
 
-By default, a live runner **processes an existing queue**, without performing a new scan. Explicit discovery steps:
+By default, a live runner **processes an existing queue**, without performing a new scan. A requested scan keeps upstream's filters; only explicit wide-scan commands remove soft preferences. The runner also applies upstream's exact configured `title_filter` to historical SQLite queue entries **before invoking a browser worker**, so previously collected unrelated roles do not consume a Codex invocation. Explicit discovery steps:
 
 ```bash
 # Run only after choosing the correct profile/root.
@@ -76,7 +76,9 @@ For on-demand discovery within the live runner, pass `--scan`. For deep ATS enum
 
 ## Application workflow and safety
 
-The runner preflights, probes the agent login and Playwright startup, leases one job, reads the JD, checks candidate fit/eligibility and previous tracker records, selects a verified PDF, fills the form in an authorized session, calls `autopilot-verify.mjs begin` before Submit and `finish` after, then records `applied` **only** with matching evidence. A click alone is not proof.
+The runner checks primary cv.md/profile contact consistency, probes installed coding-agent login (auto-falling back to another authenticated CLI) and Playwright startup, then leases one job, reads the JD, checks candidate fit/eligibility and previous tracker records, selects a verified PDF, fills the form in an authorized session, calls `autopilot-verify.mjs begin` before Submit and `finish` after, then records `applied` **only** with matching evidence. A click alone is not proof.
+
+The worker uses the exact project-local Playwright CLI entrypoint with the same named browser session; no temporary symlink or global `playwright-cli` is required. A prepared PDF is still subject to a factual/contact review before actual submission: this static preflight compares profile.yml to primary cv.md, not extracted PDF text.
 
 Other possible outcomes: `submitted_unconfirmed`, `captcha`, `validation_failed`, `failed`, `skipped`, or a deferred lease. Never retry ambiguous submissions automatically. A site-specific blocker must not switch the worker to `tg-ops`, `hh-ops`, Telegram contacts, or a different profile. HeadHunter and Telegram are excluded.
 
@@ -90,9 +92,11 @@ For supported text-image CAPTCHAs, the agent attempts bounded OCR only where per
 # After the user explicitly resumes this paused campaign,
 # and after exporting the chosen direction's environment:
 AUTOPILOT_LIVE=1 npm run autopilot:live -- --agent codex --max-jobs 3
+# A larger explicitly approved campaign can set a goal AND a separate attempt ceiling:
+# AUTOPILOT_LIVE=1 npm run autopilot:live -- --agent codex --target-applied 30 --max-jobs 120
 ```
 
-Defaults: existing queue, at most five jobs per run, ten minutes per worker. Increasing the cap or performing a scan is always deliberate. Use a restricted OS account or container: CLI flags and `AGENTS.md` are not a filesystem security boundary.
+Defaults: existing queue, at most five claimed jobs per run (not five successful submissions), ten minutes per worker. `--target-applied N` stops after N new verified submissions in this run; `--max-jobs M` independently bounds attempts. A goal alone never overrides the attempt cap. `--scan` and `--no-scan` are mutually exclusive. When the runner processes a large queue it skips repeated full Markdown queue exports (`AUTOPILOT_QUEUE_MIRROR=off`); SQLite is authoritative, and `autopilot-queue.md` may be stale until a manual export or scan refresh. Increasing the cap or performing a scan is always deliberate. Use a restricted OS account or container: CLI flags and `AGENTS.md` are not a filesystem security boundary.
 
 ## Verification and known limitations
 
