@@ -27,6 +27,7 @@ import {
 } from './autopilot-db.mjs';
 import { resolveResume } from './autopilot-resume.mjs';
 import { scoreJob } from './autopilot-ranking.mjs';
+import { buildTitleFilter } from './title-keywords.mjs';
 import { inspectApplicationUrl } from './autopilot-url-policy.mjs';
 import { auditLog, auditLogPath } from './autopilot-log.mjs';
 import {
@@ -669,6 +670,9 @@ export function cmdNext({
   const tracker = loadTrackerUrlIndex();
   const profile = loadYamlIfExists(PROFILE_PATH);
   const excluded = excludedHostTokens(profile);
+  // Reapply the exact upstream title predicate to historical wide queues.
+  // Unlike soft ranking, this blocks obviously irrelevant jobs BEFORE Codex.
+  const allowsTitle = buildTitleFilter(loadTitleFilter());
   let job = claimNextJob(owner, leaseMinutes);
   while (job) {
     const host = hostOf(job.url);
@@ -676,10 +680,12 @@ export function cmdNext({
     const destination = inspectApplicationUrl(job.url);
     const forbiddenSource = excluded.some((token) => hostMatchesToken(host, token));
     const marketMismatch = !matchesStrictMarket(job, profile);
-    if (!alreadyApplied && destination.ok && !forbiddenSource && !marketMismatch) break;
+    const titleMismatch = !allowsTitle(job.title || '');
+    if (!alreadyApplied && destination.ok && !forbiddenSource && !marketMismatch && !titleMismatch) break;
     const reason = alreadyApplied ? 'already in applications tracker' :
       !destination.ok ? `forbidden destination (${destination.reason})` :
-      forbiddenSource ? 'excluded source' : 'strict market mismatch';
+      forbiddenSource ? 'excluded source' :
+      marketMismatch ? 'strict market mismatch' : 'configured upstream title_filter mismatch';
     reportOutcome(job.url_key, 'skipped', reason + '; suppressed before browser worker', null, { claimOwner: owner });
     job = claimNextJob(owner, leaseMinutes);
   }
