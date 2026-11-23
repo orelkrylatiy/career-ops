@@ -249,9 +249,25 @@ test('unattended browser defaults to headless Chromium without a display', () =>
     assert.ok(!calls.flat().includes('--headed'));
     process.env.AUTOPILOT_BROWSER_HEADED = '1';
     calls.length = 0;
-    const withWindow = assertBrowserReady({ run });
+    const reused = assertBrowserReady({ run });
+    assert.equal(reused.headless, false);
+    assert.equal(reused.reused, true);
+    assert.equal(calls.length, 1, 'a working session must not be reopened');
+    assert.ok(!calls.flat().includes('--headed'), 'headed is only an open-time option');
+
+    calls.length = 0;
+    let snapshots = 0;
+    const restartOnlyWhenMissing = (_bin, args) => {
+      calls.push(args);
+      if (args.at(-1) === 'snapshot' && snapshots++ === 0) {
+        return { status: 1, stderr: 'no active session' };
+      }
+      return { status: 0 };
+    };
+    const withWindow = assertBrowserReady({ run: restartOnlyWhenMissing });
     assert.equal(withWindow.headless, false);
-    assert.ok(calls.flat().includes('--headed'));
+    assert.equal(withWindow.reused, false);
+    assert.ok(calls.flat().includes('--headed'), 'new headed sessions must be opened visibly');
   } finally {
     if (prevHeaded == null) delete process.env.AUTOPILOT_BROWSER_HEADED;
     else process.env.AUTOPILOT_BROWSER_HEADED = prevHeaded;
