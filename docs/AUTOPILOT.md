@@ -35,6 +35,8 @@ npm run autopilot:test
 node profile.mjs list
 npm run autopilot:status
 npm run autopilot:preflight
+# After selecting exact CAREER_OPS_ROOT, prove a browser can open/snapshot WITHOUT applications:
+node autopilot-runner.mjs --browser-check
 npm run autopilot:dry-run
 ```
 
@@ -64,6 +66,14 @@ Close/restart a named session after changing profile or browser binary; do not
 reuse a currently open personal Chrome profile. Linux/bash only in this fork's
 autonomous/profile-manager tools. The original upstream `apply` flow remains
 separate and unchanged.
+
+## When doctor says OK but Playwright startup fails
+
+`node autopilot-verify.mjs doctor` validates the local CLI installation; it does **not** prove that Chromium launches under the current Codex sandbox, uses the right profile or can snapshot. Do not start a live run just because doctor says `ok: true`.
+
+After exporting the exact selected profile, run `node autopilot-runner.mjs --browser-check` with **no** `AUTOPILOT_LIVE` required. This opens only `about:blank` when necessary, preserves an already-open named session, and prints the specific failing Playwright CLI command (`open` or `snapshot`), its exit code and sanitized stderr. It does not scan, claim jobs or submit anything. If the error mentions a busy profile, check for a surviving browser/daemon before closing it; never delete the browser profile, cookies, or session data as a first fix. A failure related to sandbox/cache permissions needs the candidate-scoped `XDG_CACHE_HOME`/writable path; a Chrome executable alone does not prove the launch works.
+
+The user-local script printed by `npm run autopilot:live` is also a version fingerprint: if it still expands to `node autopilot-runner.mjs --no-scan`, the checkout has not yet received this branch's updated wrapper. Check `git status --short` and the current `git log -1` before updating; never overwrite uncommitted browser changes.
 
 ## Candidate/direction isolation
 
