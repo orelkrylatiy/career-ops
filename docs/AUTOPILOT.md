@@ -38,7 +38,7 @@ node profile.mjs launch candidate react        # prints exact command; no browse
 # node profile.mjs launch candidate react --run # GUI login only, desktop required
 ```
 
-The browser binary and profile directory are **different paths**. The runner
+The browser binary and profile directory are **different paths**. Browser/CLI cache defaults to the selected direction's `data/autopilot/browser-cache` through `XDG_CACHE_HOME`, so sandboxed workers do not need to write in the global `~/.cache`; `AUTOPILOT_CACHE_DIR` optionally chooses another cache path. The preflight creates the directory before launching Chromium. The runner
 validates that the configured executable is absolute, exists and is executable.
 It passes `PLAYWRIGHT_MCP_EXECUTABLE_PATH` to Playwright CLI rather than relying
 on the upstream browser-launch helper used for other flows. The upstream
