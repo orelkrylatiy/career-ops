@@ -56,6 +56,8 @@ test('full ATS scan requires explicit checkpoint disposition before overwriting 
   assert.doesNotThrow(
     () => checkFullScanCheckpoint({ atsFull: false, args: [] }, { dataRoot: '/test-direction', exists }),
   );
+  assert.doesNotThrow(() => checkFullScanCheckpoint({ atsFull: true, args: ['--dry-run'] }, { dataRoot: '/test-direction', exists }));
+  assert.doesNotThrow(() => checkFullScanCheckpoint({ atsFull: true, args: ['--help'] }, { dataRoot: '/test-direction', exists }));
 });
 
 // The source registry is a separate activation step: a .mjs provider module
