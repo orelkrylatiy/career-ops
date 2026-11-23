@@ -301,7 +301,7 @@ export function listJobs(status) {
  * Atomically lease the highest-priority queued job. Expired leases are
  * quarantined for review, because a crashed worker may have submitted.
  */
-export function claimNextJob(owner = 'worker-0', leaseMinutes = 120) {
+export function claimNextJob(owner = 'worker-0', leaseMinutes = 120, { accept = null } = {}) {
   const db = openDb();
   const minutes = Number(leaseMinutes);
   if (!Number.isFinite(minutes) || minutes <= 0) {
@@ -331,15 +331,27 @@ export function claimNextJob(owner = 'worker-0', leaseMinutes = 120) {
     ).get(String(owner || 'worker-0'), nowIso);
     if (current) return current;
 
-    const row = db.prepare(
-      `SELECT * FROM jobs
+    // Read candidates in rank order without changing the state of jobs that
+    // do not match the *current* user's criteria. A profile change must not
+    // permanently mark another direction's jobs skipped. SQLite iteration
+    // avoids allocating a 20k+ row array on every claim.
+    if (accept != null && typeof accept !== 'function') {
+      throw new TypeError('claimNextJob: accept must be a function');
+    }
+    const selectSql = `SELECT * FROM jobs
        WHERE status='queued'
          AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
        ORDER BY COALESCE(priority, 50) DESC,
                 COALESCE(posted_at, first_seen) DESC,
-                rowid ASC
-       LIMIT 1`,
-    ).get(nowIso);
+                rowid ASC`;
+    let row;
+    if (accept) {
+      for (const candidate of db.prepare(selectSql).iterate(nowIso)) {
+        if (accept(candidate)) { row = candidate; break; }
+      }
+    } else {
+      row = db.prepare(selectSql + ' LIMIT 1').get(nowIso);
+    }
     if (!row) return null;
 
     const changed = db.prepare(
