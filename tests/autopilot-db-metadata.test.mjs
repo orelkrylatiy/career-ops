@@ -76,6 +76,21 @@ test('priority queue claims highest-priority job and can release the lease', () 
   assert.equal(released.status, 'queued');
 });
 
+test('predicate claim skips unrelated high-priority jobs without changing their state', () => {
+  const unrelatedUrl = 'https://jobs.example.com/role/predicate-unrelated';
+  const selectedUrl = 'https://jobs.example.com/role/predicate-selected';
+  const wrongKey = normalizeUrlKey(unrelatedUrl);
+  const targetKey = normalizeUrlKey(selectedUrl);
+  upsertJob({ urlKey: wrongKey, url: unrelatedUrl, company: 'Unrelated', title: 'Designer', priority: 100, status: 'queued' });
+  upsertJob({ urlKey: targetKey, url: selectedUrl, company: 'Selected', title: 'Engineer', priority: 99, status: 'queued' });
+  const got = claimNextJob('predicate-worker', 5, { accept: row => row.url_key === targetKey });
+  assert.equal(got?.url_key, targetKey);
+  const unrelated = openDb().prepare('SELECT status, claim_owner FROM jobs WHERE url_key=?').get(wrongKey);
+  assert.equal(unrelated.status, 'queued');
+  assert.equal(unrelated.claim_owner, null);
+  assert.equal(releaseClaim(targetKey, 'predicate-worker'), true);
+});
+
 test('expired browser claims are quarantined, not resubmitted', () => {
   const url = 'https://jobs.example.com/role/expired-claim';
   const key = normalizeUrlKey(url);
