@@ -1,11 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRunnerArgs, resolveAgent, resolveReadyAgent, agentCommand, assertBrowserReady, safeJobId, runOwnerFor, useRussianSources, acquireRunLock, workerPrompt, workerEnvironment, detectBlockingChallenge } from '../autopilot-runner.mjs';
+import { parseRunnerArgs, resolveAgent, resolveReadyAgent, agentCommand, assertBrowserReady, safeJobId, runOwnerFor, useRussianSources, acquireRunLock, runConfiguredDiscovery, workerPrompt, workerEnvironment, detectBlockingChallenge } from '../autopilot-runner.mjs';
 
 test('runner defaults to real autonomous mode and accepts bounded options', () => {
   assert.equal(parseRunnerArgs([]).dryRun, false);
   assert.equal(parseRunnerArgs([]).maxJobs, 5);
   assert.equal(parseRunnerArgs([]).noScan, true);
+  assert.equal(parseRunnerArgs([]).scanOnEmpty, true);
+  assert.equal(parseRunnerArgs(['--no-scan']).scanOnEmpty, false);
+  assert.equal(parseRunnerArgs(['--no-scan-on-empty']).scanOnEmpty, false);
   assert.equal(parseRunnerArgs(['--scan']).noScan, false);
   assert.equal(parseRunnerArgs(['--agent','codex','--max-jobs','3','--timeout-minutes','12']).maxJobs, 3);
   assert.throws(() => parseRunnerArgs(['--no-scan', '--refresh-registry']), /conflicts/);
@@ -44,6 +47,29 @@ test('each campaign uses a fresh claim owner although the browser profile is per
   assert.notEqual(runOwnerFor('aaaaaaaa-1111', 'candidate-direction'), runOwnerFor('bbbbbbbb-2222', 'candidate-direction'));
   assert.match(runOwnerFor('aaaaaaaa-1111', 'candidate-direction'), /^candidate-direction-/);
   assert.throws(() => runOwnerFor('!', 'worker'), /invalid runId/);
+});
+
+test('automatic discovery runs once, uses configured sources and bounded timeouts', () => {
+  const steps = [];
+  const step = (file, args, env = {}) => steps.push({ file, args, env });
+  runConfiguredDiscovery({ refresh: false }, {
+    bounded: true, profile: { location: { country: 'Россия' } }, deepDiscovery: 'full', step,
+  });
+  assert.deepEqual(steps.map(x => x.file), [
+    'autopilot-scan.mjs', 'source-registry.mjs', 'autopilot-scan.mjs',
+  ]);
+  assert.ok(steps.every(x => x.env.AUTOPILOT_SCAN_TIMEOUT_MS === '180000'));
+  assert.ok(steps.every(x => !x.args.includes('--ats-full') && !x.args.includes('--wide')));
+  assert.ok(steps.some(x => x.file === 'source-registry.mjs' && x.args.includes('export')));
+});
+
+test('discovery does not inject a regional market for unrelated profiles', () => {
+  const steps = [];
+  runConfiguredDiscovery({}, {
+    bounded: true, profile: { location: { country: 'Germany' } },
+    deepDiscovery: 'full', step: (file, args) => steps.push([file, args]),
+  });
+  assert.deepEqual(steps, [['autopilot-scan.mjs', []]]);
 });
 
 test('regional adapters follow candidate configuration rather than all profiles', () => {
