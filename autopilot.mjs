@@ -9,9 +9,10 @@
 // reads the full JD, selects/generates a resume, controls Chrome directly
 // through Playwright CLI, verifies Submit evidence, and reports the outcome.
 //
-// Hard rejection is intentionally minimal: invalid URL, exact duplicate /
-// already-known posting, and explicit user company/source blacklists. Fit,
-// title and location preferences only influence priority.
+// Admission protects against invalid URLs, duplicates, explicit blacklists
+// and strict market. Before leasing to a browser worker, historical queue
+// entries also pass upstream's exact configured title_filter predicate.
+// Other fit preferences continue to influence priority, not admission.
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
