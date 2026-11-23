@@ -10,6 +10,19 @@ The original Career Ops scans ATS systems and job boards, evaluates postings, ge
 
 The worker **does not** run in ordinary upstream modes. Autopilot is **paused by default**; a user instruction in the current session to send applications is the authorization for that run, but the runner still requires `AUTOPILOT_LIVE=1`, preflight, and the explicitly chosen `CAREER_OPS_ROOT`. Never hard-code a 30-application quota, Russian-market minimum or React/Next/Vue target in repository policy: the user's current request and the selected direction determine these. Old, duplicate and ambiguous sends never count.
 
+## Starting from Codex (same entrypoint as upstream)
+
+Open the checkout and start Codex normally:
+
+```bash
+cd ~/projects/career-ops
+codex
+```
+
+The upstream skill router at `.agents/skills/career-ops/SKILL.md` is used for standard modes; this fork additionally routes **explicit autonomous submission requests** to `autopilot`. Plain prompts such as "Run the Career Ops scan mode" use upstream `scan`; "Fill this application" uses review-first `apply`; an explicit "send N applications for the selected profile" uses the fork-only Autopilot **after current-session authorization, profile selection and preflight**. Simply starting Codex does not begin a campaign. If the skill is not auto-discovered, ask Codex to run `career-ops autopilot` by name; do not improvise manual browsing or broad vacancy searches.
+
+The selected candidate and direction live under the User Layer, not `AGENTS.md` or a permanent script default. Confirm the exact active profile with `node profile.mjs list` and `node profile.mjs env <candidate> <direction>` before any runner starts. Do not launch two runners for one direction or discard local changes while updating.
+
 ## Install and inspect without submissions
 
 Use Linux, a compatible Node release (`package.json` requires Node ^22.13.0 or >=23.4.0), Python only if optional Humanizer is configured, and one signed-in agent CLI (Codex, Claude, or OpenCode). Browser interaction uses Playwright CLI and either a selected local browser executable or the CLI default.
@@ -54,7 +67,7 @@ separate and unchanged.
 
 ## Candidate/direction isolation
 
-A **candidate** can have independent **React**, **Next.js** and **Vue** directions. `node profile.mjs add-profile candidate --name Candidate` registers a new person, and `node profile.mjs add-direction candidate react --name React` creates a direction. Use `node profile.mjs env candidate react` to print its data-root and browser-session exports. Apply them in the shell **before** preflight or live operations. Do not recreate existing directions.
+A **candidate** can have independent directions (for example React, Next.js or Vue). `node profile.mjs add-profile <candidate> --name Candidate` registers a new person, and `node profile.mjs add-direction <candidate> <direction> --name Direction` creates a direction. Use `node profile.mjs env <candidate> <direction>` to print its data-root and browser-session exports. Apply them in the shell **before** preflight or live operations. Do not recreate existing directions.
 
 Each direction has a different `portals.yml`, `config/profile.yml`, resume selection, `data/applications.md`, `data/autopilot.db` and Playwright session. Mixing roots silently causes wrong-CV applications and tracker duplicates.
 
@@ -62,17 +75,24 @@ Each direction has a different `portals.yml`, `config/profile.yml`, resume selec
 
 Provider adapters are for finding jobs, **not** evidence that a particular site can submit a form. Available fork-specific boards include Habr Career, GeekJob and SuperJob. Full upstream international ATS and board adapters remain present.
 
-By default, a live runner **processes an existing queue**, without performing a new scan. A requested scan keeps upstream's filters; only explicit wide-scan commands remove soft preferences. The runner also applies upstream's exact configured `title_filter` to historical SQLite queue entries **before invoking a browser worker**, so previously collected unrelated roles do not consume a Codex invocation. Explicit discovery steps:
+By default, a live runner **processes the selected profile's existing queue**, without performing a new scan. It applies the original `buildTitleFilter` to historical SQLite entries **before leasing**, without marking another direction's jobs `skipped`. A requested scan preserves upstream filters; the selected user's profile determines whether extra RU catalog sources are enabled (or set `AUTOPILOT_REGIONAL=off` to disable them). Explicit wide-scan commands disable soft preferences and should not be used for a normal targeted campaign. On-demand discovery examples:
 
 ```bash
 # Run only after choosing the correct profile/root.
+# The configured profile gets the original upstream filters.
+npm run autopilot:scan -- --no-scan
+# To scan only selected configured sources without running live applications:
+node autopilot-scan.mjs
+# If the current profile requests Russian sources:
 node source-registry.mjs export --country RU
-npm run autopilot:wide-scan
-# The expanded regional portals can also be scanned explicitly:
-CAREER_OPS_PORTALS="$CAREER_OPS_ROOT/data/portals-regional.generated.yml" npm run autopilot:wide-scan
+CAREER_OPS_PORTALS="$CAREER_OPS_ROOT/data/portals-regional.generated.yml" node autopilot-scan.mjs
+# Explicit reverse-ATS discovery, not part of the normal application loop:
+npm run autopilot:full-scan
+# To resume a previous matching sweep:
+npm run autopilot:full-scan -- --resume
 ```
 
-For on-demand discovery within the live runner, pass `--scan`; do not pass it together with `--no-scan`. Avoid repeated full discovery when the existing queue is enormous. For deep ATS enumeration, also set `AUTOPILOT_DISCOVERY=full`. Ordinary use needs neither.
+For on-demand **configured** discovery within the live runner, pass `--scan`; `npm run autopilot:live` no longer hardcodes `--no-scan`, and the parser still rejects conflicting flags. Do not repeatedly scan an existing large queue. Deep ATS discovery requires a separate intentional request (`AUTOPILOT_DISCOVERY=full` or the dedicated script); `autopilot:full-scan` now keeps upstream filters and its normal posting-date defaults, rather than silently enabling `--wide --include-undated`. If an unfinished checkpoint exists, the adapter refuses to overwrite it without explicit `--resume` or `--resume-if-compatible` (the latter may start fresh on mismatch). Ordinary operation needs neither discovery mode.
 
 ## Application workflow and safety
 
@@ -92,7 +112,7 @@ For supported text-image CAPTCHAs, the agent attempts bounded OCR only where per
 # After the user explicitly authorizes this live campaign in the current conversation,
 # and after exporting the chosen direction's environment:
 AUTOPILOT_LIVE=1 npm run autopilot:live -- --agent codex --max-jobs 3
-# A larger explicitly approved campaign can set a goal AND a separate attempt ceiling:
+# An explicitly approved campaign can set a goal AND a separate attempt ceiling:
 # AUTOPILOT_LIVE=1 npm run autopilot:live -- --agent codex --target-applied 30 --max-jobs 120
 ```
 
