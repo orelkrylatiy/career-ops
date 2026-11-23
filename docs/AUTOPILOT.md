@@ -109,7 +109,9 @@ For supported text-image CAPTCHAs, the agent attempts bounded OCR only where per
 ```bash
 # After the user explicitly authorizes this live campaign in the current conversation,
 # export the direction and execute preflight/live in this SAME shell:
-eval "$(node profile.mjs env <candidate> <direction>)"
+CANDIDATE_ID="your-candidate-slug"   # choose from: node profile.mjs list
+DIRECTION_ID="your-direction-slug"   # choose from: node profile.mjs list
+eval "$(node profile.mjs env "$CANDIDATE_ID" "$DIRECTION_ID")"
 node autopilot.mjs preflight
 AUTOPILOT_LIVE=1 npm run autopilot:live -- --agent codex --max-jobs 3
 # An explicitly approved campaign can set a goal AND a separate attempt ceiling:
