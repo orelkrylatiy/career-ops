@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeScanConfig, makeWideConfig, isExcludedTransport, parseScanArgs } from '../autopilot-scan.mjs';
+import { makeScanConfig, makeWideConfig, isExcludedTransport, parseScanArgs, checkFullScanCheckpoint } from '../autopilot-scan.mjs';
 
 test('scan preserves upstream filters by default, except explicitly forbidden transports', () => {
   const raw = {title_filter: {positive:['react']}, location_filter: {allow:['RU']}, job_boards:[{url:'https://t.me/jobs'},{url:'https://jobs.example.com'}]};
@@ -38,6 +38,24 @@ test('adapter selects original scanner by default; --wide is explicitly opt-in',
   assert.deepEqual(parseScanArgs([]), {atsFull:false,wide:false,args:[]});
   assert.deepEqual(parseScanArgs(['--ats-full','--since','7']), {atsFull:true,wide:false,args:['--since','7']});
   assert.deepEqual(parseScanArgs(['--wide','--ats-full','--since','7']), {atsFull:true,wide:true,args:['--since','7']});
+});
+
+test('full ATS scan requires explicit checkpoint disposition before overwriting work', () => {
+  const exists = () => true;
+  const opts = { atsFull: true, args: [] };
+  assert.throws(
+    () => checkFullScanCheckpoint(opts, { dataRoot: '/test-direction', exists }),
+    /unfinished ATS checkpoint exists/,
+  );
+  assert.doesNotThrow(
+    () => checkFullScanCheckpoint({ atsFull: true, args: ['--resume'] }, { dataRoot: '/test-direction', exists }),
+  );
+  assert.doesNotThrow(
+    () => checkFullScanCheckpoint({ atsFull: true, args: ['--resume-if-compatible'] }, { dataRoot: '/test-direction', exists }),
+  );
+  assert.doesNotThrow(
+    () => checkFullScanCheckpoint({ atsFull: false, args: [] }, { dataRoot: '/test-direction', exists }),
+  );
 });
 
 // The source registry is a separate activation step: a .mjs provider module
