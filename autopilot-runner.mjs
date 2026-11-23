@@ -350,9 +350,20 @@ export function runConfiguredDiscovery(opts = {}, {
 }
 
 export async function main(argv = process.argv.slice(2)) {
+  // Browser-only diagnostic: no live gate, vacancy leases, agent CLI or submissions.
+  if (argv.includes('--browser-check')) {
+    if (argv.length !== 1) throw new Error('--browser-check does not accept live runner flags');
+    if (!process.env.CAREER_OPS_ROOT && !process.env.CAREER_OPS_DATA_DIR)
+      throw new Error('select exact candidate direction with CAREER_OPS_ROOT before --browser-check');
+    assertLinux();
+    const info = assertBrowserReady();
+    console.log(JSON.stringify({ ok: true, session: info.session, profile: info.profile, reused: info.reused }, null, 2));
+    return;
+  }
   // Help is safe even when no profile, coding CLI or browser is installed.
   if (argv.includes('--help') || argv.includes('-h')) {
-    console.log(`Usage: node autopilot-runner.mjs [--dry-run] [--agent codex|claude|opencode|auto]
+    console.log(`Usage: node autopilot-runner.mjs --browser-check  # no submissions, only Playwright open/snapshot
+  node autopilot-runner.mjs [--dry-run] [--agent codex|claude|opencode|auto]
   [--target-applied N] [--max-jobs M] [--timeout-minutes N]
   [--scan | --no-scan] [--scan-on-empty | --no-scan-on-empty]
   [--refresh-registry]
