@@ -34,7 +34,7 @@ Additional CIS adapters may be present: `careercenter-am`, `ishuz`, and `staffam
 node profile.mjs list
 node source-registry.mjs status --json
 node source-registry.mjs export --country RU
-CAREER_OPS_PORTALS="$CAREER_OPS_ROOT/data/portals-regional.generated.yml" npm run autopilot:wide-scan
+CAREER_OPS_PORTALS="$CAREER_OPS_ROOT/data/portals-regional.generated.yml" node autopilot-scan.mjs # preserves profile filters
 npm run autopilot:dry-run
 npm run autopilot:status
 ```
