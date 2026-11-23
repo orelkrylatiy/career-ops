@@ -4,7 +4,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import * as yaml from 'js-yaml';
 import { fileURLToPath } from 'node:url';
@@ -248,6 +248,36 @@ export function runOwnerFor(runId, prefix = process.env.AUTOPILOT_WORKER_ID || '
   return name + '-' + suffix;
 }
 
+// A shared browser session must never be driven by two live runners.
+ // Exclusive create is atomic per direction. We do NOT delete a possibly stale
+ // lock automatically: a prior worker might still own an active submission.
+export function acquireRunLock({ dataRoot = DATA_ROOT, pid = process.pid, token = randomUUID() } = {}) {
+  const dir = path.join(dataRoot, 'data', 'autopilot');
+  mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'live-runner.lock');
+  const payload = { pid, token, started_at: new Date().toISOString() };
+  try {
+    writeFileSync(file, JSON.stringify(payload) + '\n', { flag: 'wx', mode: 0o600 });
+  } catch (error) {
+    if (error?.code !== 'EEXIST') throw error;
+    let heldBy = 'unknown';
+    try {
+      const existing = JSON.parse(readFileSync(file, 'utf8'));
+      heldBy = String(existing.pid || 'unknown');
+    } catch { /* inspect manually */ }
+    throw new Error('a live runner lock already exists for this direction (PID ' + heldBy
+      + '). Do not start a second runner. Verify the old process has stopped before removing a stale lock: ' + file);
+  }
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    try {
+      if (JSON.parse(readFileSync(file, 'utf8')).token === token) unlinkSync(file);
+    } catch { /* already gone or no longer ours */ }
+  };
+}
+
 export function safeJobId(job) {
   return createHash('sha256').update(String(job.url_key || job.url)).digest('hex').slice(0, 16);
 }
@@ -290,6 +320,7 @@ Normal upstream 'apply' does not submit. Full/wide/undated ATS discovery is sepa
   let error = null;
   let agent = null;
   let consecutiveWorkerFailures = 0;
+  let releaseRunLock = null;
   auditLog('runner_start', { no_scan: opts.noScan, refresh_registry: opts.refresh, dry_run: opts.dryRun });
   try {
     if (opts.dryRun) {
@@ -300,6 +331,8 @@ Normal upstream 'apply' does not submit. Full/wide/undated ATS discovery is sepa
     }
     if (process.env.AUTOPILOT_LIVE !== '1') throw new Error('campaign paused: live application requires AUTOPILOT_LIVE=1; use npm run autopilot for a safe dry-run');
     if (!process.env.CAREER_OPS_ROOT && !process.env.CAREER_OPS_DATA_DIR) throw new Error('select explicit CAREER_OPS_ROOT for the active candidate/direction (node profile.mjs env)');
+    releaseRunLock = acquireRunLock();
+    process.once('exit', releaseRunLock);
     if (!cmdPreflight()) throw new Error('preflight failed');
     // --version proves installation, not authentication. Auto selection falls
     // back to the next installed CLI when the model/login probe fails.
@@ -410,6 +443,10 @@ Normal upstream 'apply' does not submit. Full/wide/undated ATS discovery is sepa
     process.exitCode = 1;
     console.error('[autopilot] ' + error);
   } finally {
+    if (releaseRunLock) {
+      process.removeListener('exit', releaseRunLock);
+      releaseRunLock();
+    }
     const report = {
       version: 1, run_id: runId, target_applied: opts.targetApplied, max_jobs: opts.maxJobs, started_at: new Date(started).toISOString(),
       finished_at: new Date().toISOString(), duration_ms: Date.now() - started,
