@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRunnerArgs, resolveAgent, resolveReadyAgent, agentCommand, assertBrowserReady, safeJobId, runOwnerFor, useRussianSources, acquireRunLock, runConfiguredDiscovery, workerPrompt, workerEnvironment, detectBlockingChallenge } from '../autopilot-runner.mjs';
+import { parseRunnerArgs, resolveAgent, resolveReadyAgent, agentCommand, assertBrowserReady, browserCliFailure, safeJobId, runOwnerFor, useRussianSources, acquireRunLock, runConfiguredDiscovery, workerPrompt, workerEnvironment, detectBlockingChallenge } from '../autopilot-runner.mjs';
 
 test('runner defaults to real autonomous mode and accepts bounded options', () => {
   assert.equal(parseRunnerArgs([]).dryRun, false);
@@ -170,19 +170,42 @@ test('fork docs never override mandatory eligibility or hardcode an outdated cam
   assert.doesNotMatch(overlay, /30 new React applications|permanent 30-job goal/i);
 });
 
-test('browser must open a real named session and snapshot BEFORE processing jobs', () => {
+test('browser preflight reuses a live session without navigating away from existing form', () => {
   const calls = [];
-  const mockedRun = (_binary, args) => { calls.push(args); return { status: 0 }; };
-  const info = assertBrowserReady({ headless: true, run: mockedRun });
+  const run = (_binary, args) => { calls.push(args); return { status: 0 }; };
+  const info = assertBrowserReady({ headless: true, run });
+  assert.equal(info.reused, true);
   assert.equal(info.session, 'career-ops-worker-0');
-  assert.equal(calls.length, 2);
-  assert.ok(calls[0].includes('open'));
-  assert.ok(calls[0].includes('about:blank'));
-  assert.ok(calls[0].some(s => String(s).startsWith('--profile=')));
-  assert.equal(calls[1].at(-1), 'snapshot');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].at(-1), 'snapshot');
   assert.ok(info.profile.endsWith('/data/browser-profile'));
+});
 
-  assert.throws(() => assertBrowserReady({ headless: true, run: () => ({status: 1}) }), /browser startup\/snapshot failed/);
+test('browser preflight opens a persistent session only when no existing snapshot works', () => {
+  const calls = [];
+  const run = (_bin, args) => {
+    calls.push(args);
+    return calls.length === 1 ? { status: 1, stderr: 'Browser is not open' } : { status: 0 };
+  };
+  const info = assertBrowserReady({ headless: true, run });
+  assert.equal(info.reused, false);
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0].at(-1), 'snapshot');
+  assert.ok(calls[1].includes('open'));
+  assert.ok(calls[1].includes('about:blank'));
+  assert.ok(calls[1].some(arg => String(arg).startsWith('--profile=')));
+  assert.equal(calls[2].at(-1), 'snapshot');
+});
+
+test('browser preflight exposes which command failed, without logging contact emails or bearer tokens', () => {
+  const error = browserCliFailure('open', { status: 1, stderr: 'EPERM for candidate@sample.net Bearer sensitive.token' });
+  assert.match(error, /open; 1/);
+  assert.match(error, /EPERM/);
+  assert.doesNotMatch(error, /candidate@sample.net|sensitive\.token/);
+  assert.throws(
+    () => assertBrowserReady({ headless: true, run: () => ({ status: 1, stderr: 'profile is locked' }) }),
+    /browser startup\/snapshot failed \[open; 1\].*profile is locked/,
+  );
 });
 
 test('Linux agent execution uses direct argv without a shell', () => {
