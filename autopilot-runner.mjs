@@ -218,6 +218,15 @@ export function workerEnvironment(owner, runId, session = BROWSER_SESSION, optio
   };
 }
 
+// Reuse a browser session across runs, but NEVER reuse its lease owner.
+ // A previous worker may have submitted a form before it crashed.
+export function runOwnerFor(runId, prefix = process.env.AUTOPILOT_WORKER_ID || 'worker') {
+  const name = String(prefix || 'worker').replace(/[^a-z0-9._-]/gi, '').slice(0, 50) || 'worker';
+  const suffix = String(runId || '').replace(/[^a-z0-9]/gi, '').slice(0, 16);
+  if (!suffix) throw new Error('invalid runId for unique claim owner');
+  return name + '-' + suffix;
+}
+
 export function safeJobId(job) {
   return createHash('sha256').update(String(job.url_key || job.url)).digest('hex').slice(0, 16);
 }
@@ -245,7 +254,7 @@ export async function main(argv = process.argv.slice(2)) {
   process.env.AUTOPILOT_RUN_ID = runId;
   const started = Date.now();
   const counters = { claimed: 0, applied: 0, submitted_unconfirmed: 0, deferred: 0, captcha: 0, failed: 0, validation_failed: 0, skipped: 0, no_outcome: 0 };
-  const owner = process.env.AUTOPILOT_WORKER_ID || ('worker-' + runId.replace(/[^a-z0-9]/gi, '').slice(0, 16));
+  const owner = runOwnerFor(runId);
   let error = null;
   let agent = null;
   let consecutiveWorkerFailures = 0;
@@ -258,7 +267,7 @@ export async function main(argv = process.argv.slice(2)) {
       return;
     }
     if (process.env.AUTOPILOT_LIVE !== '1') throw new Error('campaign paused: live application requires AUTOPILOT_LIVE=1; use npm run autopilot for a safe dry-run');
-    if (!process.env.CAREER_OPS_ROOT && !process.env.CAREER_OPS_DATA_DIR) throw new Error('select explicit CAREER_OPS_ROOT for the active React/Next.js/Vue direction (node profile.mjs env)');
+    if (!process.env.CAREER_OPS_ROOT && !process.env.CAREER_OPS_DATA_DIR) throw new Error('select explicit CAREER_OPS_ROOT for the active candidate/direction (node profile.mjs env)');
     if (!cmdPreflight()) throw new Error('preflight failed');
     // --version proves installation, not authentication. Auto selection falls
     // back to the next installed CLI when the model/login probe fails.
@@ -270,15 +279,15 @@ export async function main(argv = process.argv.slice(2)) {
     // A Playwright --help check also does not prove Chromium can launch.
     assertBrowserReady();
     if (!opts.noScan) {
-      // Start with configured employer sources, then widen to the upstream ATS
-      // directories by default. Discovery never uses HH or Telegram transport.
+      // Explicit --scan uses the current direction's configured upstream filters.
+      // Never widen to full ATS directories unless separately requested.
       runStep('autopilot-scan.mjs', []);
       // A provider module is not an enabled source by itself. Export the RU
       // catalog into a temporary-looking runtime portals file, then scan it.
       // This activates Habr Career, GeekJob and SuperJob without touching the
       // user's configured portals.yml, and leaves HH/Telegram excluded by the
       // adapter regardless of what appears in the source registry.
-      if (process.env.AUTOPILOT_REGIONAL !== 'off') {
+      if (process.env.AUTOPILOT_REGIONAL === 'RU') {
         try {
           runStep('source-registry.mjs', [opts.refresh ? 'full' : 'export', '--country', 'RU']);
           const regionalPortals = process.env.CAREER_OPS_EXPANDED_PORTALS
@@ -289,11 +298,11 @@ export async function main(argv = process.argv.slice(2)) {
           console.error('[autopilot] regional source scan unavailable; continuing other sources: ' + error.message);
         }
       }
-      const deepMode = process.env.AUTOPILOT_DISCOVERY === 'full' || opts.refresh;
+      const deepMode = process.env.AUTOPILOT_DISCOVERY === 'full';
       if (deepMode) {
         const days = Math.min(30, Math.max(1, Math.trunc(Number(process.env.AUTOPILOT_ATS_SINCE_DAYS) || 14)));
         try {
-          runStep('autopilot-scan.mjs', ['--ats-full', '--since', String(days), '--include-undated']);
+          runStep('autopilot-scan.mjs', ['--ats-full', '--since', String(days)]);
         } catch (error) {
           // A partial/network-failed deep scan must not prevent already found
           // jobs from being applied to. Keep each failure visible in the log.
