@@ -8,7 +8,7 @@
 
 The original Career Ops scans ATS systems and job boards, evaluates postings, generates resumes and maintains the Markdown tracker. Our opt-in extension provides a SQLite lease-based queue and a browser worker that uses the same authorized Playwright CLI session, chooses a verified CV, fills a real application, and requires a receipt from `autopilot-verify.mjs` before it can mark a submission verified.
 
-The worker **does not** run in ordinary upstream modes. Autopilot is **paused by default**; a user instruction in the current session to send applications is the authorization for that run, but the runner still requires `AUTOPILOT_LIVE=1`, preflight, and the explicitly chosen `CAREER_OPS_ROOT`. Never hard-code a 30-application quota, Russian-market minimum or React/Next/Vue target in repository policy: the user's current request and the selected direction determine these. Old, duplicate and ambiguous sends never count.
+The worker **does not** run in ordinary upstream modes. Autopilot is **paused by default**; a user instruction in the current session to send applications is the authorization for that run, but the runner still requires `AUTOPILOT_LIVE=1`, preflight, and the explicitly chosen `CAREER_OPS_ROOT`. Never hard-code a fixed campaign quota, market minimum or technology stack in repository policy: the user's current request and the selected direction determine these. Old, duplicate and ambiguous sends never count.
 
 ## Starting from Codex (same entrypoint as upstream)
 
