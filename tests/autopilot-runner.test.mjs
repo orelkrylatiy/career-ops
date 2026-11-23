@@ -71,6 +71,8 @@ test('worker instructions avoid duplicate upstream policy loading and retain the
   assert.match(instruction, /do not redundantly read/i);
   assert.match(instruction, /modes\/autopilot\.md/);
   assert.match(instruction, /ONE already-leased job/);
+  assert.match(instruction, /currently selected candidate profile/);
+  assert.doesNotMatch(instruction, /React\/Next\.js\/Vue match/);
 });
 
 test('fork docs never override mandatory eligibility or hardcode an outdated campaign quota', async () => {
@@ -81,7 +83,9 @@ test('fork docs never override mandatory eligibility or hardcode an outdated cam
   assert.doesNotMatch(overlay, /at least 10 for the Russian market/i);
   assert.match(overlay, /Activation is per run/);
   assert.doesNotMatch(mode, /mismatch with a job requirement is not a reason to skip/i);
-  assert.match(mode, /never submit when a hard requirement is unmet/i);
+  assert.match(mode, /generic queue-state semantics, not personal filters/i);
+  assert.match(mode, /config\/profile\.yml/);
+  assert.doesNotMatch(overlay, /30 new React applications|permanent 30-job goal/i);
 });
 
 test('browser must open a real named session and snapshot BEFORE processing jobs', () => {
