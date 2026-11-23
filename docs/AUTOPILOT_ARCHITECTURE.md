@@ -286,7 +286,8 @@ Typical run:
 scheduler
   -> coding agent
   -> autopilot preflight
-  -> wide scan + enqueue
+  -> inspect existing eligible SQLite queue (configured upstream filters)
+  -> optional explicit configured scan only when necessary (wide/undated/full ATS opt-in)
   -> open persistent Playwright CLI session
   -> claim/apply/verify/report until queue empty
   -> exit
