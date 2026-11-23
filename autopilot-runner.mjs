@@ -100,8 +100,25 @@ function runStep(file, args, env = {}) {
 }
 
 /**
- * Prove that the actual persistent Chromium session can open a harmless page
- * and return a snapshot before claiming a real job. No external traffic.
+ * The normal Playwright CLI --help doctor only checks its installation.
+ * This preflight must use the same named browser session and writable profile
+ * as the real worker. Never reset/delete an existing authenticated session.
+ */
+export function browserCliFailure(stage, result = {}) {
+  const code = result.error?.code || result.signal || result.status || 'unknown';
+  const raw = String(result.stderr || result.stdout || result.error?.message || 'No CLI details available');
+  // Prevent CLI diagnostics from inadvertently printing local contact details or tokens.
+  const details = raw.replace(/\x1b\[[0-9;]*m/g, '')
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email]')
+    .replace(/(bearer\s+)[a-z0-9_.-]+/gi, '$1[redacted]')
+    .trim().slice(0, 900).replace(/\s+/g, ' ');
+  return `browser startup/snapshot failed [${stage}; ${code}]: ${details}`;
+}
+
+/**
+ * Checks the actual browser. If a named session already works, do not open
+ * about:blank over the user's existing tab or replace their authenticated
+ * Chromium context. Only open a new persistent session when snapshot fails.
  */
 export function assertBrowserReady({
   headless = process.env.AUTOPILOT_BROWSER_HEADED !== '1' && process.env.AUTOPILOT_BROWSER_HEADLESS !== '0',
@@ -114,22 +131,25 @@ export function assertBrowserReady({
   const cliEnv = browserCliEnvironment({ env, dataRoot, checkExecutable });
   const profile = cliEnv.AUTOPILOT_BROWSER_PROFILE;
   mkdirSync(path.dirname(profile), { recursive: true });
-  // Clearcote/Playwright cache must be writable to each isolated worker.
   mkdirSync(cliEnv.XDG_CACHE_HOME, { recursive: true });
-  const call = (args) => {
-    const res = run(process.execPath, [binary, 'cli', '-s=' + session, ...args], {
-      cwd: ROOT, encoding: 'utf8', shell: false, env: cliEnv,
-      timeout: 60_000, maxBuffer: 2 * 1024 * 1024,
-    });
-    if (res.error || res.status !== 0) {
-      const reason = res.error?.code === 'ETIMEDOUT' ? 'TIMEOUT' : 'CLI_FAILED';
-      throw new Error('browser startup/snapshot failed [' + reason + '] (check Chromium display/session/profile)');
-    }
-    return res;
-  };
-  call(['open', 'about:blank', '--profile=' + profile, ...(headless ? [] : ['--headed'])]);
-  call(['snapshot']);
-  return { session, headless, profile };
+
+  const call = (args, timeout = 45_000) => run(
+    process.execPath, [binary, 'cli', '-s=' + session, ...args],
+    { cwd: ROOT, encoding: 'utf8', shell: false, env: cliEnv, timeout, maxBuffer: 2 * 1024 * 1024 },
+  );
+  const success = (result) => !result.error && result.status === 0;
+
+  // Fast path preserves browser navigation and logged-in cookies.
+  const snapshot = call(['snapshot'], 20_000);
+  if (success(snapshot)) return { session, headless, profile, reused: true };
+
+  const open = call(['open', 'about:blank', '--profile=' + profile, ...(headless ? [] : ['--headed'])], 60_000);
+  if (!success(open)) throw new Error(browserCliFailure('open', open) + '; prior snapshot: '
+    + browserCliFailure('snapshot', snapshot));
+
+  const after = call(['snapshot'], 30_000);
+  if (!success(after)) throw new Error(browserCliFailure('snapshot-after-open', after));
+  return { session, headless, profile, reused: false };
 }
 
 export function workerPrompt(job, owner) {
