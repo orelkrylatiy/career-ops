@@ -4,8 +4,9 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import * as yaml from 'js-yaml';
 import { fileURLToPath } from 'node:url';
 import { cmdNext, cmdPreflight, cmdReport, cmdRun } from './autopilot.mjs';
 import { getJob, statusCounts } from './autopilot-db.mjs';
@@ -220,6 +221,26 @@ export function workerEnvironment(owner, runId, session = BROWSER_SESSION, optio
 
 // Reuse a browser session across runs, but NEVER reuse its lease owner.
  // A previous worker may have submitted a form before it crashed.
+// Regional adapters are an optional extension. For RU profiles they are
+// enabled by the selected user's config, never by an unconditional system
+// default; the operator may opt out via AUTOPILOT_REGIONAL=off.
+export function useRussianSources(profile, override = process.env.AUTOPILOT_REGIONAL) {
+  if (override === 'off') return false;
+  if (override === 'RU') return true;
+  const declared = [
+    profile?.autopilot?.strict_market,
+    profile?.location?.country,
+  ];
+  return declared.some(v => /^(?:ru|russia|россия)$/i.test(String(v || '').trim()));
+}
+
+function selectedProfile() {
+  const location = process.env.CAREER_OPS_PROFILE || path.join(DATA_ROOT, 'config', 'profile.yml');
+  if (!existsSync(location)) return {};
+  const parsed = yaml.load(readFileSync(location, 'utf8'));
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+}
+
 export function runOwnerFor(runId, prefix = process.env.AUTOPILOT_WORKER_ID || 'worker') {
   const name = String(prefix || 'worker').replace(/[^a-z0-9._-]/gi, '').slice(0, 50) || 'worker';
   const suffix = String(runId || '').replace(/[^a-z0-9]/gi, '').slice(0, 16);
@@ -287,7 +308,7 @@ export async function main(argv = process.argv.slice(2)) {
       // This activates Habr Career, GeekJob and SuperJob without touching the
       // user's configured portals.yml, and leaves HH/Telegram excluded by the
       // adapter regardless of what appears in the source registry.
-      if (process.env.AUTOPILOT_REGIONAL === 'RU') {
+      if (useRussianSources(selectedProfile())) {
         try {
           runStep('source-registry.mjs', [opts.refresh ? 'full' : 'export', '--country', 'RU']);
           const regionalPortals = process.env.CAREER_OPS_EXPANDED_PORTALS
