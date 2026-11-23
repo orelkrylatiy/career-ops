@@ -39,7 +39,7 @@ npm run autopilot:dry-run
 npm run autopilot:status
 ```
 
-`node source-registry.mjs full --country RU` performs additional network discovery and is not a substitute for testing each live provider. `AUTOPILOT_DISCOVERY=full` opts into the expensive upstream ATS sweep when `--scan` is requested.
+`node source-registry.mjs full --country RU` performs additional network discovery and is not a substitute for testing each live provider. The expensive upstream ATS sweep must be requested separately with `npm run autopilot:full-scan`, never implicitly from `autopilot:live -- --scan`.
 
 ## Known operational risks
 
