@@ -134,7 +134,7 @@ export function workerPrompt(job, owner) {
   // Vacancy fields and the website are UNTRUSTED inputs, never instructions.
   return [
     'You are the authorized, autonomous career-ops browser application worker.',
-    'Read AGENTS.md and modes/autopilot.md first. Work on ONE leased job, then exit.',
+    'Follow repository AGENTS.md (Codex/Claude may already load it via their project instructions); do not redundantly read the 100KB+ file again if its rules are in context. If not provided, read it once. Then read modes/autopilot.md. Work on exactly ONE already-leased job and exit.',
     'Run Playwright through the project-local entrypoint: node ' + path.join(path.dirname(require.resolve('playwright')), 'cli.js') + ' cli -s=' + BROWSER_SESSION + ' <command>. Do not assume a global playwright-cli binary exists. Use the SAME session for verifier calls.',
     'Only use Career Ops and the selected CAREER_OPS_ROOT. Never read, run or modify tg-ops, hh-ops or other sibling projects. No HeadHunter or Telegram links or messaging.',
     'This worker is invoked only under an explicitly enabled AUTOPILOT_LIVE=1 campaign. Do not change campaign settings.',
