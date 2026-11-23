@@ -33,7 +33,7 @@ Do not run these against a live submission scenario. Tests only use fixtures and
 
 ## Explicit live mode (only after a separate user restart)
 
-Set the chosen direction's `CAREER_OPS_ROOT` and browser session first. For later separately authorized work use `AUTOPILOT_LIVE=1 npm run autopilot:live -- --max-jobs 5`. Normal runs process the existing queue first, do not rescan unnecessarily, and use a bounded per-job timeout; scanning is a separate step or `--scan` opt-in. Full ATS discovery is explicit (`AUTOPILOT_DISCOVERY=full`).
+Set the chosen direction's `CAREER_OPS_ROOT` and browser session first. For later separately authorized work use `AUTOPILOT_LIVE=1 npm run autopilot:live -- --max-jobs 5`. Normal runs process the existing queue first, do not rescan unnecessarily, and use a bounded per-job timeout; scanning is a separate step or `--scan` opt-in. Full ATS discovery is explicit and separate (`npm run autopilot:full-scan`); it is not triggered inside the live runner.
 
 The source list is not an evidence of a working application path. Habr, GeekJob and SuperJob adapters can discover jobs; live browser submissions require independent validation. CAPTCHA support is limited to permitted text-image challenges, not bypassing interactive third-party challenges or MFA.
 
