@@ -2,7 +2,8 @@
 // autopilot.mjs — wide-funnel queue/state CLI for the autonomous web applier.
 //
 // Discovery is deterministic and zero-token:
-//   scan.mjs --wide -> data/pipeline.md -> SQLite priority queue
+//   upstream-filtered scan.mjs -> data/pipeline.md -> SQLite priority queue
+// Use explicit `autopilot-scan.mjs --wide` only for broader discovery.
 //
 // The coding agent is the application brain. It claims one job at a time,
 // reads the full JD, selects/generates a resume, controls Chrome directly
