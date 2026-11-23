@@ -6,9 +6,9 @@
 - Own extensions from previous fork `main` and draft PR #6: autonomous queue/runner, verification receipts, CAPTCHA text-image detection and OCR, Russian and CIS adapters and source registry, profile isolation, optional Humanizer and Gmail, and focused tests.
 - Cleanup: 19 translated *root* README files removed; upstream localized modes and other original files remain. No private candidate data was committed. Legacy `main` and PR #6 are preserved for comparison and rollback.
 
-## Explicitly paused campaign
+## Historical rebuild-era campaign (not live policy)
 
-The campaign of 30 new confirmed frontend applications (at least 10 for Russian-market positions) is paused until the user separately resumes it. No prior application or ambiguous submission counts. HeadHunter and Telegram are excluded. Applications are counted only with strong matching evidence; an uncertain prior Submit must never be blindly repeated.
+At the 2026-11-21 rebuild, a then-planned campaign requested 30 new confirmed frontend applications (including a Russian-market subset) and was paused. This is a historical record, **not** the current user-selected profile, campaign target or authorization status; those are defined only per active session. No prior application or ambiguous submission counts. HeadHunter and Telegram are excluded. Applications are counted only with strong matching evidence; an uncertain prior Submit must never be blindly repeated.
 
 ## Isolated directions
 
