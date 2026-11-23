@@ -70,7 +70,7 @@ export function parseScanArgs(argv) {
 // Upstream warns that a fresh reverse-ATS sweep can replace an unfinished
 // checkpoint. Require explicit selection before any destructive restart.
 export function checkFullScanCheckpoint({ atsFull, args }, { dataRoot = getCareerOpsRoot(), exists = existsSync } = {}) {
-  if (!atsFull) return null;
+  if (!atsFull || args.includes('--dry-run') || args.includes('--help') || args.includes('-h')) return null;
   const checkpoint = path.join(dataRoot, 'data', 'cache', 'ats-full-checkpoint.json');
   if (exists(checkpoint) && !args.includes('--resume') && !args.includes('--resume-if-compatible')) {
     throw new Error(
