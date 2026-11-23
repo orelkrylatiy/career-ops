@@ -978,6 +978,7 @@ function usage() {
 async function main() {
   const argv = process.argv.slice(2);
 
+  if (argv.includes('--help') || argv.includes('-h')) return usage();
   if (argv[0] === 'status') return cmdStatus();
   if (argv[0] === 'logs') return cmdLogs(flagValue(argv, '--limit') || 50);
   if (argv[0] === 'analytics') return cmdAnalytics();
