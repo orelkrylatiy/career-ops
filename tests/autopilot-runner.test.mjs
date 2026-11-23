@@ -67,7 +67,7 @@ test('discovery does not inject a regional market for unrelated profiles', () =>
   const steps = [];
   runConfiguredDiscovery({}, {
     bounded: true, profile: { location: { country: 'Germany' } },
-    deepDiscovery: 'full', step: (file, args) => steps.push([file, args]),
+    step: (file, args) => steps.push([file, args]),
   });
   assert.deepEqual(steps, [['autopilot-scan.mjs', []]]);
 });
