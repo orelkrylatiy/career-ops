@@ -65,6 +65,25 @@ test('worker instruction requires evidence and never uses HH Ops', () => {
   assert.equal(safeJobId(job).length, 16);
 });
 
+test('worker instructions avoid duplicate upstream policy loading and retain the per-job boundary', () => {
+  const job = { url_key: 'https://example.com/1', url: 'https://example.com/1', title: 'React Engineer', company: 'Acme' };
+  const instruction = workerPrompt(job, 'worker-0');
+  assert.match(instruction, /do not redundantly read/i);
+  assert.match(instruction, /modes\/autopilot\.md/);
+  assert.match(instruction, /ONE already-leased job/);
+});
+
+test('fork docs never override mandatory eligibility or hardcode an outdated campaign quota', async () => {
+  const { readFileSync } = await import('node:fs');
+  const policy = readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8');
+  const mode = readFileSync(new URL('../modes/autopilot.md', import.meta.url), 'utf8');
+  const overlay = policy.split('## Origin')[0];
+  assert.doesNotMatch(overlay, /at least 10 for the Russian market/i);
+  assert.match(overlay, /Activation is per run/);
+  assert.doesNotMatch(mode, /mismatch with a job requirement is not a reason to skip/i);
+  assert.match(mode, /never submit when a hard requirement is unmet/i);
+});
+
 test('browser must open a real named session and snapshot BEFORE processing jobs', () => {
   const calls = [];
   const mockedRun = (_binary, args) => { calls.push(args); return { status: 0 }; };
