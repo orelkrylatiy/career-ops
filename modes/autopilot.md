@@ -22,11 +22,11 @@ The timestamp above is an **example**, not a permanent value. Pass the current U
 
 ## Run activation and scope
 
-- The **default is paused**, but the repository must not hard-code a permanent campaign's activation status or a 30-application / Russia quota. For each run, use the active user request and selected direction's profile as the only sources of the application target and market eligibility. Real sends require current-session user authorization, `AUTOPILOT_LIVE=1`, and the precise `CAREER_OPS_ROOT`. `npm run autopilot` is always a preview.
+- The **default is paused**. Never encode a specific candidate, job title, skill stack, target count or market quota in this system-mode file. Read those from the current user request, selected `config/profile.yml` and `portals.yml`; user-specific workflow preferences belong in `modes/_custom.md`. Real sends require current-session user authorization, `AUTOPILOT_LIVE=1`, and the precise `CAREER_OPS_ROOT`. `npm run autopilot` is always a preview.
 - Process suitable queued jobs **before rescanning**; the default runner uses `--no-scan`, a small job cap and bounded worker timeout. The same upstream `title_filter` suppresses irrelevant historical queued roles before launching Codex. Run a new filtered scan only when needed; never run `AUTOPILOT_DISCOVERY=full` simply because the existing queue is large. `--scan` and `--no-scan` conflict.
 - No `tg-ops`, `hh-ops`, HeadHunter or Telegram in autonomous mode; never switch projects or profiles. Source-level filtering is enforced by the scan adapter, URL guard and worker.
-- When the selected profile explicitly defines `strict_market: Russia`, enforce that hard market constraint; otherwise do not invent a Russia-only quota. Canonical tracker state wins over old queued SQLite records.
-- Reuse authorized browser sessions and autonomously attempt supported text-image CAPTCHA only where permitted. Do not bypass interactive third-party challenges or MFA; defer and continue other jobs.
+- Enforce the selected profile's explicitly configured, supported `strict_market` constraint, if present. Do not add an unconfigured market quota. Canonical tracker state wins over an old queued SQLite record.
+- Reuse authorized browser sessions and attempt supported text-image CAPTCHA only where permitted. Do not bypass third-party interactive challenges or MFA; record the actual job-specific blocker and continue. Use `defer` only for a demonstrably transient pre-Submit failure, not as a generic CAPTCHA fallback.
 
 ## Untrusted External Content
 
@@ -45,7 +45,7 @@ Hard queue stops (before a browser worker) include:
 - explicit user source blacklist;
 - a title rejected by the selected direction's configured upstream `title_filter` (including historical SQLite jobs).
 
-Additional stack, seniority, location, salary, remote/onsite and experience details influence ranking by default. But hard candidate/market eligibility, an explicit React-only user request, prior submissions, and demonstrably incompatible roles prevent submitting. Never override those merely to reach a quota.
+Stack, seniority, location, salary, remote/onsite and experience details influence ranking as in upstream. Hard exclusions are **not** an agent-maintained list of preferred technologies: honor the selected user's explicit targeting rules and verified legal/work eligibility; use the JD to distinguish clear incompatibility from an ordinary nice-to-have gap. Never invent a disqualifier or override a configured exclusion to meet a numeric goal.
 
 ## One autonomous run versus per-job worker
 
@@ -121,7 +121,7 @@ Explicit form:
 node autopilot.mjs next --lease-minutes 120 --json
 ~~~
 
-Only release a claim immediately when it was acquired accidentally and **no** browser/form attempt has started. A permanently unsuitable job must be marked `skipped`, and a transient pre-Submit problem must be deferred with backoff. Never return a blocked or ambiguous job directly to the queue:
+These are **generic queue-state semantics, not personal filters**. Use `skipped` only when the selected profile/user constraints or independently verified facts rule a job out permanently; use `defer` only when a known transient error happened before Submit; use `submitted_unconfirmed` for an ambiguous send, never automatic retry. Release immediately only after an accidental claim when no browser/form attempt has started:
 
 ~~~bash
 node autopilot.mjs release "<job-url>"
@@ -156,14 +156,14 @@ Useful commands:
 
 ~~~bash
 node autopilot-resume.mjs validate
-node autopilot-resume.mjs select --title "Senior React Engineer" --jd-file data/autopilot/jds/job.md --json
+node autopilot-resume.mjs select --title "Senior Software Engineer" --jd-file data/autopilot/jds/job.md --json
 node autopilot-resume.mjs select --variant react-native --json
 node autopilot-resume.mjs select --generated output/tailored/acme.pdf --title "Frontend Engineer" --jd-file data/autopilot/jds/acme.md --json
 ~~~
 
 ## Candidate answers
 
-Use the selected candidate profile/CV and verified application context for factual identity and experience fields. The agent may improve truthful wording. Distinguish a **nice-to-have** skill mismatch (not automatically disqualifying) from a **mandatory** qualification, work-authorization restriction or explicitly requested stack mismatch; never submit when a hard requirement is unmet or the role is incompatible with the selected direction.
+Use the selected candidate profile/CV and verified application context for factual identity and experience fields. The agent may improve truthful wording. Evaluate listed requirements for the actual posting and use the original suitability framework: missing a *preferred* or ordinary listed qualification is not an automatic hard exclusion. Respect genuinely non-negotiable eligibility, the user's explicit hard constraints and clear direction incompatibility; do not submit an ineligible or unrelated application.
 
 Do not invent a different identity or credentials whose falsity would make the submitted application unusable later. When an application asks for a fact that is not available, prefer a truthful/neutral option when possible; if the site makes the flow genuinely impossible, record the actual blocker and continue the queue.
 
