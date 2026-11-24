@@ -228,7 +228,8 @@ test('browser preflight reuses a live session without navigating away from exist
   assert.ok(calls[0].includes('-s=' + expectedSession));
   assert.equal(calls.length, 1);
   assert.equal(calls[0].at(-1), 'snapshot');
-  assert.ok(info.profile.endsWith('/data/browser-profile'));
+  assert.equal(info.profile, workerEnvironment('fixture-worker','fixture-run',info.session).AUTOPILOT_BROWSER_PROFILE,
+    'browser preflight and worker must resolve the same profile even when operator overrides it');
 });
 
 test('browser preflight opens a persistent session only when no existing snapshot works', () => {
@@ -270,7 +271,7 @@ test('agent and verifier share exact Playwright CLI named session', () => {
   assert.equal(env.PLAYWRIGHT_CLI_SESSION, 'career-ops-worker-0');
   assert.equal(env.AUTOPILOT_BROWSER_SESSION, env.PLAYWRIGHT_CLI_SESSION);
   assert.equal(env.AUTOPILOT_WORKER_ID, 'worker-1');
-  assert.ok(env.AUTOPILOT_BROWSER_PROFILE.endsWith('/data/browser-profile'));
+  assert.ok(env.AUTOPILOT_BROWSER_PROFILE.startsWith('/'), 'profile path must be absolute on Linux');
   assert.match(env.PLAYWRIGHT_CLI_ENTRYPOINT, /playwright.*cli\.js$/);
   assert.ok(env.PATH.includes('node_modules/.bin'));
   assert.throws(() => workerEnvironment('worker-1','run-1','../../other'), /invalid browser session/);
