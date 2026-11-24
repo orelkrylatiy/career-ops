@@ -699,7 +699,7 @@ export function buildQueueSelection({
     const url = candidate?.url || '';
     const host = hostOf(url);
     if (!inspectApplicationUrl(url).ok) return 'invalid_url';
-    if (/^(?:[a-z0-9-]+\\.)*hh\\.(?:ru|kz|uz)$/.test(host)
+    if (/^(?:[a-z0-9-]+\.)*hh\.(?:ru|kz|uz)$/.test(host)
       || ['t.me', 'telegram.me', 'telegram.org'].includes(host)) return 'excluded_transport';
     if (blacklist.get(normalizeTextKey(candidate?.company || ''))) return 'company_blacklist';
     if (excluded.some(token => hostMatchesToken(host, token))) return 'source_blacklist';
