@@ -77,7 +77,7 @@ test('Russian catalog providers remain configured and are not HH/Telegram', asyn
 test('runner supports explicitly enabled Russian regional catalog when selected', async () => {
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../autopilot-runner.mjs', import.meta.url), 'utf8');
-  assert.match(src, /if \(useRussianSources\(profile, process\.env\.AUTOPILOT_REGIONAL, titleFilter\)\)/);
+  assert.match(src, /if \(useRussianSources\(profile, regionalOverride, selectedTitleFilter\)\)/);
   assert.match(src, /step\('source-registry\.mjs',/);
   assert.match(src, /CAREER_OPS_PORTALS: regionalPortals/);
 });
