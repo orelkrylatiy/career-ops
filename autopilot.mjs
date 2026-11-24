@@ -699,9 +699,11 @@ export function buildQueueSelection({
   function rejection(candidate) {
     const url = candidate?.url || '';
     const host = hostOf(url);
-    if (!inspectApplicationUrl(url).ok) return 'invalid_url';
+    // Transport exclusions are checked first, so a blocked HH/Telegram URL
+    // receives the same actionable reason even when URL policy also blocks it.
     if (/^(?:[a-z0-9-]+\.)*hh\.(?:ru|kz|uz)$/.test(host)
       || ['t.me', 'telegram.me', 'telegram.org'].includes(host)) return 'excluded_transport';
+    if (!inspectApplicationUrl(url).ok) return 'invalid_url';
     if (blacklist.get(normalizeTextKey(candidate?.company || ''))) return 'company_blacklist';
     if (excluded.some(token => hostMatchesToken(host, token))) return 'source_blacklist';
     if (tracker.rawSet.has(url) || tracker.keySet.has(candidate?.url_key)) return 'already_applied';
