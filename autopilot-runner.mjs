@@ -14,6 +14,7 @@ import { auditLog } from './autopilot-log.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { assertLinux, linuxBrowserSettings, browserCliEnvironment } from './lib/autopilot-browser.mjs';
+import { queueRoleFamily } from './autopilot-role-triage.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DATA_ROOT = getCareerOpsRoot();
@@ -320,15 +321,28 @@ export function detectBlockingChallenge({ session = BROWSER_SESSION, run = spawn
   } catch { return null; }
 }
 
-/** Only filtered, configured discovery. Wide/full is deliberately separate. */
+/** Broad discovery uses the unchanged upstream scanner with its existing
+ * fork --wide adapter, but only for a user-configured wide-funnel direction.
+ * Normal upstream scan and apply modes are never touched.
+ */
+export function useBroadFunnelDiscovery(profile = {}, titleFilter = {}) {
+  const requested = profile?.autopilot?.wide_funnel;
+  if (requested === true) return true;
+  if (requested === false) return false;
+  return queueRoleFamily(profile, titleFilter) === 'frontend';
+}
+
 export function runConfiguredDiscovery(opts = {}, {
   bounded = false, step = runStep, profile = selectedProfile(),
 } = {}) {
   // A fallback after queue exhaustion is one attempt, not a renewed 45-minute
   // scan per source. Explicit scans retain the operator's existing timeout.
   const scanEnv = bounded ? { AUTOPILOT_SCAN_TIMEOUT_MS: String(3 * 60_000) } : {};
+  const portalsPath = process.env.CAREER_OPS_PORTALS || path.join(DATA_ROOT, 'portals.yml');
+  const titleFilter = yaml.load(readFileSync(portalsPath, 'utf8'))?.title_filter || {};
+  const scanArgs = useBroadFunnelDiscovery(profile, titleFilter) ? ['--wide'] : [];
   try {
-    step('autopilot-scan.mjs', [], scanEnv);
+    step('autopilot-scan.mjs', scanArgs, scanEnv);
   } catch (error) {
     auditLog('configured_scan_error', { error_code: 'CONFIGURED_SCAN_FAILED' }, { level: 'warn' });
     console.error('[autopilot] configured scan failed; checking remaining sources: ' + error.message);
@@ -338,7 +352,7 @@ export function runConfiguredDiscovery(opts = {}, {
       step('source-registry.mjs', [opts.refresh && !bounded ? 'full' : 'export', '--country', 'RU'], scanEnv);
       const regionalPortals = process.env.CAREER_OPS_EXPANDED_PORTALS
         || path.join(DATA_ROOT, 'data', 'portals-regional.generated.yml');
-      step('autopilot-scan.mjs', [], { ...scanEnv, CAREER_OPS_PORTALS: regionalPortals });
+      step('autopilot-scan.mjs', scanArgs, { ...scanEnv, CAREER_OPS_PORTALS: regionalPortals });
     } catch (error) {
       auditLog('regional_scan_error', { error_code: 'REGIONAL_SCAN_FAILED' }, { level: 'warn' });
       console.error('[autopilot] regional source scan unavailable; proceeding with queue: ' + error.message);
