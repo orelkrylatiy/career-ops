@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRunnerArgs, resolveAgent, resolveReadyAgent, agentCommand, assertBrowserReady, browserCliFailure, safeJobId, runOwnerFor, useRussianSources, acquireRunLock, runConfiguredDiscovery, workerPrompt, workerEnvironment, detectBlockingChallenge } from '../autopilot-runner.mjs';
+import { parseRunnerArgs, resolveAgent, resolveReadyAgent, agentCommand, assertBrowserReady, browserCliFailure, safeJobId, runOwnerFor, useRussianSources, useBroadFunnelDiscovery, acquireRunLock, runConfiguredDiscovery, workerPrompt, workerEnvironment, detectBlockingChallenge } from '../autopilot-runner.mjs';
 
 test('runner defaults to real autonomous mode and accepts bounded options', () => {
   assert.equal(parseRunnerArgs([]).dryRun, false);
@@ -70,6 +70,23 @@ test('discovery does not inject a regional market for unrelated profiles', () =>
     step: (file, args) => steps.push([file, args]),
   });
   assert.deepEqual(steps, [['autopilot-scan.mjs', []]]);
+});
+
+test('wide frontend funnel uses the upstream scan adapter without global role restrictions', () => {
+  const frontend = { autopilot: { role_family: 'frontend' }, location: { country: 'Germany' } };
+  assert.equal(useBroadFunnelDiscovery(frontend), true);
+  assert.equal(useBroadFunnelDiscovery({ autopilot: { role_family: 'general' } }), false);
+  assert.equal(useBroadFunnelDiscovery({ autopilot: { role_family: 'frontend', wide_funnel: false } }), false);
+
+  const steps = [];
+  runConfiguredDiscovery({}, {
+    bounded: true, profile: frontend,
+    step: (file, args, env) => steps.push({ file, args, env }),
+  });
+  assert.equal(steps.length, 1);
+  assert.equal(steps[0].file, 'autopilot-scan.mjs');
+  assert.deepEqual(steps[0].args, ['--wide']);
+  assert.equal(steps[0].env.AUTOPILOT_SCAN_TIMEOUT_MS, '180000');
 });
 
 test('regional adapters follow candidate configuration rather than all profiles', () => {
