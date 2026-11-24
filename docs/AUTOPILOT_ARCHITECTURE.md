@@ -95,7 +95,7 @@ autopilot.mjs
 data/autopilot.db
 ~~~
 
-`autopilot-scan.mjs` now keeps the same configured title, location, posting-age, salary, visa and other preference filters as upstream **by default**. Only explicit `--wide` removes those soft filters for broad discovery. The upstream scanner remains unmodified.
+The original `scan.mjs` still keeps the configured title, location, date, salary, visa, content and other filters. For the Frontend/Web Autopilot role family, ONLY the fork scanner adapter runs the existing `--wide` soft-filter removal on configured sources during explicit or exhausted-queue discovery (unless `autopilot.wide_funnel: false`). Other directions preserve their upstream filters. This deliberately widens discovery but DOES NOT authorize incompatible applications; the worker checks the full JD and hard candidate eligibility. A separate full ATS sweep is never implied. The upstream scanner remains unmodified.
 
 It still keeps source safety checks, explicit blacklist behavior and canonical URL dedup.
 
@@ -115,14 +115,14 @@ Everything else can be queued.
 
 `autopilot-ranking.mjs` produces a 0..100 priority from explainable signals such as:
 
-- target-title similarity;
+- target-title similarity (soft-only, not an exact claim-time filter);
 - negative-title hints;
-- candidate country/city;
+- candidate country/city (home location may receive a boost, never a universal Russia-first boost);
 - remote wording;
 - configured priority locations/sources;
 - freshness.
 
-A low score means "later", not "discard".
+A low score means "later", not "discard". A Frontend/Web direction applies broad role-family triage when claiming: obvious sales/warehouse/backend-only roles stay queued for other directions, while generic Software Engineer, UI, Web, Fullstack, React/Vue/Angular and adjacent development titles can reach Codex. The actual suitability is decided only AFTER reading the live JD. The exact upstream `title_filter` is now a SOFT priority at claim time, unless the user explicitly configures `autopilot.require_title_match_for_apply: true`. This fixes the previous duplicate hard gate which rejected all 22,917 historical queued jobs for the user's Frontend direction.
 
 SQLite is authoritative. `data/autopilot-queue.md` is regenerated as an inspection surface.
 
@@ -138,7 +138,7 @@ Jobs now support:
 - `claim_until`;
 - `next_attempt_at` for transient pre-submit backoff.
 
-`node autopilot.mjs next --json` atomically leases the highest-priority queued job for 120 minutes by default. Expired/ambiguous leases are **quarantined rather than silently requeued**, because the worker may already have submitted an application. The worker renews the active lease immediately before arming Submit evidence.
+`node autopilot.mjs next --json` atomically leases the highest-ranked eligible queued job for 120 minutes by default, using a direction-specific ranking computed from the CURRENT profile **in memory**. Existing database priority values from stale filters are not rewritten, and irrelevant rows keep their status. `node autopilot.mjs queue-diagnose` displays a read-only funnel breakdown without claims, network scans, browser commands or submissions. Expired/ambiguous leases are **quarantined rather than silently requeued**, because the worker may already have submitted an application. The worker renews the active lease immediately before arming Submit evidence.
 
 This allows a single autonomous worker now and safe multi-worker expansion later.
 
