@@ -71,10 +71,13 @@ export function scoreJob(job, { titleFilter = {}, profile = {}, nowMs = Date.now
   const homeTokens = [locationProfile.country, locationProfile.city]
     .filter((v) => typeof v === 'string' && v.trim());
   const homeHits = homeTokens.filter((v) => includesToken(location, v));
-  if (homeHits.length) {
+  // Where the candidate lives is a factual field, not an automatic search
+  // preference. A worldwide funnel must not push every home-country posting to
+  // the front unless the candidate explicitly requests that priority.
+  if (homeHits.length && profile?.autopilot?.prioritize_home_location === true) {
     const boost = Math.min(20, homeHits.length * 10);
     priority += boost;
-    reasons.push(`home_location:+${boost}:${homeHits.join(',')}`);
+    reasons.push(`explicit_home_location:+${boost}:${homeHits.join(',')}`);
   }
 
   if (REMOTE_RE.test(`${title} ${location}`)) {
