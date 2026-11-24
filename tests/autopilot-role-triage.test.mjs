@@ -18,7 +18,10 @@ test('broad frontend triage keeps web and interface roles without a React title'
   ]) {
     assert.equal(frontendTitleTier(title), 3, title);
   }
-  for (const title of ['Product Engineer', 'Software Engineer', 'Staff Software Engineer']) {
+  for (const title of [
+    'Product Engineer', 'Software Engineer', 'Staff Software Engineer',
+    'Senior AI Developer Experience Engineer',
+  ]) {
     assert.equal(frontendTitleTier(title), 2, title);
   }
   assert.equal(frontendTitleTier('Engineer'), 1);
@@ -30,6 +33,7 @@ test('unrelated functions and pure mobile stacks are not treated as browser fron
     'Sales Operations Manager', 'Warehouse Supervisor', 'Account Manager',
     'ML Engineer', 'Backend Engineer', 'Data Scientist', 'QA Engineer',
     'React Native Developer', 'Android Engineer', 'iOS Developer',
+    'Engineering Manager, Developer Experience',
   ]) {
     assert.equal(frontendTitleTier(title), 0, title);
   }
