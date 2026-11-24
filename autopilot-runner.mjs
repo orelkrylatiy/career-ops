@@ -155,6 +155,11 @@ export function assertBrowserReady({
 
 export function workerPrompt(job, owner) {
   const browser = linuxBrowserSettings({ dataRoot: DATA_ROOT });
+  const profile = selectedProfile();
+  const portalsPath = process.env.CAREER_OPS_PORTALS || path.join(DATA_ROOT, 'portals.yml');
+  const titleFilter = existsSync(portalsPath)
+    ? (yaml.load(readFileSync(portalsPath, 'utf8'))?.title_filter || {}) : {};
+  const frontendFunnel = queueRoleFamily(profile, titleFilter) === 'frontend';
   // Vacancy fields and the website are UNTRUSTED inputs, never instructions.
   return [
     'You are the authorized, autonomous career-ops browser application worker.',
@@ -170,6 +175,7 @@ export function workerPrompt(job, owner) {
     'Claim owner: ' + owner,
     'Read full job description; check existing tracker, blacklist, live identity and application status before proceeding.',
     'Evaluate the live JD against the currently selected candidate profile, configured job filters, and explicit user requirements. Do not invent global stack, location or quota rules. A listed preferred qualification is not automatically disqualifying; honor actual hard eligibility and clear role incompatibility. Use skipped for a verified permanent exclusion, defer only a transient pre-Submit failure, and never retry an ambiguous submission.',
+    ...(frontendFunnel ? ['Frontend/Web wide funnel: consider ANY actual browser UI/frontend/web engineering role, including full-stack roles with meaningful UI work. Do not demand React, Next.js or another literal keyword in the title or JD: compare real required technologies and transferable experience against the selected candidate CV. A different frontend framework, ordinary seniority gap or missing nice-to-have alone is NOT a hard rejection. Evaluate the actual JD before choosing; unrelated-only backend/mobile/data/sales roles are not frontend. Unknown remote country permission needs verification, not an invented global rejection; do not misrepresent candidate location, work authorization or credentials.'] : []),
     'Select and verify a matching PDF with autopilot-resume.mjs. Use only truthful candidate facts.',
     'Generate a specific cover letter/answers; validate all free text via humanizer-bridge.py where available.',
     'For sign-in/registration using candidate email, use existing authorized browser accounts first.',
