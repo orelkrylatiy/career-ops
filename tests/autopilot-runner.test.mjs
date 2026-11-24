@@ -53,7 +53,8 @@ test('automatic discovery runs once, uses configured sources and bounded timeout
   const steps = [];
   const step = (file, args, env = {}) => steps.push({ file, args, env });
   runConfiguredDiscovery({ refresh: false }, {
-    bounded: true, profile: { location: { country: 'Россия' } }, step,
+    bounded: true, profile: { location: { country: 'Россия' } },
+    titleFilter: {}, step,
   });
   assert.deepEqual(steps.map(x => x.file), [
     'autopilot-scan.mjs', 'source-registry.mjs', 'autopilot-scan.mjs',
@@ -67,7 +68,7 @@ test('discovery does not inject a regional market for unrelated profiles', () =>
   const steps = [];
   runConfiguredDiscovery({}, {
     bounded: true, profile: { location: { country: 'Germany' } },
-    step: (file, args) => steps.push([file, args]),
+    titleFilter: {}, step: (file, args) => steps.push([file, args]),
   });
   assert.deepEqual(steps, [['autopilot-scan.mjs', []]]);
 });
@@ -220,7 +221,11 @@ test('browser preflight reuses a live session without navigating away from exist
   const run = (_binary, args) => { calls.push(args); return { status: 0 }; };
   const info = assertBrowserReady({ headless: true, run });
   assert.equal(info.reused, true);
-  assert.equal(info.session, 'career-ops-worker-0');
+  // A selected candidate exports a *different* named session; both values
+  // must be supported without depending on the user's shell environment.
+  const expectedSession = process.env.AUTOPILOT_BROWSER_SESSION || 'career-ops-worker-0';
+  assert.equal(info.session, expectedSession);
+  assert.ok(calls[0].includes('-s=' + expectedSession));
   assert.equal(calls.length, 1);
   assert.equal(calls[0].at(-1), 'snapshot');
   assert.ok(info.profile.endsWith('/data/browser-profile'));
