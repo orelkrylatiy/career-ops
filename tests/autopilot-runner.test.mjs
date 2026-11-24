@@ -98,24 +98,31 @@ test('regional adapters follow candidate configuration rather than all profiles'
 });
 
 test('worldwide frontend discovery does not infer a Russian source mandate from residence', () => {
-  const selected = {
-    location: { country: 'Russia' },
-    autopilot: { role_family: 'frontend' },
-  };
-  assert.equal(useRussianSources(selected, undefined, { positive: ['React'] }), false);
-  assert.equal(useRussianSources(selected, 'RU', { positive: ['React'] }), true);
-  assert.equal(useRussianSources(selected, 'off', { positive: ['React'] }), false);
-  assert.equal(useRussianSources({
-    location: { country: 'Russia' },
-    autopilot: { role_family: 'frontend', strict_market: 'Russia' },
-  }, undefined, { positive: ['React'] }), true);
+  const original = process.env.AUTOPILOT_REGIONAL;
+  delete process.env.AUTOPILOT_REGIONAL;
+  try {
+    const selected = {
+      location: { country: 'Russia' },
+      autopilot: { role_family: 'frontend' },
+    };
+    assert.equal(useRussianSources(selected, undefined, { positive: ['React'] }), false);
+    assert.equal(useRussianSources(selected, 'RU', { positive: ['React'] }), true);
+    assert.equal(useRussianSources(selected, 'off', { positive: ['React'] }), false);
+    assert.equal(useRussianSources({
+      location: { country: 'Russia' },
+      autopilot: { role_family: 'frontend', strict_market: 'Russia' },
+    }, undefined, { positive: ['React'] }), true);
 
-  const steps = [];
-  runConfiguredDiscovery({}, {
-    bounded: true, profile: selected,
-    step: (file, args) => steps.push([file, args]),
-  });
-  assert.deepEqual(steps, [['autopilot-scan.mjs', ['--wide']]]);
+    const steps = [];
+    runConfiguredDiscovery({}, {
+      bounded: true, profile: selected,
+      step: (file, args) => steps.push([file, args]),
+    });
+    assert.deepEqual(steps, [['autopilot-scan.mjs', ['--wide']]]);
+  } finally {
+    if (original === undefined) delete process.env.AUTOPILOT_REGIONAL;
+    else process.env.AUTOPILOT_REGIONAL = original;
+  }
 });
 
 test('only one live runner may use a direction browser; unrelated roots stay independent', async () => {
