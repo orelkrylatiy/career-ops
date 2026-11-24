@@ -40,6 +40,7 @@ test('candidate-selected role family, not global technology hardcodes, controls 
   assert.equal(queueRoleFamily(profile, titleFilter), 'frontend');
   assert.equal(queueRoleFamily({ autopilot: { role_family: 'general' } }, titleFilter), 'general');
   assert.equal(queueRoleFamily({}, { positive: ['machine learning'] }), 'general');
+  assert.equal(queueRoleFamily({}, { positive: ['TypeScript', 'Node.js'] }), 'general', 'backend JS/TS does not imply frontend');
   assert.equal(queueRoleFamily({ autopilot: { role_family: 'frontend' } }, {}), 'frontend');
 });
 
