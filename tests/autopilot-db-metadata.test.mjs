@@ -93,6 +93,31 @@ test('predicate claim skips unrelated high-priority jobs without changing their 
   openDb().prepare('DELETE FROM jobs WHERE url_key IN (?, ?)').run(wrongKey, targetKey);
 });
 
+test('per-direction rank beats stale database priority without mutating skipped rows', () => {
+  const noiseUrl = 'https://jobs.example.com/role/high-priority-sales';
+  const targetUrl = 'https://jobs.example.com/role/low-priority-frontend';
+  const noiseKey = normalizeUrlKey(noiseUrl);
+  const targetKey = normalizeUrlKey(targetUrl);
+  upsertJob({
+    urlKey: noiseKey, url: noiseUrl, company: 'Noise',
+    title: 'Sales Operations Manager', priority: 100, status: 'queued',
+  });
+  upsertJob({
+    urlKey: targetKey, url: targetUrl, company: 'Relevant',
+    title: 'Frontend Engineer', priority: 1, status: 'queued',
+  });
+  const selected = claimNextJob('rerank-worker', 5, {
+    accept: row => row.url_key === noiseKey || row.url_key === targetKey,
+    rank: row => row.title === 'Frontend Engineer' ? 3001 : 100,
+  });
+  assert.equal(selected?.url_key, targetKey);
+  const notTaken = openDb().prepare('SELECT status, priority FROM jobs WHERE url_key=?').get(noiseKey);
+  assert.equal(notTaken.status, 'queued');
+  assert.equal(notTaken.priority, 100, 'do not change historical priorities on other candidates');
+  assert.equal(releaseClaim(targetKey, 'rerank-worker'), true);
+  openDb().prepare('DELETE FROM jobs WHERE url_key IN (?, ?)').run(noiseKey, targetKey);
+});
+
 test('expired browser claims are quarantined, not resubmitted', () => {
   const url = 'https://jobs.example.com/role/expired-claim';
   const key = normalizeUrlKey(url);
