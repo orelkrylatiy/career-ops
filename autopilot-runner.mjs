@@ -250,17 +250,15 @@ export function workerEnvironment(owner, runId, session = BROWSER_SESSION, optio
 
 // Reuse a browser session across runs, but NEVER reuse its lease owner.
  // A previous worker may have submitted a form before it crashed.
-// Regional adapters are an optional extension. For RU profiles they are
-// enabled by the selected user's config, never by an unconditional system
-// default; the operator may opt out via AUTOPILOT_REGIONAL=off.
-export function useRussianSources(profile, override = process.env.AUTOPILOT_REGIONAL) {
-  if (override === 'off') return false;
-  if (override === 'RU') return true;
-  const declared = [
-    profile?.autopilot?.strict_market,
-    profile?.location?.country,
-  ];
-  return declared.some(v => /^(?:ru|russia|россия)$/i.test(String(v || '').trim()));
+// Regional adapters are optional. Candidate *residence* cannot silently turn
+// a worldwide Frontend/Web campaign into a Russia-only source expansion.
+// Explicit strict_market=Russia or AUTOPILOT_REGIONAL=RU still enables it.
+export function useRussianSources(profile, override = process.env.AUTOPILOT_REGIONAL, titleFilter = {}) {
+  if (String(override || '').toLowerCase() === 'off') return false;
+  if (String(override || '').toUpperCase() === 'RU') return true;
+  if (/^(?:ru|russia|россия)$/i.test(String(profile?.autopilot?.strict_market || '').trim())) return true;
+  if (useBroadFunnelDiscovery(profile, titleFilter)) return false;
+  return /^(?:ru|russia|россия)$/i.test(String(profile?.location?.country || '').trim());
 }
 
 function selectedProfile() {
@@ -354,7 +352,7 @@ export function runConfiguredDiscovery(opts = {}, {
     auditLog('configured_scan_error', { error_code: 'CONFIGURED_SCAN_FAILED' }, { level: 'warn' });
     console.error('[autopilot] configured scan failed; checking remaining sources: ' + error.message);
   }
-  if (useRussianSources(profile)) {
+  if (useRussianSources(profile, process.env.AUTOPILOT_REGIONAL, titleFilter)) {
     try {
       step('source-registry.mjs', [opts.refresh && !bounded ? 'full' : 'export', '--country', 'RU'], scanEnv);
       const regionalPortals = process.env.CAREER_OPS_EXPANDED_PORTALS
