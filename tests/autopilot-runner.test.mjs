@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRunnerArgs, resolveAgent, resolveReadyAgent, agentCommand, assertBrowserReady, browserCliFailure, safeJobId, runOwnerFor, useRussianSources, acquireRunLock, runConfiguredDiscovery, workerPrompt, workerEnvironment, detectBlockingChallenge } from '../autopilot-runner.mjs';
+import { parseRunnerArgs, resolveAgent, resolveReadyAgent, agentCommand, assertBrowserReady, browserCliFailure, safeJobId, runOwnerFor, useRussianSources, useBroadFunnelDiscovery, acquireRunLock, runConfiguredDiscovery, workerPrompt, workerEnvironment, detectBlockingChallenge } from '../autopilot-runner.mjs';
 
 test('runner defaults to real autonomous mode and accepts bounded options', () => {
   assert.equal(parseRunnerArgs([]).dryRun, false);
@@ -53,7 +53,8 @@ test('automatic discovery runs once, uses configured sources and bounded timeout
   const steps = [];
   const step = (file, args, env = {}) => steps.push({ file, args, env });
   runConfiguredDiscovery({ refresh: false }, {
-    bounded: true, profile: { location: { country: 'Россия' } }, step,
+    bounded: true, profile: { location: { country: 'Россия' } },
+    titleFilter: {}, regionalOverride: '', step,
   });
   assert.deepEqual(steps.map(x => x.file), [
     'autopilot-scan.mjs', 'source-registry.mjs', 'autopilot-scan.mjs',
@@ -67,17 +68,62 @@ test('discovery does not inject a regional market for unrelated profiles', () =>
   const steps = [];
   runConfiguredDiscovery({}, {
     bounded: true, profile: { location: { country: 'Germany' } },
-    step: (file, args) => steps.push([file, args]),
+    titleFilter: {}, regionalOverride: '', step: (file, args) => steps.push([file, args]),
   });
   assert.deepEqual(steps, [['autopilot-scan.mjs', []]]);
 });
 
+test('wide frontend funnel uses the upstream scan adapter without global role restrictions', () => {
+  const frontend = { autopilot: { role_family: 'frontend' }, location: { country: 'Germany' } };
+  assert.equal(useBroadFunnelDiscovery(frontend), true);
+  assert.equal(useBroadFunnelDiscovery({ autopilot: { role_family: 'general' } }), false);
+  assert.equal(useBroadFunnelDiscovery({ autopilot: { role_family: 'frontend', wide_funnel: false } }), false);
+
+  const steps = [];
+  runConfiguredDiscovery({}, {
+    bounded: true, profile: frontend, regionalOverride: '',
+    step: (file, args, env) => steps.push({ file, args, env }),
+  });
+  assert.equal(steps.length, 1);
+  assert.equal(steps[0].file, 'autopilot-scan.mjs');
+  assert.deepEqual(steps[0].args, ['--wide']);
+  assert.equal(steps[0].env.AUTOPILOT_SCAN_TIMEOUT_MS, '180000');
+});
+
 test('regional adapters follow candidate configuration rather than all profiles', () => {
-  assert.equal(useRussianSources({ location: { country: 'Россия' } }, undefined), true);
-  assert.equal(useRussianSources({ autopilot: { strict_market: 'Russia' } }, undefined), true);
-  assert.equal(useRussianSources({ location: { country: 'Germany' } }, undefined), false);
+  assert.equal(useRussianSources({ location: { country: 'Россия' } }, ''), true);
+  assert.equal(useRussianSources({ autopilot: { strict_market: 'Russia' } }, ''), true);
+  assert.equal(useRussianSources({ location: { country: 'Germany' } }, ''), false);
   assert.equal(useRussianSources({ location: { country: 'Россия' } }, 'off'), false);
   assert.equal(useRussianSources({ location: { country: 'Germany' } }, 'RU'), true);
+});
+
+test('worldwide frontend discovery does not infer a Russian source mandate from residence', () => {
+  const original = process.env.AUTOPILOT_REGIONAL;
+  delete process.env.AUTOPILOT_REGIONAL;
+  try {
+    const selected = {
+      location: { country: 'Russia' },
+      autopilot: { role_family: 'frontend' },
+    };
+    assert.equal(useRussianSources(selected, '', { positive: ['React'] }), false);
+    assert.equal(useRussianSources(selected, 'RU', { positive: ['React'] }), true);
+    assert.equal(useRussianSources(selected, 'off', { positive: ['React'] }), false);
+    assert.equal(useRussianSources({
+      location: { country: 'Russia' },
+      autopilot: { role_family: 'frontend', strict_market: 'Russia' },
+    }, '', { positive: ['React'] }), true);
+
+    const steps = [];
+    runConfiguredDiscovery({}, {
+      bounded: true, profile: selected, regionalOverride: '',
+      step: (file, args) => steps.push([file, args]),
+    });
+    assert.deepEqual(steps, [['autopilot-scan.mjs', ['--wide']]]);
+  } finally {
+    if (original === undefined) delete process.env.AUTOPILOT_REGIONAL;
+    else process.env.AUTOPILOT_REGIONAL = original;
+  }
 });
 
 test('only one live runner may use a direction browser; unrelated roots stay independent', async () => {
@@ -175,10 +221,15 @@ test('browser preflight reuses a live session without navigating away from exist
   const run = (_binary, args) => { calls.push(args); return { status: 0 }; };
   const info = assertBrowserReady({ headless: true, run });
   assert.equal(info.reused, true);
-  assert.equal(info.session, 'career-ops-worker-0');
+  // A selected candidate exports a *different* named session; both values
+  // must be supported without depending on the user's shell environment.
+  const expectedSession = process.env.AUTOPILOT_BROWSER_SESSION || 'career-ops-worker-0';
+  assert.equal(info.session, expectedSession);
+  assert.ok(calls[0].includes('-s=' + expectedSession));
   assert.equal(calls.length, 1);
   assert.equal(calls[0].at(-1), 'snapshot');
-  assert.ok(info.profile.endsWith('/data/browser-profile'));
+  assert.equal(info.profile, workerEnvironment('fixture-worker','fixture-run',info.session).AUTOPILOT_BROWSER_PROFILE,
+    'browser preflight and worker must resolve the same profile even when operator overrides it');
 });
 
 test('browser preflight opens a persistent session only when no existing snapshot works', () => {
@@ -220,7 +271,7 @@ test('agent and verifier share exact Playwright CLI named session', () => {
   assert.equal(env.PLAYWRIGHT_CLI_SESSION, 'career-ops-worker-0');
   assert.equal(env.AUTOPILOT_BROWSER_SESSION, env.PLAYWRIGHT_CLI_SESSION);
   assert.equal(env.AUTOPILOT_WORKER_ID, 'worker-1');
-  assert.ok(env.AUTOPILOT_BROWSER_PROFILE.endsWith('/data/browser-profile'));
+  assert.ok(env.AUTOPILOT_BROWSER_PROFILE.startsWith('/'), 'profile path must be absolute on Linux');
   assert.match(env.PLAYWRIGHT_CLI_ENTRYPOINT, /playwright.*cli\.js$/);
   assert.ok(env.PATH.includes('node_modules/.bin'));
   assert.throws(() => workerEnvironment('worker-1','run-1','../../other'), /invalid browser session/);

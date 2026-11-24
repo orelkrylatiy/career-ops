@@ -46,20 +46,27 @@ test('location preferences are penalties, never rejection decisions', () => {
   assert.ok(row.reasons.includes('remote_preference_conflict:-12'));
 });
 
-test('Russia-first is a priority boost, not a global-market filter', () => {
+test('worldwide ranking has no implicit Russia-first bias', () => {
   const neutralProfile = { autopilot: {} };
-  const russian = scoreJob({
+  const job = {
     title: 'Frontend Engineer',
     location: 'Moscow, Russia',
     url: 'https://example.ru/jobs/1',
-  }, { profile: neutralProfile, titleFilter: {} });
+  };
+  const russian = scoreJob(job, { profile: neutralProfile, titleFilter: {} });
   const global = scoreJob({
     title: 'Frontend Engineer',
     location: 'Remote, Europe',
     url: 'https://example.com/jobs/1',
   }, { profile: neutralProfile, titleFilter: {} });
 
-  assert.ok(russian.priority > global.priority);
-  assert.ok(russian.reasons.includes('russia_market:+12'));
-  assert.ok(global.priority >= 0);
+  assert.ok(!russian.reasons.some((x) => x.startsWith('russia_market:') || x.startsWith('explicit_russia_market:')));
+  assert.ok(global.priority >= russian.priority, 'a worldwide remote job must not be penalized just because it is not Russian');
+
+  const explicitlyRussianFirst = scoreJob(job, {
+    profile: { autopilot: { priority_market: 'Russia' } },
+    titleFilter: {},
+  });
+  assert.ok(explicitlyRussianFirst.priority > russian.priority);
+  assert.ok(explicitlyRussianFirst.reasons.includes('explicit_russia_market:+12'));
 });

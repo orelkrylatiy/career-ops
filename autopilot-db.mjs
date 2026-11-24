@@ -298,10 +298,11 @@ export function listJobs(status) {
 }
 
 /**
- * Atomically lease the highest-priority queued job. Expired leases are
- * quarantined for review, because a crashed worker may have submitted.
+ * Atomically lease one eligible queued job. An optional rank callback
+ * compares the live direction's preferences without rewriting old SQLite rows.
+ * Expired leases are quarantined for review, because a crashed worker may have submitted.
  */
-export function claimNextJob(owner = 'worker-0', leaseMinutes = 120, { accept = null } = {}) {
+export function claimNextJob(owner = 'worker-0', leaseMinutes = 120, { accept = null, rank = null } = {}) {
   const db = openDb();
   const minutes = Number(leaseMinutes);
   if (!Number.isFinite(minutes) || minutes <= 0) {
@@ -338,6 +339,9 @@ export function claimNextJob(owner = 'worker-0', leaseMinutes = 120, { accept = 
     if (accept != null && typeof accept !== 'function') {
       throw new TypeError('claimNextJob: accept must be a function');
     }
+    if (rank != null && typeof rank !== 'function') {
+      throw new TypeError('claimNextJob: rank must be a function');
+    }
     const selectSql = `SELECT * FROM jobs
        WHERE status='queued'
          AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
@@ -345,9 +349,17 @@ export function claimNextJob(owner = 'worker-0', leaseMinutes = 120, { accept = 
                 COALESCE(posted_at, first_seen) DESC,
                 rowid ASC`;
     let row;
-    if (accept) {
+    if (accept || rank) {
+      let bestRank = -Infinity;
       for (const candidate of db.prepare(selectSql).iterate(nowIso)) {
-        if (accept(candidate)) { row = candidate; break; }
+        if (accept && !accept(candidate)) continue;
+        if (!rank) { row = candidate; break; }
+        const score = Number(rank(candidate));
+        if (!Number.isFinite(score)) continue;
+        if (!row || score > bestRank) {
+          row = candidate;
+          bestRank = score;
+        }
       }
     } else {
       row = db.prepare(selectSql + ' LIMIT 1').get(nowIso);

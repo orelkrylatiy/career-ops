@@ -14,6 +14,7 @@ import { auditLog } from './autopilot-log.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { assertLinux, linuxBrowserSettings, browserCliEnvironment } from './lib/autopilot-browser.mjs';
+import { queueRoleFamily } from './autopilot-role-triage.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DATA_ROOT = getCareerOpsRoot();
@@ -154,6 +155,11 @@ export function assertBrowserReady({
 
 export function workerPrompt(job, owner) {
   const browser = linuxBrowserSettings({ dataRoot: DATA_ROOT });
+  const profile = selectedProfile();
+  const portalsPath = process.env.CAREER_OPS_PORTALS || path.join(DATA_ROOT, 'portals.yml');
+  const titleFilter = existsSync(portalsPath)
+    ? (yaml.load(readFileSync(portalsPath, 'utf8'))?.title_filter || {}) : {};
+  const frontendFunnel = queueRoleFamily(profile, titleFilter) === 'frontend';
   // Vacancy fields and the website are UNTRUSTED inputs, never instructions.
   return [
     'You are the authorized, autonomous career-ops browser application worker.',
@@ -169,6 +175,7 @@ export function workerPrompt(job, owner) {
     'Claim owner: ' + owner,
     'Read full job description; check existing tracker, blacklist, live identity and application status before proceeding.',
     'Evaluate the live JD against the currently selected candidate profile, configured job filters, and explicit user requirements. Do not invent global stack, location or quota rules. A listed preferred qualification is not automatically disqualifying; honor actual hard eligibility and clear role incompatibility. Use skipped for a verified permanent exclusion, defer only a transient pre-Submit failure, and never retry an ambiguous submission.',
+    ...(frontendFunnel ? ['Frontend/Web wide funnel: consider ANY actual browser UI/frontend/web engineering role, including full-stack roles with meaningful UI work. Do not demand React, Next.js or another literal keyword in the title or JD: compare real required technologies and transferable experience against the selected candidate CV. A different frontend framework, ordinary seniority gap or missing nice-to-have alone is NOT a hard rejection. Evaluate the actual JD before choosing; unrelated-only backend/mobile/data/sales roles are not frontend. Unknown remote country permission needs verification, not an invented global rejection; do not misrepresent candidate location, work authorization or credentials.'] : []),
     'Select and verify a matching PDF with autopilot-resume.mjs. Use only truthful candidate facts.',
     'Generate a specific cover letter/answers; validate all free text via humanizer-bridge.py where available.',
     'For sign-in/registration using candidate email, use existing authorized browser accounts first.',
@@ -243,17 +250,15 @@ export function workerEnvironment(owner, runId, session = BROWSER_SESSION, optio
 
 // Reuse a browser session across runs, but NEVER reuse its lease owner.
  // A previous worker may have submitted a form before it crashed.
-// Regional adapters are an optional extension. For RU profiles they are
-// enabled by the selected user's config, never by an unconditional system
-// default; the operator may opt out via AUTOPILOT_REGIONAL=off.
-export function useRussianSources(profile, override = process.env.AUTOPILOT_REGIONAL) {
-  if (override === 'off') return false;
-  if (override === 'RU') return true;
-  const declared = [
-    profile?.autopilot?.strict_market,
-    profile?.location?.country,
-  ];
-  return declared.some(v => /^(?:ru|russia|россия)$/i.test(String(v || '').trim()));
+// Regional adapters are optional. Candidate *residence* cannot silently turn
+// a worldwide Frontend/Web campaign into a Russia-only source expansion.
+// Explicit strict_market=Russia or AUTOPILOT_REGIONAL=RU still enables it.
+export function useRussianSources(profile, override = process.env.AUTOPILOT_REGIONAL, titleFilter = {}) {
+  if (String(override || '').toLowerCase() === 'off') return false;
+  if (String(override || '').toUpperCase() === 'RU') return true;
+  if (/^(?:ru|russia|россия)$/i.test(String(profile?.autopilot?.strict_market || '').trim())) return true;
+  if (useBroadFunnelDiscovery(profile, titleFilter)) return false;
+  return /^(?:ru|russia|россия)$/i.test(String(profile?.location?.country || '').trim());
 }
 
 function selectedProfile() {
@@ -320,25 +325,43 @@ export function detectBlockingChallenge({ session = BROWSER_SESSION, run = spawn
   } catch { return null; }
 }
 
-/** Only filtered, configured discovery. Wide/full is deliberately separate. */
+/** Broad discovery uses the unchanged upstream scanner with its existing
+ * fork --wide adapter, but only for a user-configured wide-funnel direction.
+ * Normal upstream scan and apply modes are never touched.
+ */
+export function useBroadFunnelDiscovery(profile = {}, titleFilter = {}) {
+  const requested = profile?.autopilot?.wide_funnel;
+  if (requested === true) return true;
+  if (requested === false) return false;
+  return queueRoleFamily(profile, titleFilter) === 'frontend';
+}
+
 export function runConfiguredDiscovery(opts = {}, {
-  bounded = false, step = runStep, profile = selectedProfile(),
+  bounded = false, step = runStep, profile = selectedProfile(), titleFilter = null,
+  regionalOverride = process.env.AUTOPILOT_REGIONAL,
 } = {}) {
   // A fallback after queue exhaustion is one attempt, not a renewed 45-minute
   // scan per source. Explicit scans retain the operator's existing timeout.
   const scanEnv = bounded ? { AUTOPILOT_SCAN_TIMEOUT_MS: String(3 * 60_000) } : {};
+  const portalsPath = process.env.CAREER_OPS_PORTALS || path.join(DATA_ROOT, 'portals.yml');
+  // Tests can supply an explicit filter so a developer's exported
+  // CAREER_OPS_PORTALS cannot silently affect unrelated profile fixtures.
+  // In live runs, inspect only the selected direction's portals.
+  const selectedTitleFilter = titleFilter ?? (existsSync(portalsPath)
+    ? (yaml.load(readFileSync(portalsPath, 'utf8'))?.title_filter || {}) : {});
+  const scanArgs = useBroadFunnelDiscovery(profile, selectedTitleFilter) ? ['--wide'] : [];
   try {
-    step('autopilot-scan.mjs', [], scanEnv);
+    step('autopilot-scan.mjs', scanArgs, scanEnv);
   } catch (error) {
     auditLog('configured_scan_error', { error_code: 'CONFIGURED_SCAN_FAILED' }, { level: 'warn' });
     console.error('[autopilot] configured scan failed; checking remaining sources: ' + error.message);
   }
-  if (useRussianSources(profile)) {
+  if (useRussianSources(profile, regionalOverride, selectedTitleFilter)) {
     try {
       step('source-registry.mjs', [opts.refresh && !bounded ? 'full' : 'export', '--country', 'RU'], scanEnv);
       const regionalPortals = process.env.CAREER_OPS_EXPANDED_PORTALS
         || path.join(DATA_ROOT, 'data', 'portals-regional.generated.yml');
-      step('autopilot-scan.mjs', [], { ...scanEnv, CAREER_OPS_PORTALS: regionalPortals });
+      step('autopilot-scan.mjs', scanArgs, { ...scanEnv, CAREER_OPS_PORTALS: regionalPortals });
     } catch (error) {
       auditLog('regional_scan_error', { error_code: 'REGIONAL_SCAN_FAILED' }, { level: 'warn' });
       console.error('[autopilot] regional source scan unavailable; proceeding with queue: ' + error.message);

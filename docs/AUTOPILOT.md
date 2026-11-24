@@ -87,7 +87,17 @@ Each direction has a different `portals.yml`, `config/profile.yml`, resume selec
 
 Provider adapters are for finding jobs, **not** evidence that a particular site can submit a form. Available fork-specific boards include Habr Career, GeekJob and SuperJob. Full upstream international ATS and board adapters remain present.
 
-By default, a live runner **processes eligible vacancies already in the selected profile's queue first**. If no eligible jobs remain, it performs **one time-bounded scan of configured sources with upstream filters**, then checks the queue once more and stops if still empty. `--no-scan-on-empty` disables that fallback; explicit `--no-scan` disables all scans. It applies the original `buildTitleFilter` to historical SQLite entries **before leasing**, without marking another direction's jobs `skipped`. A requested scan preserves upstream filters; the selected user's profile determines whether extra RU catalog sources are enabled (or set `AUTOPILOT_REGIONAL=off` to disable them). Explicit wide-scan commands disable soft preferences and should not be used for a normal targeted campaign. On-demand discovery examples:
+The live runner first considers existing SQLite queued jobs. **For a Frontend/Web direction**, it no longer requires exact `title_filter` matches before leasing: a broad, deterministic role-family triage retains UI/Web/Full-stack and ambiguous Software Engineer titles, while a worker reads the **FULL JD** to determine the actual frontend duties, stack and hard eligibility. A missing React/Next.js keyword or a preferred framework alone never rejects a position. Queue priorities are recalculated in memory for the current direction without rewriting 20k+ historical statuses or priorities. For other directions the old exact title gate stays unless explicitly disabled.
+
+If no eligible jobs remain, the runner performs **one time-bounded scan of configured sources**, then stops if still empty. For the inferred Frontend/Web wide funnel, the fork adapter calls the unchanged upstream scanner with its `--wide` option to avoid prematurely losing possible frontend listings; setting `autopilot.wide_funnel: false` uses original scanner filters instead. Ordinary upstream scan/`apply` remain unchanged. This is NOT a full ATS sweep: the runner never automatically launches deep discovery. Explicit `--no-scan` disables all discovery and `--no-scan-on-empty` disables fallback. For wide worldwide Frontend/Web directions, Russian regional catalogs are **not activated merely by the candidate's residence**; `AUTOPILOT_REGIONAL=RU` explicitly enables them and `AUTOPILOT_REGIONAL=off` suppresses them. Neither switch changes worldwide job eligibility. `autopilot.priority_market: Russia` enables an optional local boost; otherwise there is **no Russia-first bias**.
+
+Before any live run, inspect the queue read-only:
+
+```bash
+node autopilot.mjs queue-diagnose
+```
+
+The JSON output shows eligible counts, role-family tiers, exclusion reasons and top five candidates without claiming, scanning, opening a browser or submitting. A resulting `eligible: 0` now distinguishes absent frontend role families from explicit blacklists and filters. On-demand discovery examples:
 
 ```bash
 # Run only after choosing the correct profile/root.
@@ -102,7 +112,7 @@ npm run autopilot:full-scan
 npm run autopilot:full-scan -- --resume
 ```
 
-For a deliberate **initial configured-source scan** within the runner, pass `--scan`; `npm run autopilot:live` does not hardcode `--no-scan`, and the parser rejects conflicting flags. Normal queue-first execution performs at most one filtered scan only when no eligible jobs remain; that recovery never triggers a full ATS sweep. Avoid repeatedly scanning an existing large queue. Deep ATS discovery requires the separate `npm run autopilot:full-scan` command; the live runner deliberately ignores old `AUTOPILOT_DISCOVERY=full` environment values; `autopilot:full-scan` now keeps upstream filters and its normal posting-date defaults, rather than silently enabling `--wide --include-undated`. If an unfinished checkpoint exists, the adapter refuses to overwrite it without explicit `--resume` or `--resume-if-compatible` (the latter may start fresh on mismatch). Ordinary operation needs neither discovery mode.
+For a deliberate **initial configured-source scan** within the runner, pass `--scan`; `npm run autopilot:live` does not hardcode `--no-scan`, and the parser rejects conflicting flags. Normal queue-first execution performs at most one bounded, configured-source scan only when no eligible jobs remain; its Autopilot-only Frontend/Web wide-funnel option does not alter the upstream scanner or activate a full ATS sweep. Avoid repeatedly scanning an existing large queue. Deep ATS discovery requires the separate `npm run autopilot:full-scan` command; the live runner deliberately ignores old `AUTOPILOT_DISCOVERY=full` environment values; `autopilot:full-scan` now keeps upstream filters and its normal posting-date defaults, rather than silently enabling `--wide --include-undated`. If an unfinished checkpoint exists, the adapter refuses to overwrite it without explicit `--resume` or `--resume-if-compatible` (the latter may start fresh on mismatch). Ordinary operation needs neither discovery mode.
 
 ## Application workflow and safety
 

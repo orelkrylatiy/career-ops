@@ -71,10 +71,13 @@ export function scoreJob(job, { titleFilter = {}, profile = {}, nowMs = Date.now
   const homeTokens = [locationProfile.country, locationProfile.city]
     .filter((v) => typeof v === 'string' && v.trim());
   const homeHits = homeTokens.filter((v) => includesToken(location, v));
-  if (homeHits.length) {
+  // Where the candidate lives is a factual field, not an automatic search
+  // preference. A worldwide funnel must not push every home-country posting to
+  // the front unless the candidate explicitly requests that priority.
+  if (homeHits.length && profile?.autopilot?.prioritize_home_location === true) {
     const boost = Math.min(20, homeHits.length * 10);
     priority += boost;
-    reasons.push(`home_location:+${boost}:${homeHits.join(',')}`);
+    reasons.push(`explicit_home_location:+${boost}:${homeHits.join(',')}`);
   }
 
   if (REMOTE_RE.test(`${title} ${location}`)) {
@@ -103,15 +106,15 @@ export function scoreJob(job, { titleFilter = {}, profile = {}, nowMs = Date.now
 
   const host = hostname(job?.url);
 
-  // Product policy for this fork: Russia is the first market, but never an
-  // eligibility gate. An equivalent Russian posting is drained earlier while
-  // every worldwide posting remains queued.
+  // Global funnel has no implicit country preference. Candidate work
+  // authorization is evaluated from the live JD, not inferred from the source
+  // hostname. A user may explicitly opt in to prioritizing Russian postings.
   const russianMarket = host.endsWith('.ru')
     || RUSSIA_JOB_BOARD_HOSTS.has(host)
     || RUSSIA_LOCATION_RE.test(location);
-  if (russianMarket) {
+  if (russianMarket && String(ap.priority_market || '').toLowerCase() === 'russia') {
     priority += 12;
-    reasons.push('russia_market:+12');
+    reasons.push('explicit_russia_market:+12');
   }
 
   const prioritySources = strings(ap.priority_sources)
