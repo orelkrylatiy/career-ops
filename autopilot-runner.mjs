@@ -338,6 +338,7 @@ export function useBroadFunnelDiscovery(profile = {}, titleFilter = {}) {
 
 export function runConfiguredDiscovery(opts = {}, {
   bounded = false, step = runStep, profile = selectedProfile(), titleFilter = null,
+  regionalOverride = process.env.AUTOPILOT_REGIONAL,
 } = {}) {
   // A fallback after queue exhaustion is one attempt, not a renewed 45-minute
   // scan per source. Explicit scans retain the operator's existing timeout.
@@ -355,7 +356,7 @@ export function runConfiguredDiscovery(opts = {}, {
     auditLog('configured_scan_error', { error_code: 'CONFIGURED_SCAN_FAILED' }, { level: 'warn' });
     console.error('[autopilot] configured scan failed; checking remaining sources: ' + error.message);
   }
-  if (useRussianSources(profile, process.env.AUTOPILOT_REGIONAL, selectedTitleFilter)) {
+  if (useRussianSources(profile, regionalOverride, selectedTitleFilter)) {
     try {
       step('source-registry.mjs', [opts.refresh && !bounded ? 'full' : 'export', '--country', 'RU'], scanEnv);
       const regionalPortals = process.env.CAREER_OPS_EXPANDED_PORTALS
