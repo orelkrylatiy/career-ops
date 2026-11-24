@@ -21,6 +21,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'no
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as yaml from 'js-yaml';
+import Database from 'better-sqlite3';
 import { getCareerOpsRoot, resolveTrackerPath } from './path-resolver.mjs';
 import { normalizeUrl } from './url-key.mjs';
 import { normalizeTextKey, resolveColumns } from './tracker-parse.mjs';
@@ -727,27 +728,36 @@ export function cmdQueueDiagnose() {
   const selection = buildQueueSelection();
   const counts = { queued: 0, eligible: 0, family_3: 0, family_2: 0, family_1: 0, family_0: 0, blocked_by: {} };
   const highest = [];
-  const rows = openDb().prepare(
-    "SELECT * FROM jobs WHERE status='queued' ORDER BY COALESCE(priority,50) DESC, rowid ASC"
-  );
-  const now = new Date().toISOString();
-  for (const candidate of rows.iterate()) {
-    counts.queued++;
-    const tier = frontendTitleTier(candidate.title);
-    counts['family_' + tier]++;
-    const reason = candidate.next_attempt_at && candidate.next_attempt_at > now
-      ? 'deferred_until_later'
-      : selection.rejection(candidate);
-    if (reason) {
-      counts.blocked_by[reason] = (counts.blocked_by[reason] || 0) + 1;
-      continue;
-    }
-    counts.eligible++;
-    const score = selection.rank(candidate);
-    if (highest.length < 5 || score > highest[highest.length - 1].score) {
-      highest.push({ company: candidate.company, title: candidate.title, tier, score });
-      highest.sort((a, b) => b.score - a.score);
-      if (highest.length > 5) highest.pop();
+  if (existsSync(DB_PATH)) {
+    // An explicitly read-only SQLite connection: even the normal openDb()
+    // schema migration is avoided. Safe to run during diagnosis while paused.
+    const db = new Database(DB_PATH, { readonly: true, fileMustExist: true });
+    try {
+      const rows = db.prepare(
+        "SELECT * FROM jobs WHERE status='queued' ORDER BY COALESCE(priority,50) DESC, rowid ASC"
+      );
+      const now = new Date().toISOString();
+      for (const candidate of rows.iterate()) {
+        counts.queued++;
+        const tier = frontendTitleTier(candidate.title);
+        counts['family_' + tier]++;
+        const reason = candidate.next_attempt_at && candidate.next_attempt_at > now
+          ? 'deferred_until_later'
+          : selection.rejection(candidate);
+        if (reason) {
+          counts.blocked_by[reason] = (counts.blocked_by[reason] || 0) + 1;
+          continue;
+        }
+        counts.eligible++;
+        const score = selection.rank(candidate);
+        if (highest.length < 5 || score > highest[highest.length - 1].score) {
+          highest.push({ company: candidate.company, title: candidate.title, tier, score });
+          highest.sort((a, b) => b.score - a.score);
+          if (highest.length > 5) highest.pop();
+        }
+      }
+    } finally {
+      db.close();
     }
   }
   console.log(JSON.stringify({
