@@ -54,7 +54,7 @@ test('automatic discovery runs once, uses configured sources and bounded timeout
   const step = (file, args, env = {}) => steps.push({ file, args, env });
   runConfiguredDiscovery({ refresh: false }, {
     bounded: true, profile: { location: { country: 'Россия' } },
-    titleFilter: {}, step,
+    titleFilter: {}, regionalOverride: '', step,
   });
   assert.deepEqual(steps.map(x => x.file), [
     'autopilot-scan.mjs', 'source-registry.mjs', 'autopilot-scan.mjs',
@@ -68,7 +68,7 @@ test('discovery does not inject a regional market for unrelated profiles', () =>
   const steps = [];
   runConfiguredDiscovery({}, {
     bounded: true, profile: { location: { country: 'Germany' } },
-    titleFilter: {}, step: (file, args) => steps.push([file, args]),
+    titleFilter: {}, regionalOverride: '', step: (file, args) => steps.push([file, args]),
   });
   assert.deepEqual(steps, [['autopilot-scan.mjs', []]]);
 });
@@ -81,7 +81,7 @@ test('wide frontend funnel uses the upstream scan adapter without global role re
 
   const steps = [];
   runConfiguredDiscovery({}, {
-    bounded: true, profile: frontend,
+    bounded: true, profile: frontend, regionalOverride: '',
     step: (file, args, env) => steps.push({ file, args, env }),
   });
   assert.equal(steps.length, 1);
@@ -91,9 +91,9 @@ test('wide frontend funnel uses the upstream scan adapter without global role re
 });
 
 test('regional adapters follow candidate configuration rather than all profiles', () => {
-  assert.equal(useRussianSources({ location: { country: 'Россия' } }, undefined), true);
-  assert.equal(useRussianSources({ autopilot: { strict_market: 'Russia' } }, undefined), true);
-  assert.equal(useRussianSources({ location: { country: 'Germany' } }, undefined), false);
+  assert.equal(useRussianSources({ location: { country: 'Россия' } }, ''), true);
+  assert.equal(useRussianSources({ autopilot: { strict_market: 'Russia' } }, ''), true);
+  assert.equal(useRussianSources({ location: { country: 'Germany' } }, ''), false);
   assert.equal(useRussianSources({ location: { country: 'Россия' } }, 'off'), false);
   assert.equal(useRussianSources({ location: { country: 'Germany' } }, 'RU'), true);
 });
@@ -106,17 +106,17 @@ test('worldwide frontend discovery does not infer a Russian source mandate from 
       location: { country: 'Russia' },
       autopilot: { role_family: 'frontend' },
     };
-    assert.equal(useRussianSources(selected, undefined, { positive: ['React'] }), false);
+    assert.equal(useRussianSources(selected, '', { positive: ['React'] }), false);
     assert.equal(useRussianSources(selected, 'RU', { positive: ['React'] }), true);
     assert.equal(useRussianSources(selected, 'off', { positive: ['React'] }), false);
     assert.equal(useRussianSources({
       location: { country: 'Russia' },
       autopilot: { role_family: 'frontend', strict_market: 'Russia' },
-    }, undefined, { positive: ['React'] }), true);
+    }, '', { positive: ['React'] }), true);
 
     const steps = [];
     runConfiguredDiscovery({}, {
-      bounded: true, profile: selected,
+      bounded: true, profile: selected, regionalOverride: '',
       step: (file, args) => steps.push([file, args]),
     });
     assert.deepEqual(steps, [['autopilot-scan.mjs', ['--wide']]]);
