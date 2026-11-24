@@ -337,22 +337,25 @@ export function useBroadFunnelDiscovery(profile = {}, titleFilter = {}) {
 }
 
 export function runConfiguredDiscovery(opts = {}, {
-  bounded = false, step = runStep, profile = selectedProfile(),
+  bounded = false, step = runStep, profile = selectedProfile(), titleFilter = null,
 } = {}) {
   // A fallback after queue exhaustion is one attempt, not a renewed 45-minute
   // scan per source. Explicit scans retain the operator's existing timeout.
   const scanEnv = bounded ? { AUTOPILOT_SCAN_TIMEOUT_MS: String(3 * 60_000) } : {};
   const portalsPath = process.env.CAREER_OPS_PORTALS || path.join(DATA_ROOT, 'portals.yml');
-  const titleFilter = existsSync(portalsPath)
-    ? (yaml.load(readFileSync(portalsPath, 'utf8'))?.title_filter || {}) : {};
-  const scanArgs = useBroadFunnelDiscovery(profile, titleFilter) ? ['--wide'] : [];
+  // Tests can supply an explicit filter so a developer's exported
+  // CAREER_OPS_PORTALS cannot silently affect unrelated profile fixtures.
+  // In live runs, inspect only the selected direction's portals.
+  const selectedTitleFilter = titleFilter ?? (existsSync(portalsPath)
+    ? (yaml.load(readFileSync(portalsPath, 'utf8'))?.title_filter || {}) : {});
+  const scanArgs = useBroadFunnelDiscovery(profile, selectedTitleFilter) ? ['--wide'] : [];
   try {
     step('autopilot-scan.mjs', scanArgs, scanEnv);
   } catch (error) {
     auditLog('configured_scan_error', { error_code: 'CONFIGURED_SCAN_FAILED' }, { level: 'warn' });
     console.error('[autopilot] configured scan failed; checking remaining sources: ' + error.message);
   }
-  if (useRussianSources(profile, process.env.AUTOPILOT_REGIONAL, titleFilter)) {
+  if (useRussianSources(profile, process.env.AUTOPILOT_REGIONAL, selectedTitleFilter)) {
     try {
       step('source-registry.mjs', [opts.refresh && !bounded ? 'full' : 'export', '--country', 'RU'], scanEnv);
       const regionalPortals = process.env.CAREER_OPS_EXPANDED_PORTALS
