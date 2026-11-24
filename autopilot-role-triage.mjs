@@ -1,7 +1,7 @@
 // Fork-only, deterministic *queue triage* for a wide Frontend/Web funnel.
 // A title is a cheap signal, never a substitute for reading the full job description.
 // Do not use this module to assert work authorization, actual skills or submissions.
-const FOCUS_RE = /(?:front[\s-]?end|фронт[\s-]?енд|full[\s-]?stack|fullstack|react|vue(?:\.?js)?|angular|svelte|next\.?js|nuxt|javascript|typescript|\bui\b|web developer|web engineer|веб[\s-]?разработ)/iu;
+const FOCUS_RE = /(?:front[\s-]?end|фронт[\s-]?енд|full[\s-]?stack|fullstack|react|vue(?:\.?js)?|angular|svelte|next\.?js|nuxt|\bui\b|web developer|web engineer|веб[\s-]?разработ)/iu;
 const STRONG_RE = /(?:front[\s-]?end|full[\s-]?stack|fullstack|full[\s-]?cycle|(?:react|vue(?:\.?js)?|angular|svelte|next\.?js|nuxt|javascript|typescript|html5|css3|webflow|wordpress|shopify|browser|design[\s-]?systems?|interfaces?|client[\s-]?side|web[\s-]?app(?:lication)?s?)\b|\bui[\s/\-]+(?:engineer|developer|programmer)\b|\b(?:web|website)[\s/\-]+(?:developer|engineer|programmer)\b|\b(?:developer|engineer)[\s/\-]+(?:experience|product[\s-]?ui)\b)/iu;
 const FRONTEND_RU_RE = /(?:фронт[\s-]?енд|верстал[ьщ]+ик|веб[\s-]?разработ|разработчик[\s-]+(?:интерфейс|веб[\s-]?прилож)|разработка[\s-]+интерфейс)/iu;
 const MOBILE_ONLY_RE = /(?:react[\s-]?native|\b(?:android|ios|swift|kotlin|flutter)[\s/-]+(?:developer|engineer)\b)/iu;
@@ -18,7 +18,8 @@ function strings(value) {
  * Infer a broad frontend focus only from user-owned configuration, never from
  * a global technology list or the user's location. Other directions keep their
  * own upstream title gate unless they explicitly opt into soft title matching.
- * Explicit autopilot.role_family: frontend|general wins.
+ * JS/TS alone is not a frontend-family declaration: backend directions may
+ * also use these languages. Explicit autopilot.role_family: frontend|general wins.
  */
 export function queueRoleFamily(profile = {}, titleFilter = {}) {
   const requested = String(profile?.autopilot?.role_family || '').toLowerCase().trim();
