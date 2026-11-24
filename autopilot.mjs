@@ -11,8 +11,10 @@
 //
 // Admission protects against invalid URLs, duplicates, explicit blacklists
 // and strict market. Before leasing to a browser worker, historical queue
-// entries also pass upstream's exact configured title_filter predicate.
-// Other fit preferences continue to influence priority, not admission.
+// entries are triaged for the selected direction's ROLE FAMILY, not rejected
+// for omitting a literal React/Frontend title keyword. Only an explicit
+// require_title_match_for_apply=true restores the upstream title hard gate.
+// The browser agent assesses the full JD, actual stack and eligibility.
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
@@ -29,6 +31,7 @@ import {
 } from './autopilot-db.mjs';
 import { resolveResume } from './autopilot-resume.mjs';
 import { scoreJob } from './autopilot-ranking.mjs';
+import { queueRoleFamily, frontendTitleTier, queueClaimRank } from './autopilot-role-triage.mjs';
 import { buildTitleFilter } from './title-keywords.mjs';
 import { inspectApplicationUrl } from './autopilot-url-policy.mjs';
 import { auditLog, auditLogPath } from './autopilot-log.mjs';
@@ -674,35 +677,108 @@ export function cmdCap() {
   }, null, 2));
 }
 
+/**
+ * Build the same read-only selection for live claims and safe queue diagnostics.
+ * A frontend title family is a broad CHEAP heuristic (React/Vue/Angular/UI/
+ * software/web/general developer). A negative literal title_filter does not
+ * veto it: the Codex worker reads the full JD and judges actual suitability.
+ * Explicit legacy require_title_match_for_apply=true is still respected.
+ */
+export function buildQueueSelection({
+  profile = loadYamlIfExists(PROFILE_PATH),
+  titleFilter = loadTitleFilter(),
+  tracker = loadTrackerUrlIndex(),
+  blacklist = loadBlacklistKeys(),
+  excluded = excludedHostTokens(profile),
+} = {}) {
+  const family = queueRoleFamily(profile, titleFilter);
+  const allowsTitle = buildTitleFilter(titleFilter);
+  const enforceExactTitle = profile?.autopilot?.require_title_match_for_apply === true
+    || (family !== 'frontend' && profile?.autopilot?.require_title_match_for_apply !== false);
+  function rejection(candidate) {
+    const url = candidate?.url || '';
+    const host = hostOf(url);
+    if (!inspectApplicationUrl(url).ok) return 'invalid_url';
+    if (/^(?:[a-z0-9-]+\\.)*hh\\.(?:ru|kz|uz)$/.test(host)
+      || ['t.me', 'telegram.me', 'telegram.org'].includes(host)) return 'excluded_transport';
+    if (blacklist.get(normalizeTextKey(candidate?.company || ''))) return 'company_blacklist';
+    if (excluded.some(token => hostMatchesToken(host, token))) return 'source_blacklist';
+    if (tracker.rawSet.has(url) || tracker.keySet.has(candidate?.url_key)) return 'already_applied';
+    if (!matchesStrictMarket(candidate, profile)) return 'explicit_strict_market';
+    if (enforceExactTitle && !allowsTitle(candidate?.title || '')) return 'explicit_title_gate';
+    if (family === 'frontend' && frontendTitleTier(candidate?.title) === 0) return 'outside_frontend_role_family';
+    return null;
+  }
+  const rank = candidate => queueClaimRank(candidate, {
+    family,
+    scoringPriority: scoreJob({
+      title: candidate?.title,
+      location: candidate?.location,
+      url: candidate?.url,
+      posted: candidate?.posted_at,
+    }, { profile, titleFilter }).priority,
+  });
+  return { family, enforceExactTitle, rejection, accept: candidate => !rejection(candidate), rank };
+}
+
+export function cmdQueueDiagnose() {
+  // Read the SQLite queue only: never render the multi-megabyte Markdown mirror,
+  // claim a job, open a browser, scan the network or send an application.
+  const selection = buildQueueSelection();
+  const counts = { queued: 0, eligible: 0, family_3: 0, family_2: 0, family_1: 0, family_0: 0, blocked_by: {} };
+  const highest = [];
+  const rows = openDb().prepare(
+    "SELECT * FROM jobs WHERE status='queued' ORDER BY COALESCE(priority,50) DESC, rowid ASC"
+  );
+  const now = new Date().toISOString();
+  for (const candidate of rows.iterate()) {
+    counts.queued++;
+    const tier = frontendTitleTier(candidate.title);
+    counts['family_' + tier]++;
+    const reason = candidate.next_attempt_at && candidate.next_attempt_at > now
+      ? 'deferred_until_later'
+      : selection.rejection(candidate);
+    if (reason) {
+      counts.blocked_by[reason] = (counts.blocked_by[reason] || 0) + 1;
+      continue;
+    }
+    counts.eligible++;
+    const score = selection.rank(candidate);
+    if (highest.length < 5 || score > highest[highest.length - 1].score) {
+      highest.push({ company: candidate.company, title: candidate.title, tier, score });
+      highest.sort((a, b) => b.score - a.score);
+      if (highest.length > 5) highest.pop();
+    }
+  }
+  console.log(JSON.stringify({
+    role_family: selection.family,
+    exact_title_required: selection.enforceExactTitle,
+    counts,
+    top_eligible: highest,
+    dry_run: true,
+    note: 'SQLite only; zero job claims, scans, browser calls or submissions',
+  }, null, 2));
+  return counts;
+}
+
 export function cmdNext({
   owner = process.env.AUTOPILOT_WORKER_ID || 'worker-0',
   leaseMinutes = 120,
   json = false,
 } = {}) {
   // Also block direct CLI/programmatic claims when the runner is not involved.
-  // Scans/status/preflight remain available during a paused campaign.
+  // Scans/status/preflight and queue-diagnose remain available while paused.
   if (process.env.AUTOPILOT_LIVE !== '1') {
     throw new Error('campaign paused: claiming applications requires AUTOPILOT_LIVE=1');
   }
-  // Apply the selected direction's upstream title preference to old SQLite
-  // queue entries without changing their lifecycle status. Historical queues
-  // may contain jobs for other directions; those must not be permanently
-  // marked skipped merely because this *run* targets a different role.
-  const tracker = loadTrackerUrlIndex();
-  const profile = loadYamlIfExists(PROFILE_PATH);
-  const excluded = excludedHostTokens(profile);
-  const titleFilter = loadTitleFilter();
-  const allowsTitle = buildTitleFilter(titleFilter);
-  const accept = (candidate) => (
-    (profile?.autopilot?.require_title_match_for_apply === false
-      || allowsTitle(candidate.title || ''))
-    && matchesStrictMarket(candidate, profile)
-    && inspectApplicationUrl(candidate.url).ok
-    && !excluded.some(token => hostMatchesToken(hostOf(candidate.url), token))
-    && !tracker.rawSet.has(candidate.url)
-    && !tracker.keySet.has(candidate.url_key)
-  );
-  const job = claimNextJob(owner, leaseMinutes, { accept });
+  // Re-rank each claim against the CURRENT direction. Previous queue priorities
+  // may reflect an obsolete role filter or market bias. No historical row is
+  // skipped/overwritten simply for not matching this direction's role family.
+  const selection = buildQueueSelection();
+  const job = claimNextJob(owner, leaseMinutes, {
+    accept: selection.accept,
+    rank: selection.rank,
+  });
   regenerateQueue();
 
   if (!job) {
@@ -965,6 +1041,7 @@ function usage() {
   console.log(`Usage:
   node autopilot.mjs [--no-scan] [--deep-scan] [--refresh-registry] [--dry-run]
   node autopilot.mjs status
+  node autopilot.mjs queue-diagnose  # read-only live filter audit
   node autopilot.mjs logs [--limit 50]
   node autopilot.mjs analytics
   node autopilot.mjs preflight
@@ -983,6 +1060,7 @@ async function main() {
 
   if (argv.includes('--help') || argv.includes('-h')) return usage();
   if (argv[0] === 'status') return cmdStatus();
+  if (argv[0] === 'queue-diagnose') return cmdQueueDiagnose();
   if (argv[0] === 'logs') return cmdLogs(flagValue(argv, '--limit') || 50);
   if (argv[0] === 'analytics') return cmdAnalytics();
   if (argv[0] === 'preflight') {
