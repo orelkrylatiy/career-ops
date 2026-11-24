@@ -69,7 +69,7 @@ It is deterministic and does not trust the agent's self-report.
 
 ## Discovery
 
-The existing provider ecosystem remains the core collection layer. The runner also exports the **RU regional catalog** via `source-registry.mjs export --country RU` and scans it. Having a parser in `providers/` is not sufficient without an enabled source; see [RU_SOURCES.md](./RU_SOURCES.md).
+The existing provider ecosystem remains the core collection layer. The runner can optionally export the **RU regional catalog** via `source-registry.mjs export --country RU` and scan it. A wide worldwide Frontend/Web campaign does not enable RU regional catalogs merely because the candidate lives in Russia; opt in via `AUTOPILOT_REGIONAL=RU`. An explicit `strict_market: Russia` still enables RU sources. Having a parser in `providers/` is not sufficient without an enabled source; see [RU_SOURCES.md](./RU_SOURCES.md).
 
 ~~~text
 portals.yml + source-registry.db + catalog/source-catalog.yml
