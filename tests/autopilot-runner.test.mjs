@@ -97,6 +97,27 @@ test('regional adapters follow candidate configuration rather than all profiles'
   assert.equal(useRussianSources({ location: { country: 'Germany' } }, 'RU'), true);
 });
 
+test('worldwide frontend discovery does not infer a Russian source mandate from residence', () => {
+  const selected = {
+    location: { country: 'Russia' },
+    autopilot: { role_family: 'frontend' },
+  };
+  assert.equal(useRussianSources(selected, undefined, { positive: ['React'] }), false);
+  assert.equal(useRussianSources(selected, 'RU', { positive: ['React'] }), true);
+  assert.equal(useRussianSources(selected, 'off', { positive: ['React'] }), false);
+  assert.equal(useRussianSources({
+    location: { country: 'Russia' },
+    autopilot: { role_family: 'frontend', strict_market: 'Russia' },
+  }, undefined, { positive: ['React'] }), true);
+
+  const steps = [];
+  runConfiguredDiscovery({}, {
+    bounded: true, profile: selected,
+    step: (file, args) => steps.push([file, args]),
+  });
+  assert.deepEqual(steps, [['autopilot-scan.mjs', ['--wide']]]);
+});
+
 test('only one live runner may use a direction browser; unrelated roots stay independent', async () => {
   const { mkdtempSync, existsSync, writeFileSync, rmSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
