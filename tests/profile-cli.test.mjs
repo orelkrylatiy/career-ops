@@ -17,9 +17,16 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const NODE = process.execPath;
 
 function runCli(args, env) {
+  // The real operator may run this test after
+  //   eval "$(node profile.mjs env candidate direction)".
+  // Do not inherit selected candidate/profile/browser roots into a TEMP test
+  // registry. In particular CAREER_OPS_PROFILE_BASE_ROOT takes precedence over
+  // CAREER_OPS_ROOT in profile.mjs and would write test directions to REAL data.
+  const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
+    !/^(?:CAREER_OPS_|AUTOPILOT_|PLAYWRIGHT_CLI_|PLAYWRIGHT_MCP_EXECUTABLE_PATH$|PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH$)/.test(key)));
   return spawnSync(NODE, [join(ROOT, 'profile.mjs'), ...args], {
     encoding: 'utf-8',
-    env: { ...process.env, ...env },
+    env: { ...cleanEnv, ...env },
   });
 }
 
