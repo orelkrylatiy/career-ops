@@ -339,7 +339,8 @@ export function runConfiguredDiscovery(opts = {}, {
   // scan per source. Explicit scans retain the operator's existing timeout.
   const scanEnv = bounded ? { AUTOPILOT_SCAN_TIMEOUT_MS: String(3 * 60_000) } : {};
   const portalsPath = process.env.CAREER_OPS_PORTALS || path.join(DATA_ROOT, 'portals.yml');
-  const titleFilter = yaml.load(readFileSync(portalsPath, 'utf8'))?.title_filter || {};
+  const titleFilter = existsSync(portalsPath)
+    ? (yaml.load(readFileSync(portalsPath, 'utf8'))?.title_filter || {}) : {};
   const scanArgs = useBroadFunnelDiscovery(profile, titleFilter) ? ['--wide'] : [];
   try {
     step('autopilot-scan.mjs', scanArgs, scanEnv);
