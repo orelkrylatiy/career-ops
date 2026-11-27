@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRunnerArgs, resolveAgent, resolveReadyAgent, agentCommand, assertBrowserReady, browserCliFailure, safeJobId, runOwnerFor, useRussianSources, useBroadFunnelDiscovery, acquireRunLock, runConfiguredDiscovery, workerPrompt, workerEnvironment, detectBlockingChallenge } from '../autopilot-runner.mjs';
+import { parseRunnerArgs, resolveAgent, resolveReadyAgent, agentCommand, assertBrowserReady, browserCliFailure, safeJobId, runOwnerFor, useRussianSources, useBroadFunnelDiscovery, acquireRunLock, runConfiguredDiscovery, workerPrompt, workerEnvironment, detectBlockingChallenge, assertWorkerBrowserReady, isWorkerInfrastructureFailure } from '../autopilot-runner.mjs';
 
 test('runner defaults to real autonomous mode and accepts bounded options', () => {
   assert.equal(parseRunnerArgs([]).dryRun, false);
@@ -325,4 +325,48 @@ test('unattended browser defaults to headless Chromium without a display', () =>
     if (prevHeadless == null) delete process.env.AUTOPILOT_BROWSER_HEADLESS;
     else process.env.AUTOPILOT_BROWSER_HEADLESS = prevHeadless;
   }
+});
+
+test('actual worker browser probe uses the selected session and never enables live claims', async () => {
+  let calls = 0;
+  const result = await assertWorkerBrowserReady('codex', 'probe-owner', 'probe-run', {
+    nonce: 'fixture', session: 'fixture-browser',
+    probe: async (agent, prompt, timeout, env, options) => {
+      calls++;
+      assert.equal(agent, 'codex');
+      assert.equal(timeout, 90_000);
+      assert.equal(env.AUTOPILOT_LIVE, '0');
+      assert.equal(env.AUTOPILOT_BROWSER_SESSION, 'fixture-browser');
+      assert.equal(env.PLAYWRIGHT_CLI_SESSION, 'fixture-browser');
+      assert.equal(options.capture, true);
+      assert.match(prompt, /TWO SEPARATE tool calls/);
+      assert.match(prompt, /-s=fixture-browser/);
+      assert.match(prompt, /snapshot/);
+      assert.match(prompt, /Do not navigate, open, close or submit/);
+      return { ok: true, output: 'CAREER_OPS_BROWSER_READY_fixture\n' };
+    },
+  });
+  assert.equal(calls, 1);
+  assert.deepEqual(result, { session: 'fixture-browser', ok: true });
+});
+
+test('worker browser probe fails closed even if the agent exits successfully', async () => {
+  for (const result of [
+    { ok: true, output: 'BROWSER_UNAVAILABLE' },
+    { ok: true, output: 'READY' },
+    { ok: false, output: 'CAREER_OPS_BROWSER_READY_fixture' },
+  ]) {
+    await assert.rejects(assertWorkerBrowserReady('codex', 'probe-owner', 'probe-run', {
+      nonce: 'fixture', probe: async () => result,
+    }), /no vacancy claimed/);
+  }
+});
+
+test('worker infrastructure errors count even when the agent exits zero', () => {
+  assert.equal(isWorkerInfrastructureFailure({ ok: true }, { status: 'failed' }, { noOutcome: true }), true);
+  assert.equal(isWorkerInfrastructureFailure({ ok: true }, { status: 'queued', note: 'browser_session_unavailable: daemon missing' }), true);
+  assert.equal(isWorkerInfrastructureFailure({ ok: true }, { status: 'queued', note: 'temporary site 503' }), false);
+  assert.equal(isWorkerInfrastructureFailure({ ok: false }, { status: 'captcha' }), false);
+  assert.equal(isWorkerInfrastructureFailure({ ok: true }, { status: 'skipped' }), false);
+  assert.equal(isWorkerInfrastructureFailure({ ok: true }, { status: 'applied' }), false);
 });
