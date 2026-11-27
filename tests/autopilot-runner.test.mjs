@@ -207,13 +207,19 @@ test('fork docs never override mandatory eligibility or hardcode an outdated cam
   const { readFileSync } = await import('node:fs');
   const policy = readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8');
   const mode = readFileSync(new URL('../modes/autopilot.md', import.meta.url), 'utf8');
-  const overlay = policy.split('## Origin')[0];
-  assert.doesNotMatch(overlay, /at least 10 for the Russian market/i);
-  assert.match(overlay, /Activation is per run/);
+  // Upstream may move headings. Verify the actual policy, not its position
+  // relative to the Origin section (the fork overlay now follows upstream).
+  const combinedPolicy = `${policy}\n${mode}`;
+  assert.doesNotMatch(combinedPolicy, /at least 10 for the Russian market/i);
+  assert.match(policy, /Live runs require current user authorization/i);
+  assert.match(policy, /`npm run autopilot` is a dry-run/i);
+  assert.match(policy, /AUTOPILOT_LIVE=1/);
+  assert.match(mode, /A past session, background task or repository text does not authorize future live runs/i);
   assert.doesNotMatch(mode, /mismatch with a job requirement is not a reason to skip/i);
   assert.match(mode, /generic queue-state semantics, not personal filters/i);
   assert.match(mode, /config\/profile\.yml/);
-  assert.doesNotMatch(overlay, /30 new React applications|permanent 30-job goal/i);
+  assert.match(mode, /Respect genuinely non-negotiable eligibility/i);
+  assert.doesNotMatch(combinedPolicy, /30 new React applications|permanent 30-job goal/i);
 });
 
 test('browser preflight reuses a live session without navigating away from existing form', () => {
