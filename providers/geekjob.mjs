@@ -11,7 +11,8 @@
 // no year) — the year is resolved against the current date and rolled back
 // when the result would land in the future.
 
-import { fetchJsonWithRetry } from './_http.mjs';
+import { fetchJsonWithRetry, sleep } from './_http.mjs';
+import { safeEncodeURIComponent } from './_safe-url.mjs';
 
 const API = 'https://geekjob.ru/json/find/vacancy';
 const TRUSTED_HOST = 'geekjob.ru';
@@ -111,7 +112,7 @@ export function parseGeekjobResponse(json) {
 
     out.push({
       title,
-      url: `https://geekjob.ru/vacancy/${encodeURIComponent(id)}`,
+      url: `https://geekjob.ru/vacancy/${safeEncodeURIComponent(id)}`,
       company,
       location,
       ...(Number.isFinite(postedMs) ? { postedAt: postedMs } : {}),
@@ -156,7 +157,6 @@ export default {
     const jobs = [];
     const seen = new Set();
     const maxPages = Number.isInteger(ctx?.maxPages) && ctx.maxPages > 0 ? ctx.maxPages : Infinity;
-    const sleep = (ms) => (ctx?.sleep ? ctx.sleep(ms) : new Promise((r) => setTimeout(r, ms)));
 
     for (const query of queriesFor(entry)) {
       let page = 1;
@@ -178,7 +178,7 @@ export default {
         page += 1;
         if (parsed.length === 0 || newCount === 0) break;
         if (Number.isFinite(pageCount) && page > pageCount) break;
-        await sleep(250);
+        await sleep(250, ctx);
       }
     }
 

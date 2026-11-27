@@ -318,7 +318,7 @@ try {
   const EXEMPT = new Set(['path-resolver.mjs', 'career-profile.mjs']);
   const PENDING = new Set([]);
   const HAND_BUILT = [
-    /(?<!delete\s)process\.env\.CAREER_OPS_PROFILE(?!\s*=[^=])/,   // a read; deleting it (doctor.mjs, undoing a .env load) is not a path
+    /(?<!delete\s)process\.env\.CAREER_OPS_PROFILE\b(?!\s*=[^=])/,   // a read; deleting it (doctor.mjs, undoing a .env load) is not a path
     /\b(?:join|resolve)\([^\n]*['"](?:config\/)?profile\.yml['"]/,
     /(?<![=!])=\s*['"]config\/profile\.yml['"]/,
     /readFile\(['"]config\/profile\.yml/,

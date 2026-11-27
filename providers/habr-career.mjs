@@ -9,7 +9,7 @@
 // Note: this scans vacancies only — applying on Habr still requires an OAuth
 // session, so hits are discovery, not applications.
 
-import { fetchTextWithRetry } from './_http.mjs';
+import { fetchTextWithRetry, sleep } from './_http.mjs';
 
 const BASE = 'https://career.habr.com';
 const SEARCH = BASE + '/vacancies';
@@ -130,7 +130,6 @@ export default {
     const jobs = [];
     const seen = new Set();
     const maxPages = Number.isInteger(ctx?.maxPages) && ctx.maxPages > 0 ? ctx.maxPages : Infinity;
-    const sleep = (ms) => (ctx?.sleep ? ctx.sleep(ms) : new Promise((r) => setTimeout(r, ms)));
 
     for (const query of queriesFor(entry)) {
       let page = 1;
@@ -151,7 +150,7 @@ export default {
 
         page += 1;
         if (parsed.length === 0 || newCount === 0) break;
-        await sleep(400);
+        await sleep(400, ctx);
       }
     }
 

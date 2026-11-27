@@ -50,6 +50,10 @@ function parse(argv) {
 }
 
 function main() {
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    console.log('Usage: node scan-regional.mjs [--refresh] [--dry-run] [--country RU|KZ|AM|UZ]');
+    return;
+  }
   const opts = parse(process.argv.slice(2));
   const countryArgs = opts.country ? ['--country', opts.country] : [];
 

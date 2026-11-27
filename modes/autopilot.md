@@ -66,7 +66,7 @@ The runner serializes access to each selected direction's persistent browser wit
 
 ## Browser
 
-Use Playwright CLI, not `autopilot-browser.mjs` and not generated step files.
+Use Playwright CLI directly, not the retired browser-step protocol or generated step files.
 
 For a visible debugging session on a **Linux desktop** (not a headless VPS):
 

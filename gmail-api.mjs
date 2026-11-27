@@ -8,6 +8,7 @@ import path from 'node:path';
 import { homedir } from 'node:os';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import { isMainModule } from './lib/is-main-module.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const MAIL_DIR = path.resolve(process.env.CAREER_OPS_GMAIL_DIR || path.join(homedir(), '.mail'));
@@ -87,13 +88,14 @@ export async function send({to, subject, body}) {
 }
 
 function usage() {
-  console.log('node gmail-api.mjs profile | search <query> | read <id> | send <to> <subject> <body-file>');
+  console.log('Usage: node gmail-api.mjs profile | search <query> | read <id> | send <to> <subject> <body-file>');
 }
 
 const [command, ...args] = process.argv.slice(2);
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
+if (isMainModule(import.meta.url)) {
   try {
-    if (command === 'profile') console.log(await profileEmail());
+    if (command === '--help' || command === '-h') usage();
+    else if (command === 'profile') console.log(await profileEmail());
     else if (command === 'search') console.log(JSON.stringify(await search(args.join(' ')), null, 2));
     else if (command === 'read') console.log(JSON.stringify(await readMessage(args[0]), null, 2));
     else if (command === 'send') console.log(JSON.stringify(await send({to: args[0], subject: args[1], body: fs.readFileSync(path.resolve(ROOT, args[2]), 'utf8')}), null, 2));

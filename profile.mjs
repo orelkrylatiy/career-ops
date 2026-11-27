@@ -25,7 +25,7 @@ import {
   existsSync, mkdirSync, copyFileSync, writeFileSync, readFileSync, rmSync,
 } from 'fs';
 import { join, dirname, resolve } from 'path';
-import { getCareerOpsRoot } from './path-resolver.mjs';
+import { getCareerOpsRoot, getProfilePath } from './path-resolver.mjs';
 import { assertLinux, linuxBrowserSettings, browserCliEnvironment } from './lib/autopilot-browser.mjs';
 import { fileURLToPath } from 'url';
 import { spawnSync } from 'child_process';
@@ -112,7 +112,7 @@ function createDirectionSkeleton(root, directionName) {
     mkdirSync(join(root, dir), { recursive: true });
   }
   writeFileSync(join(root, 'data', 'applications.md'), TRACKER_HEADER, 'utf-8');
-  copyFileSync(join(CODE_ROOT, 'config', 'profile.example.yml'), join(root, 'config', 'profile.yml'));
+  copyFileSync(join(CODE_ROOT, 'config', 'profile.example.yml'), getProfilePath(root));
   copyFileSync(join(CODE_ROOT, 'templates', 'portals.example.yml'), join(root, 'portals.yml'));
   copyFileSync(join(CODE_ROOT, 'modes', '_profile.template.md'), join(root, 'modes', '_profile.md'));
   copyFileSync(join(CODE_ROOT, 'modes', '_brief.template.md'), join(root, 'modes', '_brief.md'));

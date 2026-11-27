@@ -102,7 +102,8 @@ const SCANNER_TITLES = {
   'scan-topdev.mjs': 'TopDev Scan',
 };
 // Top-level scan-*.mjs files that are not scanners and print no summary.
-const NOT_SCANNERS = new Set(['scan-local-lib.mjs']);
+// scan-regional delegates to existing scanners and does not print its own scan summary.
+const NOT_SCANNERS = new Set(['scan-local-lib.mjs', 'scan-regional.mjs']);
 
 test('every top-level scanner has a known summary title', async () => {
   const { readdirSync } = await import('node:fs');

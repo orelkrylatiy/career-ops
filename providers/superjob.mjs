@@ -11,7 +11,7 @@
 // — enough for discovery + title-based ranking, not for evaluation.
 // Pagination: ?page=N (1-based), stop on an empty ItemList.
 
-import { fetchTextWithRetry } from './_http.mjs';
+import { fetchTextWithRetry, sleep } from './_http.mjs';
 
 const SEARCH = 'https://www.superjob.ru/vacancy/search/';
 const TRUSTED_HOST = 'www.superjob.ru';
@@ -116,7 +116,6 @@ export default {
     const jobs = [];
     const seen = new Set();
     const maxPages = Number.isInteger(ctx?.maxPages) && ctx.maxPages > 0 ? ctx.maxPages : Infinity;
-    const sleep = (ms) => (ctx?.sleep ? ctx.sleep(ms) : new Promise((r) => setTimeout(r, ms)));
 
     for (const query of queriesFor(entry)) {
       let page = 1;
@@ -136,7 +135,7 @@ export default {
 
         page += 1;
         if (parsed.length === 0 || newCount === 0) break;
-        await sleep(500);
+        await sleep(500, ctx);
       }
     }
 
