@@ -22,7 +22,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as yaml from 'js-yaml';
 import Database from 'better-sqlite3';
-import { getCareerOpsRoot, resolveTrackerPath } from './path-resolver.mjs';
+import { getCareerOpsRoot, getProfilePath, resolveTrackerPath } from './path-resolver.mjs';
 import { normalizeUrl } from './url-key.mjs';
 import { normalizeTextKey, resolveColumns } from './tracker-parse.mjs';
 import {
@@ -47,7 +47,7 @@ const CODE_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DATA_ROOT = getCareerOpsRoot();
 
 const PORTALS_PATH = process.env.CAREER_OPS_PORTALS || path.join(DATA_ROOT, 'portals.yml');
-const PROFILE_PATH = process.env.CAREER_OPS_PROFILE || path.join(DATA_ROOT, 'config/profile.yml');
+const PROFILE_PATH = getProfilePath();
 const PIPELINE_PATH = process.env.CAREER_OPS_PIPELINE || path.join(DATA_ROOT, 'data', 'pipeline.md');
 const TRACKER_PATH = resolveTrackerPath(DATA_ROOT);
 const BLACKLIST_PATH = path.join(DATA_ROOT, 'data', 'blacklist.md');

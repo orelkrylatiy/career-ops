@@ -8,18 +8,18 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 import { fileURLToPath } from 'node:url';
-import { getCareerOpsRoot } from './path-resolver.mjs';
+import { getCareerOpsRoot, getProfilePath } from './path-resolver.mjs';
 import { auditLog } from './autopilot-log.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 
 const DATA_ROOT = getCareerOpsRoot();
-const PROFILE_PATH = process.env.CAREER_OPS_PROFILE || path.join(DATA_ROOT, 'config', 'profile.yml');
+const PROFILE_PATH = getProfilePath();
 
 function loadProfile(profilePath = PROFILE_PATH) {
   if (!existsSync(profilePath)) return {};
-  const parsed = yaml.load(readFileSync(profilePath, 'utf8'));
+  const parsed = loadYaml(readFileSync(profilePath, 'utf8'));
   return parsed && typeof parsed === 'object' ? parsed : {};
 }
 

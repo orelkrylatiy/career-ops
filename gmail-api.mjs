@@ -5,11 +5,12 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { homedir } from 'node:os';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const MAIL_DIR = path.resolve(process.env.CAREER_OPS_GMAIL_DIR || 'C:/Users/Maxim/.mail');
+const MAIL_DIR = path.resolve(process.env.CAREER_OPS_GMAIL_DIR || path.join(homedir(), '.mail'));
 const CONFIG_FILE = path.join(MAIL_DIR, 'config.json');
 const CREDENTIALS_FILE = path.join(MAIL_DIR, 'credentials.json');
 const TOKEN_FILE = path.join(MAIL_DIR, 'token.json');

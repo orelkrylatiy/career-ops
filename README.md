@@ -349,6 +349,7 @@ All of them share one router, `.agents/skills/career-ops/SKILL.md`, and the same
 | [`contacto`](modes/contacto.md) | Find the hiring manager, recruiter or a peer, and draft a LinkedIn message |
 | [`gambit`](modes/gambit.md) | Pitch a role a company has not posted: research an evidenced need, then draft the role, CV, cover letter and pitch. Draft-only: never sends |
 | [`apply`](modes/apply.md) | Live application assistant (Playwright from this checkout). Does not submit |
+| [`autopilot`](modes/autopilot.md) | Optional fork extension; dry-run by default, live only with explicit authorization |
 
 **Interview**
 

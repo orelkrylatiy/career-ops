@@ -1,9 +1,9 @@
 ---
 name: career-ops
-description: "Open-source AI job search agent -- evaluate offers, generate CVs, scan portals, track applications. Use when the user pastes a job URL or JD, asks to scan portals, generate a CV/PDF, track applications, prepare for interviews, draft outreach/emails, or run any career-ops mode."
+description: "Open-source AI job search agent -- evaluate offers, generate CVs, scan portals, track applications. Use when the user pastes a job URL or JD, asks to scan portals, generate a CV/PDF, track applications, prepare for interviews, draft outreach/emails, run an explicitly authorized autonomous application campaign, or run any career-ops mode."
 arguments: mode
 user-invocable: true
-argument-hint: "[scan | discover | deep | pdf | ats | text | latex | latex-tex | cover | email | proposal | add | expand | eu-swe | oferta | ofertas | apply | capture | triage | batch | tracker | agent-inbox | pipeline | contacto | gambit | training | project | interview-prep | interview | master-profile | intake | retro | interview/plan | interview/practice | interview/debrief | interview-redflag | patterns | calibrate | offer-prep | titles | upskill | followup | reply-watch | outcome | update]"
+argument-hint: "[scan | discover | deep | pdf | ats | text | latex | latex-tex | cover | email | proposal | add | expand | eu-swe | oferta | ofertas | apply | capture | triage | batch | tracker | agent-inbox | pipeline | contacto | gambit | training | project | interview-prep | interview | master-profile | intake | retro | interview/plan | interview/practice | interview/debrief | interview-redflag | patterns | calibrate | offer-prep | titles | upskill | followup | reply-watch | outcome | autopilot | update]"
 license: MIT
 ---
 
@@ -48,6 +48,8 @@ Run the career-ops scan mode and summarize new matches.
 Run the career-ops pipeline mode for data/pipeline.md.
 Run the career-ops pdf mode for the latest evaluated role.
 Run the career-ops tracker mode and summarize the current statuses.
+Run career-ops autopilot for the selected profile and inspect its queue (dry-run only).
+Run career-ops autopilot for a user-authorized application campaign using the chosen profile (live only after preflight).
 ```
 
 ## Mode Routing
@@ -89,6 +91,7 @@ Determine the mode from `$mode`:
 | `pipeline` | `pipeline` |
 | `capture` | `capture` |
 | `apply` | `apply` |
+| `autopilot` | `autopilot` |
 | `scan` | `scan` |
 | `discover` | `discover` |
 | `triage` | `triage` |
@@ -104,6 +107,8 @@ Determine the mode from `$mode`:
 | `interview-redflag` | `interview-redflag` |
 | `update` | `update` |
 | `cover` | `cover` |
+
+**Autonomous submission routing (fork extension; BEFORE JD/auto-pipeline detection):** If the current user request explicitly asks the agent to **send/submit applications autonomously**, including multi-job requests such as "send N applications", "подай N откликов", or "отправь заявки", select `autopilot`, not `apply`, `scan`, `auto-pipeline`, or free-form web search. If the user asks only to inspect, evaluate, draft, or fill forms, keep the original mode; `apply` never presses Submit. An audit, bugfix or code-review request is not permission to send applications. Read only the selected candidate/direction's `config/profile.yml`, `portals.yml` and user instructions for targeting, never hard-code a React-only/market quota into this router. For an authorized batch: resolve exact profile through `node profile.mjs list`/`env`, check the direction and identity, run preflight, then use the single existing-queue-first `autopilot-runner.mjs` with `--agent codex --target-applied N --max-jobs M` and `AUTOPILOT_LIVE=1`. Do not start a second runner or an unrequested wide/undated/full ATS scan. If user authorization, candidate identity, or contact data is unresolved, stop before live submission and report the blocker.
 
 **Auto-pipeline detection:** If `$mode` is not a known sub-command AND contains JD text (keywords: "responsibilities", "requirements", "qualifications", "about the role", "we're looking for", company name + role) or a URL to a JD, execute `auto-pipeline`.
 
@@ -200,7 +205,8 @@ Available commands:
   /career-ops project   → Evaluate portfolio project idea
   /career-ops tracker   → Application status overview
   /career-ops agent-inbox → Queue/drain requests for the next session (data/agent-inbox.md)
-  /career-ops apply     → Live application assistant (Playwright from this checkout, does not submit)
+  /career-ops apply     → Review-first application form assistant (never submits)
+  /career-ops autopilot → Fork-only autonomous applications (default dry-run; live requires current approval, profile and AUTOPILOT_LIVE=1)
   /career-ops scan      → Scan portals and discover new offers
   /career-ops discover  → Resolve a company list to scannable ATS boards + append to portals.yml (zero-token)
   /career-ops capture   → Record a posting in the inbox, no evaluation (URL + optional JD text)
@@ -244,7 +250,7 @@ Run `gambit` here, in the interactive session, never in a worker, even though it
 
 Read `modes/_profile.md` (if exists) + `modes/_custom.md` (if exists) + `modes/{mode}.md`
 
-Applies to: `tracker`, `agent-inbox`, `deep`, `interview-prep`, `interview`, `master-profile`, `regional/eu-swe`, `interview/plan`, `interview/practice`, `interview/debrief`, `latex`, `latex-tex`, `training`, `project`, `patterns`, `titles`, `upskill`, `followup`, `reply-watch`, `outcome`, `cover`, `email`, `proposal`, `add`, `offer-prep`, `discover`, `intake`, `ats`, `calibrate`, `retro`, `expand`, `interview-redflag`, `update`
+Applies to: `autopilot`, `tracker`, `agent-inbox`, `deep`, `interview-prep`, `interview`, `master-profile`, `regional/eu-swe`, `interview/plan`, `interview/practice`, `interview/debrief`, `latex`, `latex-tex`, `training`, `project`, `patterns`, `titles`, `upskill`, `followup`, `reply-watch`, `outcome`, `cover`, `email`, `proposal`, `add`, `offer-prep`, `discover`, `intake`, `ats`, `calibrate`, `retro`, `expand`, `interview-redflag`, `update`
 
 ### Modes that load only their mode file
 

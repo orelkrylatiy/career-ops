@@ -90,8 +90,8 @@ Determine the mode from `$mode`:
 | `inbox` | `agent-inbox` |
 | `pipeline` | `pipeline` |
 | `capture` | `capture` |
-| `apply` | `apply` (review-first; never auto-submits) |
-| `autopilot` | `autopilot` (fork-only, explicit opt-in) |
+| `apply` | `apply` |
+| `autopilot` | `autopilot` |
 | `scan` | `scan` |
 | `discover` | `discover` |
 | `triage` | `triage` |

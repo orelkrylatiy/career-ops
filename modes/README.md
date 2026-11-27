@@ -24,6 +24,7 @@ table in `AGENTS.md` (mirrored in `CLAUDE.md`).
 | `triage.md` | `triage` | Fast first-pass quick score before full evaluation |
 | `batch.md` | `batch` | Mass processing with headless workers |
 | `apply.md` | `apply` | Live application assistant (form filling; never submits) |
+| `autopilot.md` | `autopilot` | Fork extension; dry-run by default, live only with explicit authorization |
 | `pdf.md` | `pdf` | ATS-optimized PDF generation |
 | `ats.md` | `ats` | ATS-friendliness check of a generated CV (parseability score + issues) |
 | `latex.md` | `latex` | LaTeX/Overleaf CV export |

@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { cmdNext, cmdPreflight, cmdReport, cmdRun } from './autopilot.mjs';
 import { getJob, statusCounts } from './autopilot-db.mjs';
 import { auditLog } from './autopilot-log.mjs';
-import { getCareerOpsRoot } from './path-resolver.mjs';
+import { getCareerOpsRoot, getProfilePath } from './path-resolver.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { assertLinux, linuxBrowserSettings, browserCliEnvironment } from './lib/autopilot-browser.mjs';
 import { queueRoleFamily } from './autopilot-role-triage.mjs';
@@ -292,7 +292,7 @@ export function useRussianSources(profile, override = process.env.AUTOPILOT_REGI
 }
 
 function selectedProfile() {
-  const location = process.env.CAREER_OPS_PROFILE || path.join(DATA_ROOT, 'config', 'profile.yml');
+  const location = getProfilePath();
   if (!existsSync(location)) return {};
   const parsed = yaml.load(readFileSync(location, 'utf8'));
   return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
