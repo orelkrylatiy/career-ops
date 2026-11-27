@@ -138,6 +138,7 @@ function selectedBrowser(profileId, directionId) {
 
 function envPairs(profileId, directionId) {
   const browser = selectedBrowser(profileId, directionId);
+  const browserEnv = browserCliEnvironment({ dataRoot: directionRoot(profileId, directionId) });
   const session = sessionNameFor(profileId, directionId);
   return [
     ['CAREER_OPS_PROFILE_BASE_ROOT', PROFILE_BASE_ROOT],
@@ -147,6 +148,9 @@ function envPairs(profileId, directionId) {
     ['AUTOPILOT_BROWSER_SESSION', session],
     ['PLAYWRIGHT_CLI_SESSION', session],
     ['AUTOPILOT_BROWSER_PROFILE', browser.profileDir],
+    // Raw Playwright CLI calls after `profile env` must use the same daemon/cache
+    // namespace as runner, verifier and `profile launch --run`.
+    ['XDG_CACHE_HOME', browserEnv.XDG_CACHE_HOME],
     ...(browser.executablePath
       ? [['AUTOPILOT_BROWSER_EXECUTABLE_PATH', browser.executablePath],
         ['PLAYWRIGHT_MCP_EXECUTABLE_PATH', browser.executablePath]]
