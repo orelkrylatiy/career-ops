@@ -3,7 +3,7 @@ name: career-ops
 description: "Open-source AI job search agent -- evaluate offers, generate CVs, scan portals, track applications. Use when the user pastes a job URL or JD, asks to scan portals, generate a CV/PDF, track applications, prepare for interviews, draft outreach/emails, run an explicitly authorized autonomous application campaign, or run any career-ops mode."
 arguments: mode
 user-invocable: true
-argument-hint: "[scan | discover | deep | pdf | ats | text | latex | latex-tex | cover | email | proposal | add | expand | eu-swe | oferta | ofertas | apply | triage | batch | tracker | agent-inbox | pipeline | contacto | gambit | training | project | interview-prep | interview | master-profile | intake | retro | interview/plan | interview/practice | interview/debrief | interview-redflag | patterns | calibrate | offer-prep | titles | upskill | followup | reply-watch | outcome | autopilot | update]"
+argument-hint: "[scan | discover | deep | pdf | ats | text | latex | latex-tex | cover | email | proposal | add | expand | eu-swe | oferta | ofertas | apply | capture | triage | batch | tracker | agent-inbox | pipeline | contacto | gambit | training | project | interview-prep | interview | master-profile | intake | retro | interview/plan | interview/practice | interview/debrief | interview-redflag | patterns | calibrate | offer-prep | titles | upskill | followup | reply-watch | outcome | autopilot | update]"
 license: MIT
 ---
 
@@ -47,7 +47,9 @@ Evaluate this JD with career-ops auto-pipeline: https://company.com/jobs/123
 Run the career-ops scan mode and summarize new matches.
 Run the career-ops pipeline mode for data/pipeline.md.
 Run the career-ops pdf mode for the latest evaluated role.
-Run the career-ops tracker mode and summarize the current statuses.\nRun career-ops autopilot for the selected profile and inspect its queue (dry-run only).\nRun career-ops autopilot for a user-authorized application campaign using the chosen profile (live only after preflight).
+Run the career-ops tracker mode and summarize the current statuses.
+Run career-ops autopilot for the selected profile and inspect its queue (dry-run only).
+Run career-ops autopilot for a user-authorized application campaign using the chosen profile (live only after preflight).
 ```
 
 ## Mode Routing
@@ -87,7 +89,9 @@ Determine the mode from `$mode`:
 | `agent-inbox` | `agent-inbox` |
 | `inbox` | `agent-inbox` |
 | `pipeline` | `pipeline` |
-| `apply` | `apply` (review-first; never auto-submits) |\n| `autopilot` | `autopilot` (fork-only, explicit opt-in) |
+| `capture` | `capture` |
+| `apply` | `apply` (review-first; never auto-submits) |
+| `autopilot` | `autopilot` (fork-only, explicit opt-in) |
 | `scan` | `scan` |
 | `discover` | `discover` |
 | `triage` | `triage` |
@@ -201,9 +205,11 @@ Available commands:
   /career-ops project   → Evaluate portfolio project idea
   /career-ops tracker   → Application status overview
   /career-ops agent-inbox → Queue/drain requests for the next session (data/agent-inbox.md)
-  /career-ops apply     → Review-first application form assistant (never submits)\n  /career-ops autopilot → Fork-only autonomous applications (default dry-run; live requires current approval, profile and AUTOPILOT_LIVE=1)
+  /career-ops apply     → Review-first application form assistant (never submits)
+  /career-ops autopilot → Fork-only autonomous applications (default dry-run; live requires current approval, profile and AUTOPILOT_LIVE=1)
   /career-ops scan      → Scan portals and discover new offers
   /career-ops discover  → Resolve a company list to scannable ATS boards + append to portals.yml (zero-token)
+  /career-ops capture   → Record a posting in the inbox, no evaluation (URL + optional JD text)
   /career-ops triage    → Fast first-pass go/no-go score from modes/_brief.md (writes no files)
   /career-ops batch     → Batch processing with parallel workers
   /career-ops patterns  → Analyze rejection patterns and improve targeting
@@ -225,6 +231,8 @@ Or paste a JD directly to run the full pipeline.
 ## Context Loading by Mode
 
 After determining the mode, load the necessary files before executing:
+
+**First run.** Before a mode that needs the user's profile (an evaluation, a scan, an application draft, a tracker write), if `node doctor.mjs --json` reports `dataRootError`, stop: onboarding writes nothing to that root, as AGENTS.md → "First Run — Onboarding" sets out. Otherwise, if it reports `onboardingNeeded`, read `modes/_onboarding.md` and complete onboarding first.
 
 If `modes/_custom.md` exists, read it after `modes/_profile.md` and before the selected mode file. It contains user house rules and procedural preferences. It may override workflow/style defaults, but it never adds factual claims about the candidate.
 
@@ -248,7 +256,11 @@ Applies to: `autopilot`, `tracker`, `agent-inbox`, `deep`, `interview-prep`, `in
 
 Read `modes/{mode}.md` only. Do not preload `_shared.md`, `_profile.md` or `_custom.md`: the mode file names the one context file it reads and the ones it must not. Values it takes from `config/profile.yml` (`language.output`, `pipeline.triage_threshold`) are resolved here and injected; the mode never reads that file itself.
 
-Applies to: `triage`
+Applies to: `triage`, `capture`
+
+`capture` is deliberately in this group: it records a posting and stops, so
+loading the evaluation context (`oferta.md` alone is ~80 KB) would cost more than
+the whole capture and buy nothing.
 
 ### Modes delegated to subagent
 

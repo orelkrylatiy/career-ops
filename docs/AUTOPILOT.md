@@ -37,6 +37,7 @@ npm run autopilot:status
 npm run autopilot:preflight
 # After selecting exact CAREER_OPS_ROOT, prove a browser can open/snapshot WITHOUT applications:
 node autopilot-runner.mjs --browser-check
+node autopilot-runner.mjs --worker-browser-check --agent codex
 npm run autopilot:dry-run
 ```
 
@@ -55,7 +56,7 @@ node profile.mjs launch candidate react        # prints exact command; no browse
 # node profile.mjs launch candidate react --run # GUI login only, desktop required
 ```
 
-The browser binary and profile directory are **different paths**. Browser/CLI cache defaults to the selected direction's `data/autopilot/browser-cache` through `XDG_CACHE_HOME`, so sandboxed workers do not need to write in the global `~/.cache`; `AUTOPILOT_CACHE_DIR` optionally chooses another cache path. The preflight creates the directory before launching Chromium. The runner
+The browser binary and profile directory are **different paths**. Browser/CLI cache defaults to the selected direction's `data/autopilot/browser-cache` through `XDG_CACHE_HOME`, so sandboxed workers do not need to write in the global `~/.cache`; `AUTOPILOT_CACHE_DIR` optionally chooses another cache path. The preflight creates the directory before launching Chromium. `profile env` exports the same scoped `XDG_CACHE_HOME` for manual CLI calls; use a direction-specific shell. The fork's CLI adapter also honors upstream's explicit `CAREER_OPS_BROWSER_SANDBOX=off` from the selected root or shell unless `PLAYWRIGHT_MCP_SANDBOX` is explicitly set; it does not automatically disable the CLI sandbox. The runner
 validates that the configured executable is absolute, exists and is executable.
 It passes `PLAYWRIGHT_MCP_EXECUTABLE_PATH` to Playwright CLI rather than relying
 on the upstream browser-launch helper used for other flows. The upstream
@@ -74,6 +75,8 @@ separate and unchanged.
 `node autopilot-verify.mjs doctor` validates the local CLI installation; it does **not** prove that Chromium launches under the current Codex sandbox, uses the right profile or can snapshot. Do not start a live run just because doctor says `ok: true`.
 
 After exporting the exact selected profile, run `node autopilot-runner.mjs --browser-check` with **no** `AUTOPILOT_LIVE` required. This opens only `about:blank` when necessary, preserves an already-open named session, and prints the specific failing Playwright CLI command (`open` or `snapshot`), its exit code and sanitized stderr. It does not scan, claim jobs or submit anything. If the error mentions a busy profile, check for a surviving browser/daemon before closing it; never delete the browser profile, cookies, or session data as a first fix. A failure related to sandbox/cache permissions needs the candidate-scoped `XDG_CACHE_HOME`/writable path; a Chrome executable alone does not prove the launch works.
+
+Run `node autopilot-runner.mjs --worker-browser-check --agent codex` next, in the selected direction's shell. This uses the real coding-agent invocation and asks it to snapshot the same named browser twice in separate tool calls without navigating or submitting. The live runner also requires this check before its first lease. A zero-exit agent alone is not enough. Browser-session failures before Submit should be deferred with the `browser_session_unavailable:` note prefix; three consecutive infrastructure failures stop the run. Never disable sandboxing simply to pass this check. Reports include `target_met` separately from technical `ok`.
 
 The user-local script printed by `npm run autopilot:live` is also a version fingerprint: if it still expands to `node autopilot-runner.mjs --no-scan`, the checkout has not yet received this branch's updated wrapper. Check `git status --short` and the current `git log -1` before updating; never overwrite uncommitted browser changes.
 

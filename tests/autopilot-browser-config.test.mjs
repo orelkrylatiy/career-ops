@@ -45,3 +45,14 @@ test('browser profile is independent of executable and resolved against active d
     assert.equal(linuxBrowserSettings({ env: { PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: '/fake/chrome' }, dataRoot: root, checkExecutable: () => {} }).executablePath, '/fake/chrome');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('CLI adapter honors explicit upstream sandbox opt-out from selected data root', () => {
+  const root = mkdtempSync(join(tmpdir(), 'autopilot-sandbox-setting-'));
+  try {
+    writeFileSync(join(root, '.env'), 'CAREER_OPS_BROWSER_SANDBOX=off\n');
+    assert.equal(browserCliEnvironment({ env: {}, dataRoot: root }).PLAYWRIGHT_MCP_SANDBOX, '0');
+    assert.equal(browserCliEnvironment({ env: { PLAYWRIGHT_MCP_SANDBOX: '1' }, dataRoot: root }).PLAYWRIGHT_MCP_SANDBOX, '1');
+    assert.equal(browserCliEnvironment({ env: { CAREER_OPS_BROWSER_SANDBOX: 'on' }, dataRoot: root }).PLAYWRIGHT_MCP_SANDBOX, undefined);
+    assert.equal(browserCliEnvironment({ env: { CAREER_OPS_BROWSER_SANDBOX: 'off' }, dataRoot: root }).PLAYWRIGHT_MCP_SANDBOX, '0');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

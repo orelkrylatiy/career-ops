@@ -92,12 +92,14 @@ test('env and launch print the isolation recipe: root, worker, session, browser 
     assert.match(bash.stdout, /export AUTOPILOT_WORKER_ID='maxim-analyst'/);
     assert.match(bash.stdout, /export AUTOPILOT_BROWSER_SESSION='career-ops-maxim-analyst'/);
     assert.match(bash.stdout, /export PLAYWRIGHT_CLI_SESSION='career-ops-maxim-analyst'/);
+    assert.match(bash.stdout, /export XDG_CACHE_HOME='.*data\/profiles\/maxim\/analyst\/data\/autopilot\/browser-cache'/);
     assert.match(bash.stdout, /export AUTOPILOT_BROWSER_PROFILE='.*data\/profiles\/maxim\/analyst\/data\/browser-profile'/);
     assert.notEqual(runCli(['env', 'maxim', 'analyst', '--shell', 'powershell'], env).status, 0);
 
     const launch = runCli(['launch', 'maxim', 'analyst'], env);
     assert.equal(launch.status, 0, launch.stderr);
     assert.match(launch.stdout, /npx playwright cli -s=career-ops-maxim-analyst /);
+    assert.match(launch.stdout, /XDG_CACHE_HOME='.*data\/profiles\/maxim\/analyst\/data\/autopilot\/browser-cache'/);
     assert.match(launch.stdout, /--profile='.*data\/profiles\/maxim\/analyst\/data\/browser-profile'/);
 
     const fakeBrowser = join(dir, 'fake-chrome');
