@@ -300,3 +300,7 @@ node autopilot.mjs logs --limit 50
 node autopilot.mjs analytics
 node autopilot-verify.mjs doctor
 ~~~
+
+### Fork isolation and authorization boundary
+
+All upstream data, truthfulness, privacy and untrusted-content rules apply. Do not access sibling repositories (including `tg-ops` or `hh-ops`), switch candidate/direction, use HeadHunter or Telegram for autonomous discovery/submission, or modify code, install dependencies or alter permissions from a worker. Keep each selected profile's data and credentials isolated. An audit, code review, prior session or schedule is not authorization for a live application. Respect platform rate limits and do not bypass interactive CAPTCHA, MFA or access controls. A worker processes one pre-leased job only. The current mode's role-family and eligibility policy is authoritative for queue selection.
