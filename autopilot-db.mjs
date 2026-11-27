@@ -573,6 +573,10 @@ export function statusCounts() {
 
 function cliMain() {
   const [cmd] = process.argv.slice(2);
+  if (cmd === '--help' || cmd === '-h') {
+    console.log('Usage: node autopilot-db.mjs status');
+    return;
+  }
   if (cmd && cmd !== 'status') {
     console.error('Usage: node autopilot-db.mjs status');
     process.exit(1);

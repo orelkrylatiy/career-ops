@@ -176,6 +176,10 @@ function readDescription(argv) {
 
 function cli() {
   const argv = process.argv.slice(2);
+  if (argv.includes('--help') || argv.includes('-h')) {
+    console.log('Usage: node autopilot-resume.mjs select [--title text] [--description text] [--jd-file path] [--variant name] [--generated path] [--json]\n       node autopilot-resume.mjs validate');
+    return;
+  }
   const command = argv[0] || 'select';
   if (command === 'validate') {
     const problems = validateResumeConfig();

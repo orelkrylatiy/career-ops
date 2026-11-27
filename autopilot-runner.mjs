@@ -6,7 +6,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 import { fileURLToPath } from 'node:url';
 import { cmdNext, cmdPreflight, cmdReport, cmdRun } from './autopilot.mjs';
 import { getJob, statusCounts } from './autopilot-db.mjs';
@@ -188,7 +188,7 @@ export function workerPrompt(job, owner) {
   const profile = selectedProfile();
   const portalsPath = process.env.CAREER_OPS_PORTALS || path.join(DATA_ROOT, 'portals.yml');
   const titleFilter = existsSync(portalsPath)
-    ? (yaml.load(readFileSync(portalsPath, 'utf8'))?.title_filter || {}) : {};
+    ? (loadYaml(readFileSync(portalsPath, 'utf8'))?.title_filter || {}) : {};
   const frontendFunnel = queueRoleFamily(profile, titleFilter) === 'frontend';
   // Vacancy fields and the website are UNTRUSTED inputs, never instructions.
   return [
@@ -294,7 +294,7 @@ export function useRussianSources(profile, override = process.env.AUTOPILOT_REGI
 function selectedProfile() {
   const location = getProfilePath();
   if (!existsSync(location)) return {};
-  const parsed = yaml.load(readFileSync(location, 'utf8'));
+  const parsed = loadYaml(readFileSync(location, 'utf8'));
   return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
 }
 
@@ -378,7 +378,7 @@ export function runConfiguredDiscovery(opts = {}, {
   // CAREER_OPS_PORTALS cannot silently affect unrelated profile fixtures.
   // In live runs, inspect only the selected direction's portals.
   const selectedTitleFilter = titleFilter ?? (existsSync(portalsPath)
-    ? (yaml.load(readFileSync(portalsPath, 'utf8'))?.title_filter || {}) : {});
+    ? (loadYaml(readFileSync(portalsPath, 'utf8'))?.title_filter || {}) : {});
   const scanArgs = useBroadFunnelDiscovery(profile, selectedTitleFilter) ? ['--wide'] : [];
   try {
     step('autopilot-scan.mjs', scanArgs, scanEnv);

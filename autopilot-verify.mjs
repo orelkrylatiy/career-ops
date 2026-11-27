@@ -741,6 +741,7 @@ function usage() {
 
 async function main() {
   const argv = process.argv.slice(2);
+  if (argv.includes('--help') || argv.includes('-h')) return usage();
   const cmd = argv[0];
   if (cmd === 'doctor') {
     process.exitCode = doctor() ? 0 : 1;

@@ -126,6 +126,10 @@ export async function findVerification({ token, domain, urlHost = null, since, f
 }
 
 export async function main(argv = process.argv.slice(2), env = process.env) {
+  if (argv.includes('--help') || argv.includes('-h')) {
+    console.log('Usage: node autopilot-mail.mjs doctor | wait --domain domain --url-host host --since unix-seconds');
+    return;
+  }
   const opts = parseMailArgs(argv);
   const token = await accessToken(env);
   if (opts.command === 'doctor') {

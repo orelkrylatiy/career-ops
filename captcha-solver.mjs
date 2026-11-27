@@ -734,6 +734,7 @@ function usage() {
 
 async function main() {
   const argv = process.argv.slice(2);
+  if (argv.includes('--help') || argv.includes('-h')) return usage();
   const command = argv[0];
   const json = argv.includes('--json');
 

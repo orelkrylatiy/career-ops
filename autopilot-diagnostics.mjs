@@ -44,6 +44,9 @@ export function exportDiagnostics({ limit = 10 } = {}) {
 }
 if (isMainModule(import.meta.url)) {
   try {
+    if (process.argv.includes('--help') || process.argv.includes('-h')) {
+      console.log('Usage: node autopilot-diagnostics.mjs [limit] [--output filename.json]');
+    } else {
     const n = Number(process.argv[2] || 10);
     if (!Number.isSafeInteger(n) || n < 1 || n > MAX) throw new Error('limit must be 1..30');
     const data = JSON.stringify(exportDiagnostics({ limit: n }), null, 2) + '\n';
@@ -54,5 +57,6 @@ if (isMainModule(import.meta.url)) {
       writeFileSync(dest, data, { flag: 'wx', mode: 0o600 });
       console.log('Sanitized diagnostic report: ' + dest);
     } else console.log(data);
+    }
   } catch (e) { console.error('diagnostics: ' + e.message); process.exitCode = 1; }
 }

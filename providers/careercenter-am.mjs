@@ -12,7 +12,7 @@ const HOST = 'careercenter.am';
 const BASE = 'https://careercenter.am/en/jobs?status=all&view=list';
 
 function visible(fragment) {
-  return decodeEntities(String(fragment ?? '').replace(/<[^>]+>/g, ' '))
+  return decodeEntities(String(fragment ?? '').replace(/<([^>]*)(>?)/g, (tag, body, close) => (close && body ? ' ' : tag)))
     .replace(/\s+/g, ' ')
     .trim();
 }

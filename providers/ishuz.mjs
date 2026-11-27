@@ -11,7 +11,7 @@ import { fetchTextWithRetry } from './_http.mjs';
 const HOST = 'ish.uz';
 
 function visible(fragment) {
-  return decodeEntities(String(fragment ?? '').replace(/<[^>]+>/g, ' '))
+  return decodeEntities(String(fragment ?? '').replace(/<([^>]*)(>?)/g, (tag, body, close) => (close && body ? ' ' : tag)))
     .replace(/\s+/g, ' ')
     .trim();
 }

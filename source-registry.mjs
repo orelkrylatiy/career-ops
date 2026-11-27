@@ -21,6 +21,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { fetchTextWithRetry, makeHttpCtx } from './providers/_http.mjs';
@@ -138,7 +139,7 @@ export function openRegistryDb() {
 }
 
 function loadCatalog() {
-  const doc = yaml.load(readFileSync(CATALOG_PATH, 'utf8'));
+  const doc = loadYaml(readFileSync(CATALOG_PATH, 'utf8'));
   if (!doc || typeof doc !== 'object') throw new Error('source catalog is not a YAML object');
   return doc;
 }
@@ -559,7 +560,7 @@ async function resolveCompanySources(country = null) {
 function loadUserPortals() {
   if (!existsSync(USER_PORTALS)) return {};
   try {
-    const doc = yaml.load(readFileSync(USER_PORTALS, 'utf8'));
+    const doc = loadYaml(readFileSync(USER_PORTALS, 'utf8'));
     return doc && typeof doc === 'object' ? doc : {};
   } catch {
     return {};
@@ -754,6 +755,10 @@ async function withRun(action, country, fn) {
 }
 
 async function main() {
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    console.log('Usage: node source-registry.mjs <init|sync|verify|enrich|resolve|export|full|status> [--country RU|KZ|AM|UZ] [--json]');
+    return;
+  }
   const { cmd, country, json } = parseArgs(process.argv.slice(2));
   if (cmd === 'init') {
     const n = upsertCatalog();

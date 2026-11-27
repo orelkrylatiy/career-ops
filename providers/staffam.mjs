@@ -19,7 +19,7 @@ const DEFAULT_PATHS = [
 ];
 
 function visible(fragment) {
-  return decodeEntities(String(fragment ?? '').replace(/<[^>]+>/g, ' '))
+  return decodeEntities(String(fragment ?? '').replace(/<([^>]*)(>?)/g, (tag, body, close) => (close && body ? ' ' : tag)))
     .replace(/\s+/g, ' ')
     .trim();
 }

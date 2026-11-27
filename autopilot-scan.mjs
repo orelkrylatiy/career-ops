@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 
@@ -82,10 +83,14 @@ export function checkFullScanCheckpoint({ atsFull, args }, { dataRoot = getCaree
 }
 
 export function main(argv = process.argv.slice(2)) {
+  if (argv.includes('--help') || argv.includes('-h')) {
+    console.log('Usage: node autopilot-scan.mjs [--wide] [--ats-full] [scanner flags]');
+    return 0;
+  }
   const { atsFull, wide, args } = parseScanArgs(argv);
   checkFullScanCheckpoint({ atsFull, args });
   const portals = process.env.CAREER_OPS_PORTALS || path.join(getCareerOpsRoot(), 'portals.yml');
-  const base = yaml.load(readFileSync(portals, 'utf8'));
+  const base = loadYaml(readFileSync(portals, 'utf8'));
   const config = makeScanConfig(base, { wide });
   const tempDir = mkdtempSync(path.join(tmpdir(), 'careerops-scan-'));
   const tempConfig = path.join(tempDir, 'portals.yml');

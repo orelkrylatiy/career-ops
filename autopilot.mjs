@@ -20,7 +20,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 import Database from 'better-sqlite3';
 import { getCareerOpsRoot, getProfilePath, resolveTrackerPath } from './path-resolver.mjs';
 import { normalizeUrl } from './url-key.mjs';
@@ -76,7 +76,7 @@ function readTextIfExists(p) {
 function loadYamlIfExists(p) {
   const text = readTextIfExists(p);
   if (!text.trim()) return {};
-  const parsed = yaml.load(text);
+  const parsed = loadYaml(text);
   return parsed && typeof parsed === 'object' ? parsed : {};
 }
 
