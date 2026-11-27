@@ -153,6 +153,36 @@ export function assertBrowserReady({
   return { session, headless, profile, reused: false };
 }
 
+// The outer runner and coding agent have different sandbox/process boundaries.
+// Probe the exact existing session from the real agent before leasing a job.
+export async function assertWorkerBrowserReady(agent, owner, runId, {
+  probe = runAgent, nonce = randomUUID(), session = BROWSER_SESSION,
+} = {}) {
+  const env = { ...workerEnvironment(owner, runId, session), AUTOPILOT_LIVE: '0' };
+  const marker = 'CAREER_OPS_BROWSER_READY_' + nonce;
+  const argv = [process.execPath, env.PLAYWRIGHT_CLI_ENTRYPOINT, 'cli', '-s=' + session, 'snapshot'];
+  const prompt = [
+    'Read-only Career Ops worker browser readiness check. No job is leased. Do not navigate, open, close or submit anything.',
+    'Run the following exact argument vector as a shell command twice, in TWO SEPARATE tool calls, suppressing snapshot contents:',
+    JSON.stringify(argv),
+    'Use the existing session only. Do not alter the environment or sandbox. If either call fails or reports a browser/session error, respond BROWSER_UNAVAILABLE.',
+    'Only if both calls actually succeed, respond with exactly this line: ' + marker,
+  ].join('\n');
+  const result = await probe(agent, prompt, 90_000, env, { capture: true });
+  const lines = String(result?.output || '').split(/\r?\n/).map(line => line.trim());
+  if (!result?.ok || !lines.includes(marker)) {
+    throw new Error('worker browser readiness failed: existing session is not reachable across separate agent tool calls; no vacancy claimed');
+  }
+  return { session, ok: true };
+}
+
+export function isWorkerInfrastructureFailure(result, actual, { noOutcome = false } = {}) {
+  if (actual?.status === 'captcha') return false;
+  if (noOutcome) return true;
+  if (actual?.status === 'queued' && /^browser_session_unavailable:/i.test(String(actual.note || ''))) return true;
+  return !result?.ok && !['skipped', 'validation_failed'].includes(actual?.status);
+}
+
 export function workerPrompt(job, owner) {
   const browser = linuxBrowserSettings({ dataRoot: DATA_ROOT });
   const profile = selectedProfile();
@@ -187,7 +217,7 @@ export function workerPrompt(job, owner) {
     'Use node autopilot-verify.mjs begin before clicking real Submit, then run node autopilot-verify.mjs finish immediately after, and report through node autopilot.mjs report with the matching evidence receipt.',
     'Never ask for per-application human approval in this explicitly authorized run. If truthful data or website authorization is unavailable, record the job-specific blocker and continue the queue.',
     'Never claim applied without matching verifier evidence; never resubmit an ambiguous attempt.',
-    'If a temporary failure occurs BEFORE Submit, use node autopilot.mjs defer; otherwise report the actual failure.',
+    'If the existing browser session is unavailable BEFORE Submit, use node autopilot.mjs defer with a note starting browser_session_unavailable: and exit. For other temporary pre-Submit failures use defer with the actual reason. After Submit or an uncertain click, never defer or retry.',
     'Always include --owner ' + owner + ' on claim management/report commands.',
     'Do not change source code, package files, environment or tool permissions. Stop after THIS one job.',
   ].join('\n');
@@ -383,9 +413,27 @@ export async function main(argv = process.argv.slice(2)) {
     console.log(JSON.stringify({ ok: true, session: info.session, profile: info.profile, reused: info.reused }, null, 2));
     return;
   }
+  // Read-only diagnostic in the actual coding-agent environment; no live gate or claims.
+  if (argv.includes('--worker-browser-check')) {
+    const flags = argv.filter(arg => arg !== '--worker-browser-check');
+    if (flags.length !== 0 && !(flags.length === 2 && flags[0] === '--agent')) throw new Error('usage: --worker-browser-check [--agent codex|claude|opencode|auto]');
+    if (!process.env.CAREER_OPS_ROOT && !process.env.CAREER_OPS_DATA_DIR) throw new Error('select exact candidate direction before --worker-browser-check');
+    assertLinux();
+    const { agent: requested } = parseRunnerArgs(flags);
+    const release = acquireRunLock();
+    try {
+      assertBrowserReady();
+      const agent = resolveAgent(requested);
+      const runId = randomUUID();
+      const info = await assertWorkerBrowserReady(agent, runOwnerFor(runId), runId);
+      console.log(JSON.stringify({ ...info, agent }, null, 2));
+    } finally { release(); }
+    return;
+  }
   // Help is safe even when no profile, coding CLI or browser is installed.
   if (argv.includes('--help') || argv.includes('-h')) {
     console.log(`Usage: node autopilot-runner.mjs --browser-check  # no submissions, only Playwright open/snapshot
+  node autopilot-runner.mjs --worker-browser-check [--agent codex|claude|opencode|auto] # actual worker, no applications
   node autopilot-runner.mjs [--dry-run] [--agent codex|claude|opencode|auto]
   [--target-applied N] [--max-jobs M] [--timeout-minutes N]
   [--scan | --no-scan] [--scan-on-empty | --no-scan-on-empty]
@@ -430,6 +478,7 @@ Normal upstream 'apply' does not submit. Full/wide/undated ATS discovery is sepa
     });
     // A Playwright --help check also does not prove Chromium can launch.
     assertBrowserReady();
+    await assertWorkerBrowserReady(agent, owner, runId);
     if (!opts.noScan) runConfiguredDiscovery(opts);
     // SQLite remains authoritative; avoid re-rendering a 20k+ job Markdown
     // inspection file on every lease/report. Manual CLI can still export it.
@@ -461,6 +510,7 @@ Normal upstream 'apply' does not submit. Full/wide/undated ATS discovery is sepa
       const result = await runAgent(agent, workerPrompt(job, owner), opts.timeoutMinutes * 60_000,
         workerEnvironment(owner, runId));
       const actual = getJob(job.url_key);
+      let noOutcome = false;
       if (actual?.status === 'claimed' && actual.claim_owner === owner) {
         // Never auto-retry an ambiguous run: Submit could already have happened.
         // If the browser still shows a CAPTCHA, it is job-specific and must
@@ -472,6 +522,7 @@ Normal upstream 'apply' does not submit. Full/wide/undated ATS discovery is sepa
             counters.captcha++;
           } else {
             counters.no_outcome++;
+            noOutcome = true;
             await cmdReport(job.url, 'failed', 'worker exited without verified outcome; review before retry', 'browser', { owner });
           }
         } catch (e) {
@@ -484,19 +535,20 @@ Normal upstream 'apply' does not submit. Full/wide/undated ATS discovery is sepa
         counters[actual.status]++;
       } else {
         counters.no_outcome++;
+        noOutcome = true;
       }
       auditLog('worker_finish', {
         job_id: jid, agent, outcome: getJob(job.url_key)?.status || 'unknown',
         agent_exit: result.code ?? -1, timed_out: result.timedOut, ok: result.ok,
       }, { level: result.ok ? 'info' : 'warn' });
-      const reportedChallenge = !result.ok && getJob(job.url_key)?.status === 'captcha';
-      if (!result.ok && !reportedChallenge && !['captcha', 'skipped', 'validation_failed'].includes(actual?.status)) {
+      const finalJob = getJob(job.url_key);
+      if (isWorkerInfrastructureFailure(result, finalJob, { noOutcome })) {
         // One failed job must not stop unrelated applications. An agent outage
         // is different: break after three consecutive worker failures.
         consecutiveWorkerFailures++;
         console.error('[autopilot] isolated worker failure (' + consecutiveWorkerFailures + '/3); continuing with next job');
         if (consecutiveWorkerFailures >= 3) {
-          throw new Error('coding agent failed for three consecutive jobs; circuit breaker stopped this run');
+          throw new Error('worker infrastructure failed for three consecutive jobs; circuit breaker stopped this run');
         }
       } else {
         consecutiveWorkerFailures = 0;
@@ -516,6 +568,7 @@ Normal upstream 'apply' does not submit. Full/wide/undated ATS discovery is sepa
       version: 1, run_id: runId, target_applied: opts.targetApplied, max_jobs: opts.maxJobs, started_at: new Date(started).toISOString(),
       finished_at: new Date().toISOString(), duration_ms: Date.now() - started,
       agent, counts: counters, queue: opts.dryRun ? null : statusCounts(), ok: !error,
+      target_met: opts.dryRun || opts.targetApplied === null ? null : counters.applied >= opts.targetApplied,
       error_code: error ? 'RUNNER_FAILED' : null,
     };
     const reportDir = path.join(DATA_ROOT, 'data', 'autopilot', 'reports');
