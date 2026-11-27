@@ -108,3 +108,11 @@ test('geekjob row date without a year never lands in the future', () => {
   assert.ok(Number.isNaN(parseGeekjobDate('вчера')));
   assert.ok(Number.isNaN(parseGeekjobDate(null)));
 });
+
+test('geekjob drops malformed UTF-16 vacancy IDs instead of constructing a fake URL', () => {
+  const jobs = parseGeekjobResponse({ data: [
+    { id: '\ud800', position: 'Engineer' },
+    { id: 'good', position: 'Engineer' },
+  ] });
+  assert.deepEqual(jobs.map(job => job.url), ['https://geekjob.ru/vacancy/good']);
+});

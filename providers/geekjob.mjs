@@ -100,6 +100,8 @@ export function parseGeekjobResponse(json) {
     const id = String(row.id ?? '').trim();
     const title = String(row.position ?? '').trim();
     if (!title || !id) continue;
+    const encodedId = safeEncodeURIComponent(id);
+    if (encodedId === null) continue;
 
     const company = String(row?.company?.name ?? '').trim();
     const location = [row.city, row.country]
@@ -112,7 +114,7 @@ export function parseGeekjobResponse(json) {
 
     out.push({
       title,
-      url: `https://geekjob.ru/vacancy/${safeEncodeURIComponent(id)}`,
+      url: `https://geekjob.ru/vacancy/${encodedId}`,
       company,
       location,
       ...(Number.isFinite(postedMs) ? { postedAt: postedMs } : {}),

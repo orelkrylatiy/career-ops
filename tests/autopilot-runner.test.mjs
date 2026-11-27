@@ -376,3 +376,12 @@ test('worker infrastructure errors count even when the agent exits zero', () => 
   assert.equal(isWorkerInfrastructureFailure({ ok: true }, { status: 'skipped' }), false);
   assert.equal(isWorkerInfrastructureFailure({ ok: true }, { status: 'applied' }), false);
 });
+
+test('worker readiness reports only allowlisted diagnostic codes and remains fail-closed', async () => {
+  await assert.rejects(assertWorkerBrowserReady('codex', 'probe-owner', 'probe-run', {
+    nonce: 'fixture', probe: async () => ({ ok: true, output: 'BROWSER_UNAVAILABLE:fixture:SECOND:SESSION_MISSING' }),
+  }), /SECOND:SESSION_MISSING.*no vacancy claimed/);
+  await assert.rejects(assertWorkerBrowserReady('codex', 'probe-owner', 'probe-run', {
+    nonce: 'fixture', probe: async () => ({ ok: true, output: 'BROWSER_UNAVAILABLE:fixture:SECOND:private data' }),
+  }), /NO_VALID_PROBE_RESULT.*no vacancy claimed/);
+});

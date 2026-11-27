@@ -165,13 +165,18 @@ export async function assertWorkerBrowserReady(agent, owner, runId, {
     'Read-only Career Ops worker browser readiness check. No job is leased. Do not navigate, open, close or submit anything.',
     'Run the following exact argument vector as a shell command twice, in TWO SEPARATE tool calls, suppressing snapshot contents:',
     JSON.stringify(argv),
-    'Use the existing session only. Do not alter the environment or sandbox. If either call fails or reports a browser/session error, respond BROWSER_UNAVAILABLE.',
+    'Use the existing session only. Do not alter the environment or sandbox. Inspect the exit status and CLI errors; never print page contents or paths.',
+    'If a snapshot fails, return exactly BROWSER_UNAVAILABLE:' + nonce + ':<stage>:<reason>, replacing stage with FIRST or SECOND and reason with SESSION_MISSING, PERMISSION_DENIED, BINARY_MISSING, TIMEOUT, ENV_MISMATCH or OTHER. Choose only the code supported by the observed result. Do not guess or include raw output.',
     'Only if both calls actually succeed, respond with exactly this line: ' + marker,
   ].join('\n');
   const result = await probe(agent, prompt, 90_000, env, { capture: true });
   const lines = String(result?.output || '').split(/\r?\n/).map(line => line.trim());
   if (!result?.ok || !lines.includes(marker)) {
-    throw new Error('worker browser readiness failed: existing session is not reachable across separate agent tool calls; no vacancy claimed');
+    const prefix = 'BROWSER_UNAVAILABLE:' + nonce + ':';
+    const failure = lines.find(line => line.startsWith(prefix)
+      && /^(FIRST|SECOND):(SESSION_MISSING|PERMISSION_DENIED|BINARY_MISSING|TIMEOUT|ENV_MISMATCH|OTHER)$/.test(line.slice(prefix.length)));
+    const reason = failure ? failure.slice(prefix.length) : result?.timedOut ? 'AGENT_TIMEOUT' : !result?.ok ? 'AGENT_EXIT_FAILURE' : 'NO_VALID_PROBE_RESULT';
+    throw new Error('worker browser readiness failed: existing session is not reachable across separate agent tool calls [' + reason + ']; no vacancy claimed');
   }
   return { session, ok: true };
 }
